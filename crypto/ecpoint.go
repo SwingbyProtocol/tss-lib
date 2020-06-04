@@ -95,6 +95,13 @@ func (p *ECPoint) EightInvEight() *ECPoint {
 	return p.ScalarMult(eight).ScalarMult(eightInv)
 }
 
+func (p *ECPoint) ToProtobufPoint() *common.ECPoint {
+	return &common.ECPoint{
+		X: p.X().Bytes(),
+		Y: p.Y().Bytes(),
+	}
+}
+
 // ----- //
 
 func isOnCurve(c elliptic.Curve, x, y *big.Int) bool {
