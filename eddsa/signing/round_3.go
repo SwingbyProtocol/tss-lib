@@ -74,9 +74,9 @@ func (round *round3) Start() *tss.Error {
 	// h = hash512(k || A || M)
 	h := sha512.New()
 	h.Reset()
-	h.Write(encodedR[:])
-	h.Write(encodedPubKey[:])
-	h.Write(round.temp.m.Bytes())
+	_, _ = h.Write(encodedR[:])
+	_, _ = h.Write(encodedPubKey[:])
+	_, _ = h.Write(round.temp.m.Bytes())
 
 	var lambda [64]byte
 	h.Sum(lambda[:0])
