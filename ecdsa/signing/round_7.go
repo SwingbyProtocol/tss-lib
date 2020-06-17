@@ -148,7 +148,7 @@ func (round *round7) Start() *tss.Error {
 	round.temp.T = int32(len(round.Parties().IDs()) - 1)
 	round.data.OneRoundData = &round.temp.SignatureData_OneRoundData
 	if round.temp.m == nil {
-		round.end <- *round.data
+		round.end <- round.data
 		return nil
 	}
 

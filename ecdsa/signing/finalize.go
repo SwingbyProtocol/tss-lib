@@ -177,7 +177,7 @@ func (round *finalization) Start() *tss.Error {
 		return round.WrapError(err, Pi)
 	}
 	round.data = data
-	round.end <- *round.data
+	round.end <- round.data
 	return nil
 }
 
