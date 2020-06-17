@@ -99,7 +99,7 @@ func (round *round6) Start() *tss.Error {
 		gX, gY := ec.Params().Gx, ec.Params().Gy
 		if bigRBarJProducts.X().Cmp(gX) != 0 || bigRBarJProducts.Y().Cmp(gY) != 0 {
 			round.aborting = true
-			common.Logger.Warningf("round 6: consistency check failed: g != R products, entering identify abort mode")
+			common.Logger.Warnf("round 6: consistency check failed: g != R products, entering identify abort mode")
 
 			r6msg := NewSignRound6MessageAbort(Pi, &round.temp.r5AbortData)
 			round.temp.signRound6Messages[i] = r6msg

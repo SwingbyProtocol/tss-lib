@@ -10,8 +10,6 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/golang/protobuf/proto"
-
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
@@ -21,7 +19,6 @@ import (
 )
 
 // These messages were generated from Protocol Buffers definitions into ecdsa-signing.pb.go
-// The following messages are registered on the Protocol Buffers "wire"
 
 var (
 	// Ensure that signing messages implement ValidateBasic
@@ -36,17 +33,6 @@ var (
 		(*SignRound7Message)(nil),
 	}
 )
-
-func init() {
-	proto.RegisterType((*SignRound1Message1)(nil), tss.ECDSAProtoNamePrefix+"sign.SRound1Message1")
-	proto.RegisterType((*SignRound1Message2)(nil), tss.ECDSAProtoNamePrefix+"sign.SRound1Message2")
-	proto.RegisterType((*SignRound2Message)(nil), tss.ECDSAProtoNamePrefix+"sign.SRound2Message")
-	proto.RegisterType((*SignRound3Message)(nil), tss.ECDSAProtoNamePrefix+"sign.SRound3Message")
-	proto.RegisterType((*SignRound4Message)(nil), tss.ECDSAProtoNamePrefix+"sign.SRound4Message")
-	proto.RegisterType((*SignRound5Message)(nil), tss.ECDSAProtoNamePrefix+"sign.SRound5Message")
-	proto.RegisterType((*SignRound6Message)(nil), tss.ECDSAProtoNamePrefix+"sign.SRound6Message")
-	proto.RegisterType((*SignRound7Message)(nil), tss.ECDSAProtoNamePrefix+"sign.SRound7Message")
-}
 
 // ----- //
 
