@@ -9,8 +9,6 @@ package keygen
 import (
 	"math/big"
 
-	"github.com/golang/protobuf/proto"
-
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
@@ -20,7 +18,6 @@ import (
 )
 
 // These messages were generated from Protocol Buffers definitions into eddsa-keygen.pb.go
-// The following messages are registered on the Protocol Buffers "wire"
 
 var (
 	// Ensure that keygen messages implement ValidateBasic
@@ -30,12 +27,6 @@ var (
 		(*KGRound2Message2)(nil),
 	}
 )
-
-func init() {
-	proto.RegisterType((*KGRound1Message)(nil), tss.EDDSAProtoNamePrefix+"keygen.KGRound1Message")
-	proto.RegisterType((*KGRound2Message1)(nil), tss.EDDSAProtoNamePrefix+"keygen.KGRound2Message1")
-	proto.RegisterType((*KGRound2Message2)(nil), tss.EDDSAProtoNamePrefix+"keygen.KGRound2Message2")
-}
 
 // ----- //
 

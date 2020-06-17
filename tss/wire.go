@@ -9,14 +9,9 @@ package tss
 import (
 	"errors"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
-)
-
-const (
-	ECDSAProtoNamePrefix = "tss-lib.ecdsa-gg20."
-	EDDSAProtoNamePrefix = "tss-lib.eddsa."
+	"google.golang.org/protobuf/proto"
 )
 
 // Used externally to update a LocalParty with a valid ParsedMessage

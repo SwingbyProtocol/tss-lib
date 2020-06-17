@@ -9,8 +9,6 @@ package signing
 import (
 	"math/big"
 
-	"github.com/golang/protobuf/proto"
-
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
@@ -19,7 +17,6 @@ import (
 )
 
 // These messages were generated from Protocol Buffers definitions into eddsa-signing.pb.go
-// The following messages are registered on the Protocol Buffers "wire"
 
 var (
 	// Ensure that signing messages implement ValidateBasic
@@ -29,12 +26,6 @@ var (
 		(*SignRound3Message)(nil),
 	}
 )
-
-func init() {
-	proto.RegisterType((*SignRound1Message)(nil), tss.EDDSAProtoNamePrefix+"signing.SignRound1Message")
-	proto.RegisterType((*SignRound2Message)(nil), tss.EDDSAProtoNamePrefix+"signing.SignRound2Message")
-	proto.RegisterType((*SignRound3Message)(nil), tss.EDDSAProtoNamePrefix+"signing.SignRound3Message")
-}
 
 // ----- //
 

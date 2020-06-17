@@ -42,7 +42,7 @@ func (round *round7) Start() *tss.Error {
 			r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
 			r6msgInner, ok := msg.Content().(*SignRound6Message).GetContent().(*SignRound6Message_Abort)
 			if !ok {
-				common.Logger.Warningf("unexpected success message while in aborting mode: %+v", r6msgInner)
+				common.Logger.Warnf("unexpected success message while in aborting mode: %+v", r6msgInner)
 				culprits = append(culprits, Pj)
 				continue
 			}
