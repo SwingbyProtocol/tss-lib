@@ -35,7 +35,7 @@ type (
 
 		// outbound messaging
 		out chan<- tss.Message
-		end chan<- common.SignatureData
+		end chan<- *common.SignatureData
 	}
 
 	localMessageStore struct {
@@ -96,7 +96,7 @@ func NewLocalParty(
 	params *tss.Parameters,
 	key keygen.LocalPartySaveData,
 	out chan<- tss.Message,
-	end chan<- common.SignatureData,
+	end chan<- *common.SignatureData,
 ) tss.Party {
 	partyCount := len(params.Parties().IDs())
 	p := &LocalParty{
@@ -138,7 +138,7 @@ func NewLocalPartyWithOneRoundSign(
 	params *tss.Parameters,
 	key keygen.LocalPartySaveData,
 	out chan<- tss.Message,
-	end chan<- common.SignatureData,
+	end chan<- *common.SignatureData,
 ) tss.Party {
 	return NewLocalParty(nil, params, key, out, end)
 }

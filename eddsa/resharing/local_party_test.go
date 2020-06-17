@@ -160,7 +160,7 @@ signing:
 
 	signErrCh := make(chan *tss.Error, len(signPIDs))
 	signOutCh := make(chan tss.Message, len(signPIDs))
-	signEndCh := make(chan common.SignatureData, len(signPIDs))
+	signEndCh := make(chan *common.SignatureData, len(signPIDs))
 
 	for j, signPID := range signPIDs {
 		params := tss.NewParameters(signP2pCtx, signPID, len(signPIDs), newThreshold)
