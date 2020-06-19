@@ -329,25 +329,24 @@ func NewSignRound6MessageAbort(
 		From:        from,
 		IsBroadcast: true,
 	}
-	content := &SignRound6Message{
-		Content: &SignRound6Message_Abort{
-			Abort: data,
-		},
-	}
-	// this hack makes the ValidateBasic pass because the [i] index position is empty in these arrays
+	// this hack makes the ValidateBasic pass because the [i] index position for this P is empty in these arrays
 	data.GetAlphaIJ()[from.Index] = []byte{1}
 	data.GetBetaJI()[from.Index] = []byte{1}
+	content := &SignRound6Message{
+		Content: &SignRound6Message_Abort{Abort: data},
+	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
 }
 
 func (m *SignRound6Message) ValidateBasic() bool {
-	if m == nil {
+	if m == nil || m.GetContent() == nil {
 		return false
 	}
 	switch c := m.GetContent().(type) {
 	case *SignRound6Message_Success:
-		if !common.NonEmptyBytes(c.Success.GetSIX()) ||
+		if c.Success == nil ||
+			!common.NonEmptyBytes(c.Success.GetSIX()) ||
 			!common.NonEmptyBytes(c.Success.GetSIY()) ||
 			!common.NonEmptyBytes(c.Success.GetStProofAlphaX()) ||
 			!common.NonEmptyBytes(c.Success.GetStProofAlphaY()) ||
@@ -367,7 +366,8 @@ func (m *SignRound6Message) ValidateBasic() bool {
 		}
 		return sI.ValidateBasic() && tProof.ValidateBasic()
 	case *SignRound6Message_Abort:
-		return common.NonEmptyBytes(c.Abort.GetKI()) &&
+		return c.Abort != nil &&
+			common.NonEmptyBytes(c.Abort.GetKI()) &&
 			common.NonEmptyBytes(c.Abort.GetKIRandomness()) &&
 			common.NonEmptyBytes(c.Abort.GetGammaI()) &&
 			common.NonEmptyMultiBytes(c.Abort.GetAlphaIJ()) &&
@@ -409,7 +409,7 @@ func (m *SignRound6Message_SuccessData) UnmarshalSTProof() (*zkp.STProof, error)
 
 // ----- //
 
-func NewSignRound7Message(
+func NewSignRound7MessageSuccess(
 	from *tss.PartyID,
 	sI *big.Int,
 ) tss.ParsedMessage {
@@ -418,13 +418,40 @@ func NewSignRound7Message(
 		IsBroadcast: true,
 	}
 	content := &SignRound7Message{
-		SI: sI.Bytes(),
+		Content: &SignRound7Message_SI{SI: sI.Bytes()},
+	}
+	msg := tss.NewMessageWrapper(meta, content)
+	return tss.NewMessage(meta, content, msg)
+}
+
+func NewSignRound7MessageAbort(
+	from *tss.PartyID,
+	data *SignRound7Message_AbortData,
+) tss.ParsedMessage {
+	meta := tss.MessageRouting{
+		From:        from,
+		IsBroadcast: true,
+	}
+	// this hack makes the ValidateBasic pass because the [i] index position for this P is empty in these arrays
+	data.GetVJI()[from.Index] = []byte{1}
+	content := &SignRound7Message{
+		Content: &SignRound7Message_Abort{Abort: data},
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
 }
 
 func (m *SignRound7Message) ValidateBasic() bool {
-	return m != nil &&
-		common.NonEmptyBytes(m.SI)
+	if m == nil || m.GetContent() == nil {
+		return false
+	}
+	switch c := m.GetContent().(type) {
+	case *SignRound7Message_SI:
+		return common.NonEmptyBytes(c.SI)
+	case *SignRound7Message_Abort:
+		return c.Abort != nil &&
+			common.NonEmptyMultiBytes(c.Abort.GetVJI())
+	default:
+		return false
+	}
 }

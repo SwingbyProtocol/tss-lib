@@ -79,7 +79,7 @@ func TestShareProtocolWC(t *testing.T) {
 
 	gBPoint, err := crypto.NewECPoint(tss.EC(), gBX, gBY)
 	assert.NoError(t, err)
-	_, cB, betaPrm, pfB, err := BobMidWC(pk, pf, b, cA, NTildei, h1i, h2i, NTildej, h1j, h2j, gBPoint)
+	betaPrm, cB, _, pfB, err := BobMidWC(pk, pf, b, cA, NTildei, h1i, h2i, NTildej, h1j, h2j, gBPoint)
 	assert.NoError(t, err)
 
 	alpha, err := AliceEndWC(pk, pfB, gBPoint, cA, cB, NTildei, h1i, h2i, sk)

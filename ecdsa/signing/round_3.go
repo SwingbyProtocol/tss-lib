@@ -119,7 +119,8 @@ func (round *round3) Start() *tss.Error {
 			continue
 		}
 		deltaI = modN.Add(deltaI, alphas[j].Add(alphas[j], round.temp.betas[j]))
-		sigmaI = modN.Add(sigmaI, us[j].Add(us[j], round.temp.vs[j]))
+		beta := modN.Sub(zero, round.temp.vjis[j])
+		sigmaI = modN.Add(sigmaI, us[j].Add(us[j], beta))
 	}
 
 	// gg20: calculate T_i = g^sigma_i h^l_i

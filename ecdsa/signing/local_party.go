@@ -69,7 +69,7 @@ type (
 		betas, // return value of Bob_mid
 		c1jis,
 		c2jis,
-		vs []*big.Int // return value of Bob_mid_wc
+		vjis []*big.Int // return value of Bob_mid_wc
 		pi1jis []*mta.ProofBob
 		pi2jis []*mta.ProofBobWC
 
@@ -87,6 +87,7 @@ type (
 		sI *big.Int
 		rI,
 		TI *crypto.ECPoint
+		r7AbortData SignRound7Message_AbortData
 	}
 )
 
@@ -126,10 +127,11 @@ func NewLocalParty(
 	p.temp.c2jis = make([]*big.Int, partyCount)
 	p.temp.pi1jis = make([]*mta.ProofBob, partyCount)
 	p.temp.pi2jis = make([]*mta.ProofBobWC, partyCount)
-	p.temp.vs = make([]*big.Int, partyCount)
+	p.temp.vjis = make([]*big.Int, partyCount)
 	p.temp.bigGammaJs = make([]*crypto.ECPoint, partyCount)
 	p.temp.r5AbortData.AlphaIJ = make([][]byte, partyCount)
 	p.temp.r5AbortData.BetaJI = make([][]byte, partyCount)
+	p.temp.r7AbortData.VJI = make([][]byte, partyCount)
 	return p
 }
 

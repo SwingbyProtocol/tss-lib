@@ -46,12 +46,15 @@ type (
 	round6 struct {
 		*round5
 
-		// Trigger for when a consistency check fails during subsequent parts of the protocol, resulting in an identifiable abort
-		aborting bool
+		// Trigger for when a consistency check fails during Phase 5 of the protocol, resulting in a Type 5 identifiable abort (GG20)
+		abortingT5 bool
 	}
 	// The final round for the one-round signing mode (see the README)
 	round7 struct {
 		*round6
+
+		// Trigger for when a consistency check fails during Phase 6 of the protocol, resulting in a Type 7 identifiable abort (GG20)
+		abortingT7 bool
 	}
 	finalization struct {
 		*round7

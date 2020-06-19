@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcec"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -57,10 +58,11 @@ func TestE2EConcurrent(t *testing.T) {
 	updater := test.SharedPartyUpdater
 
 	// init the parties
+	msg := common.GetRandomPrimeInt(256)
 	for i := 0; i < len(signPIDs); i++ {
 		params := tss.NewParameters(p2pCtx, signPIDs[i], len(signPIDs), threshold)
 
-		P := NewLocalParty(big.NewInt(42), params, keys[i], outCh, endCh).(*LocalParty)
+		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
 			if err := P.Start(); err != nil {
@@ -95,10 +97,10 @@ signing:
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
-		case <-endCh:
+		case data := <-endCh:
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
-				t.Logf("Done. Received signature data from %d participants", ended)
+				t.Logf("Done. Received signature data from %d participants %+v", ended, data)
 
 				// bigR is stored as bytes for the OneRoundData protobuf struct
 				bigRX, bigRY := new(big.Int).SetBytes(parties[0].temp.BigR.GetX()), new(big.Int).SetBytes(parties[0].temp.BigR.GetY())
@@ -124,8 +126,13 @@ signing:
 					X:     pkX,
 					Y:     pkY,
 				}
-				ok := ecdsa.Verify(&pk, big.NewInt(42).Bytes(), bigR.X(), sumS)
+				ok := ecdsa.Verify(&pk, msg.Bytes(), bigR.X(), sumS)
 				assert.True(t, ok, "ecdsa verify must pass")
+
+				btcecSig := &btcec.Signature{R: r, S: sumS}
+				btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(&pk))
+				assert.True(t, ok, "ecdsa verify 2 must pass")
+
 				t.Log("ECDSA signing test done.")
 				// END ECDSA verify
 

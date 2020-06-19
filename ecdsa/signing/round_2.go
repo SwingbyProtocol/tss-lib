@@ -73,7 +73,7 @@ func (round *round2) Start() *tss.Error {
 				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: UnmarshalRangeProofAlice failed"), Pj)
 				return
 			}
-			v, c2ji, _, pi2ji, err := mta.BobMidWC(
+			vji, c2ji, _, pi2ji, err := mta.BobMidWC(
 				round.key.PaillierPKs[j],
 				rangeProofAliceJ,
 				round.temp.wI,
@@ -89,7 +89,7 @@ func (round *round2) Start() *tss.Error {
 				errChs <- round.WrapError(err, Pj)
 				return
 			}
-			round.temp.vs[j] = v
+			round.temp.vjis[j] = vji // consumed in round 3; revealed during Type 7 identified abort mode in round 7
 			round.temp.c2jis[j] = c2ji
 			round.temp.pi2jis[j] = pi2ji
 		}(j, Pj)

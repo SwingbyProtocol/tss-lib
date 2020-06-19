@@ -90,8 +90,14 @@ message SignRound6Message {
 }
 
 /*
- * Represents a BROADCAST message sent to all parties during Phase 7 of the GG20 ECDSA TSS signing protocol.
+ * Represents a BROADCAST message sent to all parties during online mode Phase 7 of the GG20 ECDSA TSS signing protocol.
  */
 message SignRound7Message {
-    bytes s_i = 1;
+    message AbortData {
+        repeated bytes v_j_i = 1;
+    }
+    oneof content {
+        bytes s_i = 1;
+        AbortData abort = 2;
+    }
 }

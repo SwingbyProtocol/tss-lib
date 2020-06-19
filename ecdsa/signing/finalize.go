@@ -13,6 +13,7 @@ import (
 	"math/big"
 
 	"github.com/btcsuite/btcd/btcec"
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
@@ -135,7 +136,12 @@ func FinalizeGetAndVerifyFinalSig(
 	state.SignatureRecovery = []byte{byte(recId)}
 	state.M = msg.Bytes()
 
-	return state, &btcec.Signature{R: r, S: s}, nil
+	btcecSig := &btcec.Signature{R: r, S: s}
+	if ok = btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(pk)); !ok {
+		return nil, nil, FinalizeWrapError(fmt.Errorf("signature verification 2 failed"), ourP)
+	}
+
+	return state, btcecSig, nil
 }
 
 func FinalizeWrapError(err error, victim *tss.PartyID, culprits ...*tss.PartyID) *tss.Error {
@@ -156,15 +162,45 @@ func (round *finalization) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
+	culprits := make([]*tss.PartyID, 0, len(round.temp.signRound6Messages))
+
+	// Identifiable Abort Type 7 triggered during Phase 6 (GG20)
+	if round.abortingT7 {
+		for j, msg := range round.temp.signRound7Messages {
+			if j == i {
+				continue
+			}
+			Pj := round.Parties().IDs()[j]
+			r7msgInner, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort)
+			if !ok {
+				common.Logger.Warnf("round 8: unexpected success message while in aborting mode: %+v", r7msgInner)
+				culprits = append(culprits, Pj)
+				continue
+			}
+		}
+
+		return round.WrapError(errors.New("round 7 consistency check failed: y != bigSJ products, Type 7 identified abort, culprits known"), culprits...)
+	}
+
 	ourSI := round.temp.sI
 	otherSIs := make(map[*tss.PartyID]*big.Int, len(Ps)-1)
-	for j, Pj := range round.Parties().IDs() {
+	var multiErr error
+	for j, msg := range round.temp.signRound7Messages {
 		if j == i {
 			continue
 		}
-		r7msg := round.temp.signRound7Messages[j].Content().(*SignRound7Message)
-		sI := r7msg.GetSI()
+		Pj := round.Parties().IDs()[j]
+		r7msgInner, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_SI)
+		if !ok {
+			culprits = append(culprits, Pj)
+			multiErr = multierror.Append(multiErr, fmt.Errorf("round 8: unexpected abort message while in success mode: %+v", r7msgInner))
+			continue
+		}
+		sI := r7msgInner.SI
 		otherSIs[Pj] = new(big.Int).SetBytes(sI)
+	}
+	if 0 < len(culprits) {
+		return round.WrapError(multiErr, culprits...)
 	}
 
 	pk := &ecdsa.PublicKey{
