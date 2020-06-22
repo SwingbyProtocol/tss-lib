@@ -6,12 +6,12 @@
 
 syntax = "proto3";
 
-option go_package = "./common";
+option go_package = "github.com/binance-chain/tss-lib/ecdsa/signing";
 
 import "protob/shared.proto";
 
 /*
- * State object for signatures, either partial (for offline/async "one round" signing) or full (contains the final signature).
+ * State object for signatures, either partial (for offline/async "one round" signing) or full (contains the final ECDSA signature).
  */
 message SignatureData {
     message OneRoundData {
@@ -27,17 +27,6 @@ message SignatureData {
         map<string, ECPoint> big_r_bar_j = 5;
         map<string, ECPoint> big_s_j = 6;
     }
-    OneRoundData one_round_data = 6;
-
-    bytes signature = 1;
-
-    // Ethereum-style recovery byte; only the first byte is relevant
-    bytes signature_recovery = 2;
-
-    // Signature components R, S
-    bytes r = 3;
-    bytes s = 4;
-
-    // M represents the original message digest that was signed M
-    bytes m = 5;
+    ECSignature signature = 10;
+    OneRoundData one_round_data = 11;
 }

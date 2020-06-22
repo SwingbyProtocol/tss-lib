@@ -6,7 +6,9 @@
 
 syntax = "proto3";
 
-option go_package = "ecdsa/signing";
+option go_package = "github.com/binance-chain/tss-lib/ecdsa/signing";
+
+import "protob/shared.proto";
 
 /*
  * Represents a P2P message sent to each party during Phase 1 of the GG20 ECDSA TSS signing protocol.
@@ -38,12 +40,10 @@ message SignRound2Message {
  */
 message SignRound3Message {
     bytes delta_i = 1;
-    bytes t_i_x = 2;
-    bytes t_i_y = 3;
-    bytes t_proof_alpha_x = 4;
-    bytes t_proof_alpha_y = 5;
-    bytes t_proof_t = 6;
-    bytes t_proof_u = 7;
+    ECPoint t_i = 2;
+    ECPoint t_proof_alpha = 3;
+    bytes t_proof_t = 4;
+    bytes t_proof_u = 5;
 }
 
 /*
@@ -57,9 +57,8 @@ message SignRound4Message {
  * Represents a BROADCAST message sent to all parties during Phase 5 of the GG20 ECDSA TSS signing protocol.
  */
 message SignRound5Message {
-    bytes r_i_x = 1;
-    bytes r_i_y = 2;
-    repeated bytes proof_pdl_w_slack = 3;
+    ECPoint r_i = 1;
+    repeated bytes proof_pdl_w_slack = 2;
 }
 
 /*
@@ -67,14 +66,11 @@ message SignRound5Message {
  */
 message SignRound6Message {
     message SuccessData {
-        bytes s_i_x = 1;
-        bytes s_i_y = 2;
-        bytes st_proof_alpha_x = 3;
-        bytes st_proof_alpha_y = 4;
-        bytes st_proof_beta_x = 5;
-        bytes st_proof_beta_y = 6;
-        bytes st_proof_t = 7;
-        bytes st_proof_u = 8;
+        ECPoint s_i = 1;
+        ECPoint st_proof_alpha = 2;
+        ECPoint st_proof_beta = 3;
+        bytes st_proof_t = 4;
+        bytes st_proof_u = 5;
     }
     message AbortData {
         bytes k_i = 1;
@@ -95,6 +91,7 @@ message SignRound6Message {
 message SignRound7Message {
     message AbortData {
         repeated bytes v_j_i = 1;
+        repeated bytes v_rand_j_i = 2;
     }
     oneof content {
         bytes s_i = 1;
