@@ -24,7 +24,7 @@ var (
 )
 
 // round 1 represents round 1 of the signing part of the GG18 ECDSA TSS spec (Gennaro, Goldfeder; 2018)
-func newRound1(params *tss.Parameters, key *keygen.LocalPartySaveData, data *common.SignatureData, temp *localTempData, out chan<- tss.Message, end chan<- *common.SignatureData) tss.Round {
+func newRound1(params *tss.Parameters, key *keygen.LocalPartySaveData, data *SignatureData, temp *localTempData, out chan<- tss.Message, end chan<- *SignatureData) tss.Round {
 	return &round1{
 		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 1}}
 }
@@ -90,7 +90,6 @@ func (round *round1) Start() *tss.Error {
 	r1msg2 := NewSignRound1Message2(round.PartyID(), cmt.C)
 	round.temp.signRound1Message2s[i] = r1msg2
 	round.out <- r1msg2
-
 	return nil
 }
 

@@ -44,8 +44,7 @@ func NewDGRound1Message(
 		IsToOldCommittee: false,
 	}
 	content := &DGRound1Message{
-		EddsaPubX:   eddsaPub.X().Bytes(),
-		EddsaPubY:   eddsaPub.Y().Bytes(),
+		EddsaPub:    eddsaPub.ToProtobufPoint(),
 		VCommitment: vct.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
@@ -54,16 +53,13 @@ func NewDGRound1Message(
 
 func (m *DGRound1Message) ValidateBasic() bool {
 	return m != nil &&
-		common.NonEmptyBytes(m.EddsaPubX) &&
-		common.NonEmptyBytes(m.EddsaPubY) &&
+		m.GetEddsaPub() != nil &&
+		m.GetEddsaPub().ValidateBasic() &&
 		common.NonEmptyBytes(m.VCommitment)
 }
 
 func (m *DGRound1Message) UnmarshalEDDSAPub() (*crypto.ECPoint, error) {
-	return crypto.NewECPoint(
-		tss.EC(),
-		new(big.Int).SetBytes(m.EddsaPubX),
-		new(big.Int).SetBytes(m.EddsaPubY))
+	return crypto.NewECPointFromProtobuf(m.GetEddsaPub())
 }
 
 func (m *DGRound1Message) UnmarshalVCommitment() *big.Int {

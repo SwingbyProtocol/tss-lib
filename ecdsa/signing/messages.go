@@ -150,13 +150,17 @@ func NewSignRound3Message(
 		IsBroadcast: true,
 	}
 	content := &SignRound3Message{
-		DeltaI:       deltaI.Bytes(),
-		TIX:          TI.X().Bytes(),
-		TIY:          TI.Y().Bytes(),
-		TProofAlphaX: tProof.Alpha.X().Bytes(),
-		TProofAlphaY: tProof.Alpha.Y().Bytes(),
-		TProofT:      tProof.T.Bytes(),
-		TProofU:      tProof.U.Bytes(),
+		DeltaI: deltaI.Bytes(),
+		TI: &common.ECPoint{
+			X: TI.X().Bytes(),
+			Y: TI.Y().Bytes(),
+		},
+		TProofAlpha: &common.ECPoint{
+			X: tProof.Alpha.X().Bytes(),
+			Y: tProof.Alpha.Y().Bytes(),
+		},
+		TProofT: tProof.T.Bytes(),
+		TProofU: tProof.U.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -164,11 +168,9 @@ func NewSignRound3Message(
 
 func (m *SignRound3Message) ValidateBasic() bool {
 	if m == nil ||
+		m.GetTI() == nil ||
+		!m.GetTI().ValidateBasic() ||
 		!common.NonEmptyBytes(m.GetDeltaI()) ||
-		!common.NonEmptyBytes(m.GetTIX()) ||
-		!common.NonEmptyBytes(m.GetTIY()) ||
-		!common.NonEmptyBytes(m.GetTProofAlphaX()) ||
-		!common.NonEmptyBytes(m.GetTProofAlphaY()) ||
 		!common.NonEmptyBytes(m.GetTProofT()) ||
 		!common.NonEmptyBytes(m.GetTProofU()) {
 		return false
@@ -190,20 +192,14 @@ func (m *SignRound3Message) ValidateBasic() bool {
 }
 
 func (m *SignRound3Message) UnmarshalTI() (*crypto.ECPoint, error) {
-	if m.GetTIX() == nil || m.GetTIY() == nil {
-		return nil, errors.New("UnmarshalTI() X or Y coord is nil")
+	if m.GetTI() == nil || !m.GetTI().ValidateBasic() {
+		return nil, errors.New("UnmarshalTI() X or Y coord is nil or did not validate")
 	}
-	return crypto.NewECPoint(
-		tss.EC(),
-		new(big.Int).SetBytes(m.GetTIX()),
-		new(big.Int).SetBytes(m.GetTIY()))
+	return crypto.NewECPointFromProtobuf(m.GetTI())
 }
 
 func (m *SignRound3Message) UnmarshalTProof() (*zkp.TProof, error) {
-	alpha, err := crypto.NewECPoint(
-		tss.EC(),
-		new(big.Int).SetBytes(m.GetTProofAlphaX()),
-		new(big.Int).SetBytes(m.GetTProofAlphaY()))
+	alpha, err := crypto.NewECPointFromProtobuf(m.GetTProofAlpha())
 	if err != nil {
 		return nil, err
 	}
@@ -258,8 +254,7 @@ func NewSignRound5Message(
 		return nil
 	}
 	content := &SignRound5Message{
-		RIX:            Ri.X().Bytes(),
-		RIY:            Ri.Y().Bytes(),
+		RI:             Ri.ToProtobufPoint(),
 		ProofPdlWSlack: pfBzs,
 	}
 	msg := tss.NewMessageWrapper(meta, content)
@@ -268,8 +263,8 @@ func NewSignRound5Message(
 
 func (m *SignRound5Message) ValidateBasic() bool {
 	if m == nil ||
-		!common.NonEmptyBytes(m.GetRIX()) ||
-		!common.NonEmptyBytes(m.GetRIY()) ||
+		m.GetRI() == nil ||
+		!m.GetRI().ValidateBasic() ||
 		!common.NonEmptyMultiBytes(m.GetProofPdlWSlack(), zkp.PDLwSlackMarshalledParts) {
 		return false
 	}
@@ -281,9 +276,7 @@ func (m *SignRound5Message) ValidateBasic() bool {
 }
 
 func (m *SignRound5Message) UnmarshalRI() (*crypto.ECPoint, error) {
-	return crypto.NewECPoint(tss.EC(),
-		new(big.Int).SetBytes(m.GetRIX()),
-		new(big.Int).SetBytes(m.GetRIY()))
+	return crypto.NewECPointFromProtobuf(m.GetRI())
 }
 
 func (m *SignRound5Message) UnmarshalPDLwSlackProof() (*zkp.PDLwSlackProof, error) {
@@ -305,14 +298,11 @@ func NewSignRound6MessageSuccess(
 	content := &SignRound6Message{
 		Content: &SignRound6Message_Success{
 			Success: &SignRound6Message_SuccessData{
-				SIX:           sI.X().Bytes(),
-				SIY:           sI.Y().Bytes(),
-				StProofAlphaX: proof.Alpha.X().Bytes(),
-				StProofAlphaY: proof.Alpha.Y().Bytes(),
-				StProofBetaX:  proof.Beta.X().Bytes(),
-				StProofBetaY:  proof.Beta.Y().Bytes(),
-				StProofT:      proof.T.Bytes(),
-				StProofU:      proof.U.Bytes(),
+				SI:           sI.ToProtobufPoint(),
+				StProofAlpha: proof.Alpha.ToProtobufPoint(),
+				StProofBeta:  proof.Beta.ToProtobufPoint(),
+				StProofT:     proof.T.Bytes(),
+				StProofU:     proof.U.Bytes(),
 			},
 		},
 	}
@@ -346,12 +336,12 @@ func (m *SignRound6Message) ValidateBasic() bool {
 	switch c := m.GetContent().(type) {
 	case *SignRound6Message_Success:
 		if c.Success == nil ||
-			!common.NonEmptyBytes(c.Success.GetSIX()) ||
-			!common.NonEmptyBytes(c.Success.GetSIY()) ||
-			!common.NonEmptyBytes(c.Success.GetStProofAlphaX()) ||
-			!common.NonEmptyBytes(c.Success.GetStProofAlphaY()) ||
-			!common.NonEmptyBytes(c.Success.GetStProofBetaX()) ||
-			!common.NonEmptyBytes(c.Success.GetStProofBetaY()) ||
+			c.Success.GetSI() == nil ||
+			!c.Success.GetSI().ValidateBasic() ||
+			c.Success.GetStProofAlpha() == nil ||
+			c.Success.GetStProofBeta() == nil ||
+			!c.Success.GetStProofAlpha().ValidateBasic() ||
+			!c.Success.GetStProofBeta().ValidateBasic() ||
 			!common.NonEmptyBytes(c.Success.GetStProofT()) ||
 			!common.NonEmptyBytes(c.Success.GetStProofU()) {
 			return false
@@ -379,23 +369,15 @@ func (m *SignRound6Message) ValidateBasic() bool {
 }
 
 func (m *SignRound6Message_SuccessData) UnmarshalSI() (*crypto.ECPoint, error) {
-	return crypto.NewECPoint(tss.EC(),
-		new(big.Int).SetBytes(m.GetSIX()),
-		new(big.Int).SetBytes(m.GetSIY()))
+	return crypto.NewECPointFromProtobuf(m.GetSI())
 }
 
 func (m *SignRound6Message_SuccessData) UnmarshalSTProof() (*zkp.STProof, error) {
-	alpha, err := crypto.NewECPoint(
-		tss.EC(),
-		new(big.Int).SetBytes(m.GetStProofAlphaX()),
-		new(big.Int).SetBytes(m.GetStProofAlphaY()))
+	alpha, err := crypto.NewECPointFromProtobuf(m.GetStProofAlpha())
 	if err != nil {
 		return nil, err
 	}
-	beta, err := crypto.NewECPoint(
-		tss.EC(),
-		new(big.Int).SetBytes(m.GetStProofBetaX()),
-		new(big.Int).SetBytes(m.GetStProofBetaY()))
+	beta, err := crypto.NewECPointFromProtobuf(m.GetStProofBeta())
 	if err != nil {
 		return nil, err
 	}

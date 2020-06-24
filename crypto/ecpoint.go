@@ -42,6 +42,13 @@ func NewECPointNoCurveCheck(curve elliptic.Curve, X, Y *big.Int) *ECPoint {
 	return &ECPoint{curve, [2]*big.Int{X, Y}, false}
 }
 
+func NewECPointFromProtobuf(p *common.ECPoint) (*ECPoint, error) {
+	if p == nil || p.GetX() == nil || p.GetY() == nil {
+		return nil, errors.New("nil protobuf point provided")
+	}
+	return NewECPoint(tss.EC(), new(big.Int).SetBytes(p.GetX()), new(big.Int).SetBytes(p.GetY()))
+}
+
 func (p *ECPoint) X() *big.Int {
 	return new(big.Int).Set(p.coords[0])
 }
