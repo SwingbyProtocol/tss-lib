@@ -91,8 +91,7 @@ func NewKGRound2Message2(
 	dcBzs := common.BigIntsToBytes(deCommitment)
 	content := &KGRound2Message2{
 		DeCommitment: dcBzs,
-		ProofAlphaX:  proof.Alpha.X().Bytes(),
-		ProofAlphaY:  proof.Alpha.Y().Bytes(),
+		ProofAlpha:   proof.Alpha.ToProtobufPoint(),
 		ProofT:       proof.T.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
@@ -110,10 +109,7 @@ func (m *KGRound2Message2) UnmarshalDeCommitment() []*big.Int {
 }
 
 func (m *KGRound2Message2) UnmarshalZKProof() (*zkp.DLogProof, error) {
-	point, err := crypto.NewECPoint(
-		tss.EC(),
-		new(big.Int).SetBytes(m.GetProofAlphaX()),
-		new(big.Int).SetBytes(m.GetProofAlphaY()))
+	point, err := crypto.NewECPointFromProtobuf(m.GetProofAlpha())
 	if err != nil {
 		return nil, err
 	}

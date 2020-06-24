@@ -31,11 +31,11 @@ type (
 
 		keys keygen.LocalPartySaveData
 		temp localTempData
-		data common.SignatureData
+		data SignatureData
 
 		// outbound messaging
 		out chan<- tss.Message
-		end chan<- *common.SignatureData
+		end chan<- *SignatureData
 	}
 
 	localMessageStore struct {
@@ -81,7 +81,7 @@ type (
 		r5AbortData SignRound6Message_AbortData
 
 		// round 6
-		common.SignatureData_OneRoundData
+		SignatureData_OneRoundData
 
 		// round 7
 		sI *big.Int
@@ -97,7 +97,7 @@ func NewLocalParty(
 	params *tss.Parameters,
 	key keygen.LocalPartySaveData,
 	out chan<- tss.Message,
-	end chan<- *common.SignatureData,
+	end chan<- *SignatureData,
 ) tss.Party {
 	partyCount := len(params.Parties().IDs())
 	p := &LocalParty{
@@ -105,7 +105,7 @@ func NewLocalParty(
 		params:    params,
 		keys:      keygen.BuildLocalSaveDataSubset(key, params.Parties().IDs()),
 		temp:      localTempData{},
-		data:      common.SignatureData{},
+		data:      SignatureData{},
 		out:       out,
 		end:       end,
 	}
@@ -140,7 +140,7 @@ func NewLocalPartyWithOneRoundSign(
 	params *tss.Parameters,
 	key keygen.LocalPartySaveData,
 	out chan<- tss.Message,
-	end chan<- *common.SignatureData,
+	end chan<- *SignatureData,
 ) tss.Party {
 	return NewLocalParty(nil, params, key, out, end)
 }

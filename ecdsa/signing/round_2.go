@@ -73,7 +73,7 @@ func (round *round2) Start() *tss.Error {
 				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: UnmarshalRangeProofAlice failed"), Pj)
 				return
 			}
-			vji, c2ji, _, pi2ji, err := mta.BobMidWC(
+			vji, c2ji, pi2ji, err := mta.BobMidWC(
 				round.key.PaillierPKs[j],
 				rangeProofAliceJ,
 				round.temp.wI,

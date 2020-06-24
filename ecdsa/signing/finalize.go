@@ -27,7 +27,7 @@ const (
 // One Round Finalization (async/offline)
 
 // FinalizeGetOurSigShare is called in one-round signing mode after the online rounds have finished to compute s_i.
-func FinalizeGetOurSigShare(state *common.SignatureData, msg *big.Int) (sI *big.Int) {
+func FinalizeGetOurSigShare(state *SignatureData, msg *big.Int) (sI *big.Int) {
 	data := state.GetOneRoundData()
 
 	N := tss.EC().Params().N
@@ -41,13 +41,13 @@ func FinalizeGetOurSigShare(state *common.SignatureData, msg *big.Int) (sI *big.
 // FinalizeGetOurSigShare is called in one-round signing mode to build a final signature given others' s_i shares and a msg.
 // Note: each P in otherPs should correspond with that P's s_i at the same index in otherSIs.
 func FinalizeGetAndVerifyFinalSig(
-	state *common.SignatureData,
+	state *SignatureData,
 	pk *ecdsa.PublicKey,
 	msg *big.Int,
 	ourP *tss.PartyID,
 	ourSI *big.Int,
 	otherSIs map[*tss.PartyID]*big.Int,
-) (*common.SignatureData, *btcec.Signature, *tss.Error) {
+) (*SignatureData, *btcec.Signature, *tss.Error) {
 	if len(otherSIs) == 0 {
 		return nil, nil, FinalizeWrapError(errors.New("len(otherSIs) == 0"), ourP)
 	}
@@ -127,11 +127,11 @@ func FinalizeGetAndVerifyFinalSig(
 
 	ok := ecdsa.Verify(pk, msg.Bytes(), r, s)
 	if !ok {
-		return nil, nil, FinalizeWrapError(fmt.Errorf("signature verification failed"), ourP)
+		return nil, nil, FinalizeWrapError(fmt.Errorf("signature verification 1 failed"), ourP)
 	}
 
 	// save the signature for final output
-	state.R, state.S = r.Bytes(), s.Bytes()
+	state.GetSignature().R, state.S = r.Bytes(), s.Bytes()
 	state.Signature = append(r.Bytes(), s.Bytes()...)
 	state.SignatureRecovery = []byte{byte(recId)}
 	state.M = msg.Bytes()
@@ -140,6 +140,9 @@ func FinalizeGetAndVerifyFinalSig(
 	if ok = btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(pk)); !ok {
 		return nil, nil, FinalizeWrapError(fmt.Errorf("signature verification 2 failed"), ourP)
 	}
+
+	// SECURITY: to be safe, the oneRoundData is no longer needed here and reuse of `r` can compromise the key
+	state.OneRoundData.Reset()
 
 	return state, btcecSig, nil
 }

@@ -56,13 +56,13 @@ func BobMidWC(
 	pf *RangeProofAlice,
 	b, cA, NTildeA, h1A, h2A, NTildeB, h1B, h2B *big.Int,
 	B *crypto.ECPoint,
-) (betaPrm, cB, rB *big.Int, piB *ProofBobWC, err error) {
+) (betaPrm, cB *big.Int, piB *ProofBobWC, err error) {
 	if !pf.Verify(pkA, NTildeB, h1B, h2B, cA) {
 		err = errors.New("RangeProofAlice.Verify() returned false")
 		return
 	}
 	betaPrm = common.GetRandomPositiveInt(pkA.N)
-	cBetaPrm, rB, err := pkA.EncryptAndReturnRandomness(betaPrm)
+	cBetaPrm, cRand, err := pkA.EncryptAndReturnRandomness(betaPrm)
 	if err != nil {
 		return
 	}
@@ -74,7 +74,7 @@ func BobMidWC(
 	if err != nil {
 		return
 	}
-	piB, err = ProveBobWC(pkA, NTildeA, h1A, h2A, cA, cB, b, betaPrm, rB, B)
+	piB, err = ProveBobWC(pkA, NTildeA, h1A, h2A, cA, cB, b, betaPrm, cRand, B)
 	return
 }
 

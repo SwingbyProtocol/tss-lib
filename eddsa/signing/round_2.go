@@ -38,9 +38,9 @@ func (round *round2) Start() *tss.Error {
 	}
 
 	// 3. BROADCAST de-commitments of Shamir poly*G and Schnorr prove
-	r2msg2 := NewSignRound2Message(round.PartyID(), round.temp.deCommit, pir)
-	round.temp.signRound2Messages[i] = r2msg2
-	round.out <- r2msg2
+	r2msg := NewSignRound2Message(round.PartyID(), round.temp.deCommit, pir)
+	round.temp.signRound2Messages[i] = r2msg
+	round.out <- r2msg
 
 	return nil
 }
