@@ -160,7 +160,7 @@ signing:
 
 	signErrCh := make(chan *tss.Error, len(signPIDs))
 	signOutCh := make(chan tss.Message, len(signPIDs))
-	signEndCh := make(chan *common.SignatureData, len(signPIDs))
+	signEndCh := make(chan *signing.SignatureData, len(signPIDs))
 
 	for j, signPID := range signPIDs {
 		params := tss.NewParameters(signP2pCtx, signPID, len(signPIDs), newThreshold)
@@ -210,7 +210,7 @@ signing:
 					Y:     pkY,
 				}
 
-				newSig, err := edwards.ParseSignature(signData.Signature)
+				newSig, err := edwards.ParseSignature(signData.Signature.Signature)
 				if err != nil {
 					println("new sig error, ", err.Error())
 				}

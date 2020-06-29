@@ -67,8 +67,7 @@ func NewSignRound2Message(
 	dcBzs := common.BigIntsToBytes(deCommitment)
 	content := &SignRound2Message{
 		DeCommitment: dcBzs,
-		ProofAlphaX:  proof.Alpha.X().Bytes(),
-		ProofAlphaY:  proof.Alpha.Y().Bytes(),
+		ProofAlpha:   proof.Alpha.ToProtobufPoint(),
 		ProofT:       proof.T.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
@@ -77,9 +76,9 @@ func NewSignRound2Message(
 
 func (m *SignRound2Message) ValidateBasic() bool {
 	return m != nil &&
+		m.ProofAlpha != nil &&
 		common.NonEmptyMultiBytes(m.DeCommitment, 3) &&
-		common.NonEmptyBytes(m.ProofAlphaX) &&
-		common.NonEmptyBytes(m.ProofAlphaY) &&
+		m.ProofAlpha.ValidateBasic() &&
 		common.NonEmptyBytes(m.ProofT)
 }
 
@@ -89,10 +88,7 @@ func (m *SignRound2Message) UnmarshalDeCommitment() []*big.Int {
 }
 
 func (m *SignRound2Message) UnmarshalZKProof() (*zkp.DLogProof, error) {
-	point, err := crypto.NewECPoint(
-		tss.EC(),
-		new(big.Int).SetBytes(m.GetProofAlphaX()),
-		new(big.Int).SetBytes(m.GetProofAlphaY()))
+	point, err := crypto.NewECPointFromProtobuf(m.GetProofAlpha())
 	if err != nil {
 		return nil, err
 	}
