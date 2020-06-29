@@ -131,18 +131,20 @@ func FinalizeGetAndVerifyFinalSig(
 	}
 
 	// save the signature for final output
-	state.GetSignature().R, state.S = r.Bytes(), s.Bytes()
-	state.Signature = append(r.Bytes(), s.Bytes()...)
-	state.SignatureRecovery = []byte{byte(recId)}
-	state.M = msg.Bytes()
+	signature := new(common.ECSignature)
+	signature.R, signature.S = r.Bytes(), s.Bytes()
+	signature.Signature = append(r.Bytes(), s.Bytes()...)
+	signature.SignatureRecovery = []byte{byte(recId)}
+	signature.M = msg.Bytes()
+	state.Signature = signature
 
 	btcecSig := &btcec.Signature{R: r, S: s}
 	if ok = btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(pk)); !ok {
 		return nil, nil, FinalizeWrapError(fmt.Errorf("signature verification 2 failed"), ourP)
 	}
 
-	// SECURITY: to be safe, the oneRoundData is no longer needed here and reuse of `r` can compromise the key
-	state.OneRoundData.Reset()
+	// SECURITY: to be safe the oneRoundData is no longer needed here and reuse of `r` can compromise the key
+	state.OneRoundData = nil
 
 	return state, btcecSig, nil
 }

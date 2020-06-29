@@ -14,6 +14,7 @@ import (
 	"github.com/agl/ed25519/edwards25519"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 
+	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -39,10 +40,12 @@ func (round *finalization) Start() *tss.Error {
 	}
 
 	// save the signature for final output
-	round.data.Signature = append(bigIntToEncodedBytes(round.temp.r)[:], sumS[:]...)
-	round.data.R = round.temp.r.Bytes()
-	round.data.S = sumS[:]
-	round.data.M = round.temp.m.Bytes()
+	signature := new(common.ECSignature)
+	signature.Signature = append(bigIntToEncodedBytes(round.temp.r)[:], sumS[:]...)
+	signature.R = round.temp.r.Bytes()
+	signature.S = sumS[:]
+	signature.M = round.temp.m.Bytes()
+	round.data.Signature = signature
 
 	pk := edwards.PublicKey{
 		Curve: tss.EC(),
