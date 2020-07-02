@@ -358,7 +358,6 @@ func (m *SignRound6Message) ValidateBasic() bool {
 	case *SignRound6Message_Abort:
 		return c.Abort != nil &&
 			common.NonEmptyBytes(c.Abort.GetKI()) &&
-			common.NonEmptyBytes(c.Abort.GetKIRandomness()) &&
 			common.NonEmptyBytes(c.Abort.GetGammaI()) &&
 			common.NonEmptyMultiBytes(c.Abort.GetAlphaIJ()) &&
 			common.NonEmptyMultiBytes(c.Abort.GetBetaJI()) &&
