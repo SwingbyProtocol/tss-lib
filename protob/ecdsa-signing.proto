@@ -74,7 +74,6 @@ message SignRound6Message {
     }
     message AbortData {
         bytes k_i = 1;
-        bytes k_i_randomness = 2;
         bytes gamma_i = 3;
         repeated bytes alpha_i_j = 4;
         repeated bytes beta_j_i = 5;
