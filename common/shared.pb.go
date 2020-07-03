@@ -92,7 +92,7 @@ type ECSignature struct {
 	unknownFields protoimpl.UnknownFields
 
 	Signature []byte `protobuf:"bytes,1,opt,name=signature,proto3" json:"signature,omitempty"`
-	// Ethereum-style recovery byte; only the first byte is relevant
+	// Ethereum-style Recovery ID: Used to enable extracting the public key from the signature.
 	SignatureRecovery []byte `protobuf:"bytes,2,opt,name=signature_recovery,json=signatureRecovery,proto3" json:"signature_recovery,omitempty"`
 	// Signature components R, S
 	R []byte `protobuf:"bytes,3,opt,name=r,proto3" json:"r,omitempty"`

@@ -16,7 +16,7 @@ message ECPoint {
 message ECSignature {
     bytes signature = 1;
 
-    // Ethereum-style recovery byte; only the first byte is relevant
+    // Ethereum-style Recovery ID: Used to enable extracting the public key from the signature.
     bytes signature_recovery = 2;
 
     // Signature components R, S
