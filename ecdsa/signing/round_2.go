@@ -7,11 +7,15 @@
 package signing
 
 import (
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/sha512"
 	"errors"
 	"sync"
 
 	errorspkg "github.com/pkg/errors"
 
+	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto/mta"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -26,6 +30,12 @@ func (round *round2) Start() *tss.Error {
 
 	i := round.PartyID().Index
 	round.ok[i] = true
+
+	// for Type 7 identified abort; see usage below
+	skI := &ecdsa.PrivateKey{
+		PublicKey: *round.key.BigXj[i].ToECDSAPubKey(),
+		D:         round.key.Xi,
+	}
 
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
 	wg := sync.WaitGroup{}
@@ -43,7 +53,7 @@ func (round *round2) Start() *tss.Error {
 				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: UnmarshalRangeProofAlice failed"), Pj)
 				return
 			}
-			betaJI, c1ji, _, pi1ji, err := mta.BobMid(
+			betaJI, c1JI, _, pi1JI, err := mta.BobMid(
 				round.key.PaillierPKs[j],
 				rangeProofAliceJ,
 				round.temp.gammaI,
@@ -61,8 +71,8 @@ func (round *round2) Start() *tss.Error {
 			// should be thread safe as these are pre-allocated
 			round.temp.betas[j] = betaJI
 			round.temp.r5AbortData.BetaJI[j] = betaJI.Bytes()
-			round.temp.c1jis[j] = c1ji
-			round.temp.pi1jis[j] = pi1ji
+			round.temp.pI1JIs[j] = pi1JI
+			round.temp.c1JIs[j] = c1JI
 		}(j, Pj)
 		// Bob_mid_wc
 		go func(j int, Pj *tss.PartyID) {
@@ -73,7 +83,7 @@ func (round *round2) Start() *tss.Error {
 				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: UnmarshalRangeProofAlice failed"), Pj)
 				return
 			}
-			vji, c2ji, pi2ji, err := mta.BobMidWC(
+			vJI, c2JI, pi2JI, err := mta.BobMidWC(
 				round.key.PaillierPKs[j],
 				rangeProofAliceJ,
 				round.temp.wI,
@@ -89,9 +99,15 @@ func (round *round2) Start() *tss.Error {
 				errChs <- round.WrapError(err, Pj)
 				return
 			}
-			round.temp.vjis[j] = vji // consumed in round 3; revealed during Type 7 identified abort mode in round 7
-			round.temp.c2jis[j] = c2ji
-			round.temp.pi2jis[j] = pi2ji
+			round.temp.vJIs[j] = vJI
+			round.temp.pI2JIs[j] = pi2JI
+			round.temp.c2JIs[j] = c2JI
+			// for Type 7 identified abort; proves the cipher-text's origin during P2P MtA messaging if we enter abort mode later on
+			c2JIHash := sha512.Sum512_256(c2JI.Bytes())
+			if round.temp.c2JISigRs[j], round.temp.c2JISigSs[j], err = ecdsa.Sign(rand.Reader, skI, c2JIHash[:]); err != nil {
+				errChs <- round.WrapError(err, Pj)
+				return
+			}
 		}(j, Pj)
 	}
 	// consume error channels; wait for goroutines
@@ -110,9 +126,18 @@ func (round *round2) Start() *tss.Error {
 			continue
 		}
 		r2msg := NewSignRound2Message(
-			Pj, round.PartyID(), round.temp.c1jis[j], round.temp.pi1jis[j], round.temp.c2jis[j], round.temp.pi2jis[j])
+			Pj, round.PartyID(),
+			round.temp.c1JIs[j],
+			round.temp.pI1JIs[j],
+			round.temp.c2JIs[j],
+			round.temp.c2JISigRs[j],
+			round.temp.c2JISigSs[j],
+			round.temp.pI2JIs[j])
 		round.out <- r2msg
 	}
+	// for Type 7 identified abort; if we enter abort mode in round 7
+	round.temp.r7AbortData.C2SigsR = common.BigIntsToBytes(round.temp.c2JISigRs)
+	round.temp.r7AbortData.C2SigsS = common.BigIntsToBytes(round.temp.c2JISigSs)
 	return nil
 }
 

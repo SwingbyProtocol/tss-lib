@@ -51,10 +51,8 @@ func (round *round1) Start() *tss.Error {
 	i := Pi.Index
 	round.ok[i] = true
 
-	kI := common.GetRandomPositiveInt(tss.EC().Params().N)
 	gammaI := common.GetRandomPositiveInt(tss.EC().Params().N)
-	round.temp.KI = kI.Bytes()
-	round.temp.r5AbortData.KI = kI.Bytes()
+	kI := common.GetRandomPositiveInt(tss.EC().Params().N)
 	round.temp.gammaI = gammaI
 	round.temp.r5AbortData.GammaI = gammaI.Bytes()
 
@@ -70,9 +68,18 @@ func (round *round1) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
-	round.temp.cAKI = cA // used in round 5 for the ZK proof
-	round.temp.rAKI = rA
-	round.temp.r5AbortData.KIRandomness = rA.Bytes()
+
+	// set "k"-related temporary variables, also used for identified aborts later in the protocol
+	{
+		kIBz := kI.Bytes()
+		round.temp.KI = kIBz
+		round.temp.cAKI = cA // used or the ZK proof in round 5
+		round.temp.rAKI = rA
+		round.temp.r5AbortData.KI = kIBz
+		round.temp.r7AbortData.KI = kIBz
+		round.temp.r7AbortData.KRandI = rA.Bytes()
+	}
+
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue
@@ -83,7 +90,7 @@ func (round *round1) Start() *tss.Error {
 		}
 		r1msg1 := NewSignRound1Message1(Pj, round.PartyID(), cA, pi)
 		round.temp.signRound1Message1s[i] = r1msg1
-		round.temp.cis[j] = cA
+		round.temp.c1Is[j] = cA
 		round.out <- r1msg1
 	}
 

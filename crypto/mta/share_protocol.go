@@ -38,12 +38,10 @@ func BobMid(
 	if err != nil {
 		return
 	}
-	cB, err = pkA.HomoMult(b, cA)
-	if err != nil {
+	if cB, err = pkA.HomoMult(b, cA); err != nil {
 		return
 	}
-	cB, err = pkA.HomoAdd(cB, cBetaPrm)
-	if err != nil {
+	if cB, err = pkA.HomoAdd(cB, cBetaPrm); err != nil {
 		return
 	}
 	beta = common.ModInt(q).Sub(zero, betaPrm)
@@ -83,16 +81,17 @@ func AliceEnd(
 	pf *ProofBob,
 	h1A, h2A, cA, cB, NTildeA *big.Int,
 	sk *paillier.PrivateKey,
-) (*big.Int, error) {
+) (alphaIJ *big.Int, err error) {
 	if !pf.Verify(pkA, NTildeA, h1A, h2A, cA, cB) {
-		return nil, errors.New("ProofBob.Verify() returned false")
+		err = errors.New("ProofBob.Verify() returned false")
+		return
 	}
-	alphaPrm, err := sk.Decrypt(cB)
-	if err != nil {
-		return nil, err
+	if alphaIJ, err = sk.Decrypt(cB); err != nil {
+		return
 	}
 	q := tss.EC().Params().N
-	return new(big.Int).Mod(alphaPrm, q), nil
+	alphaIJ.Mod(alphaIJ, q)
+	return
 }
 
 func AliceEndWC(
@@ -101,14 +100,15 @@ func AliceEndWC(
 	B *crypto.ECPoint,
 	cA, cB, NTildeA, h1A, h2A *big.Int,
 	sk *paillier.PrivateKey,
-) (*big.Int, error) {
+) (muIJ, muIJRand *big.Int, err error) {
 	if !pf.Verify(pkA, NTildeA, h1A, h2A, cA, cB, B) {
-		return nil, errors.New("ProofBobWC.Verify() returned false")
+		err = errors.New("ProofBobWC.Verify() returned false")
+		return
 	}
-	alphaPrm, err := sk.Decrypt(cB)
-	if err != nil {
-		return nil, err
+	if muIJ, muIJRand, err = sk.DecryptAndRecoverRandomness(cB); err != nil {
+		return
 	}
 	q := tss.EC().Params().N
-	return new(big.Int).Mod(alphaPrm, q), nil
+	muIJ = new(big.Int).Mod(muIJ, q)
+	return
 }

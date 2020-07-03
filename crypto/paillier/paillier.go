@@ -189,16 +189,18 @@ func (pk *PublicKey) Gamma() *big.Int {
 
 func (sk *PrivateKey) Decrypt(c *big.Int) (m *big.Int, err error) {
 	NSq := sk.NSquare()
+	modN := common.ModInt(sk.N)
+	modNSq := common.ModInt(NSq)
 	if c.Cmp(zero) == -1 || c.Cmp(NSq) != -1 { // c < 0 || c >= N2 ?
 		return nil, ErrMessageTooLong
 	}
 	// 1. L(u) = (c^LambdaN-1 mod N2) / N
-	Lc := L(new(big.Int).Exp(c, sk.LambdaN, NSq), sk.N)
+	Lc := L(modNSq.Exp(c, sk.LambdaN), sk.N)
 	// 2. L(u) = (Gamma^LambdaN-1 mod N2) / N
-	Lg := L(new(big.Int).Exp(sk.Gamma(), sk.LambdaN, NSq), sk.N)
+	Lg := L(modNSq.Exp(sk.Gamma(), sk.LambdaN), sk.N)
 	// 3. (1) * modInv(2) mod N
-	inv := new(big.Int).ModInverse(Lg, sk.N)
-	m = common.ModInt(sk.N).Mul(Lc, inv)
+	inv := modN.Inverse(Lg)
+	m = modN.Mul(Lc, inv)
 	return
 }
 

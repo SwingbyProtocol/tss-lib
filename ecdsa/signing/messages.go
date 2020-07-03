@@ -99,21 +99,23 @@ func (m *SignRound1Message2) UnmarshalCommitment() *big.Int {
 
 func NewSignRound2Message(
 	to, from *tss.PartyID,
-	c1Ji *big.Int,
-	pi1Ji *mta.ProofBob,
-	c2Ji *big.Int,
-	pi2Ji *mta.ProofBobWC,
+	c1JI *big.Int,
+	pi1JI *mta.ProofBob,
+	c2JI, c2JiSigR, c2JiSigS *big.Int,
+	pi2JI *mta.ProofBobWC,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
 	}
-	pfBob := pi1Ji.Bytes()
-	pfBobWC := pi2Ji.Bytes()
+	pfBob := pi1JI.Bytes()
+	pfBobWC := pi2JI.Bytes()
 	content := &SignRound2Message{
-		C1:         c1Ji.Bytes(),
-		C2:         c2Ji.Bytes(),
+		C1:         c1JI.Bytes(),
+		C2:         c2JI.Bytes(),
+		C2SigR:     c2JiSigR.Bytes(),
+		C2SigS:     c2JiSigS.Bytes(),
 		ProofBob:   pfBob[:],
 		ProofBobWc: pfBobWC[:],
 	}
@@ -125,6 +127,8 @@ func (m *SignRound2Message) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyBytes(m.GetC1()) &&
 		common.NonEmptyBytes(m.GetC2()) &&
+		common.NonEmptyBytes(m.GetC2SigR(), 32/8) &&
+		common.NonEmptyBytes(m.GetC2SigS(), 32/8) &&
 		common.NonEmptyMultiBytes(m.GetProofBob(), mta.ProofBobBytesParts) &&
 		common.NonEmptyMultiBytes(m.GetProofBobWc(), mta.ProofBobWCBytesParts)
 }
@@ -360,8 +364,7 @@ func (m *SignRound6Message) ValidateBasic() bool {
 			common.NonEmptyBytes(c.Abort.GetKI()) &&
 			common.NonEmptyBytes(c.Abort.GetGammaI()) &&
 			common.NonEmptyMultiBytes(c.Abort.GetAlphaIJ()) &&
-			common.NonEmptyMultiBytes(c.Abort.GetBetaJI()) &&
-			len(c.Abort.GetAlphaIJ()) == len(c.Abort.GetBetaJI())
+			common.NonEmptyMultiBytes(c.Abort.GetBetaJI(), len(c.Abort.GetAlphaIJ()))
 	default:
 		return false
 	}
@@ -414,7 +417,10 @@ func NewSignRound7MessageAbort(
 		IsBroadcast: true,
 	}
 	// this hack makes the ValidateBasic pass because the [i] index position for this P is empty in these arrays
-	data.GetVJI()[from.Index] = []byte{1}
+	data.GetUIJ()[from.Index] = []byte{1}
+	data.GetURandIJ()[from.Index] = []byte{1}
+	data.GetC2SigsR()[from.Index] = []byte{1}
+	data.GetC2SigsS()[from.Index] = []byte{1}
 	content := &SignRound7Message{
 		Content: &SignRound7Message_Abort{Abort: data},
 	}
@@ -431,7 +437,12 @@ func (m *SignRound7Message) ValidateBasic() bool {
 		return common.NonEmptyBytes(c.SI)
 	case *SignRound7Message_Abort:
 		return c.Abort != nil &&
-			common.NonEmptyMultiBytes(c.Abort.GetVJI())
+			common.NonEmptyBytes(c.Abort.GetKI()) &&
+			common.NonEmptyBytes(c.Abort.GetKRandI()) &&
+			common.NonEmptyMultiBytes(c.Abort.GetUIJ()) &&
+			common.NonEmptyMultiBytes(c.Abort.GetURandIJ(), len(c.Abort.GetUIJ())) &&
+			common.NonEmptyMultiBytes(c.Abort.GetC2SigsR(), len(c.Abort.GetUIJ())) &&
+			common.NonEmptyMultiBytes(c.Abort.GetC2SigsS(), len(c.Abort.GetUIJ()))
 	default:
 		return false
 	}
