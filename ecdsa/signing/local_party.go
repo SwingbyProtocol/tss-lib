@@ -60,18 +60,20 @@ type (
 		deltaI,
 		sigmaI,
 		gammaI *big.Int
-		cis      []*big.Int
+		c1Is     []*big.Int
 		bigWs    []*crypto.ECPoint
 		gammaIG  *crypto.ECPoint
 		deCommit cmt.HashDeCommitment
 
 		// round 2
 		betas, // return value of Bob_mid
-		c1jis,
-		c2jis,
-		vjis []*big.Int // return value of Bob_mid_wc
-		pi1jis []*mta.ProofBob
-		pi2jis []*mta.ProofBobWC
+		c1JIs,
+		c2JIs,
+		c2JISigRs,
+		c2JISigSs,
+		vJIs []*big.Int // return value of Bob_mid_wc
+		pI1JIs []*mta.ProofBob
+		pI2JIs []*mta.ProofBobWC
 
 		// round 3
 		lI *big.Int
@@ -120,18 +122,19 @@ func NewLocalParty(
 	p.temp.signRound7Messages = make([]tss.ParsedMessage, partyCount)
 	// temp data init
 	p.temp.m = msg
-	p.temp.cis = make([]*big.Int, partyCount)
+	p.temp.c1Is = make([]*big.Int, partyCount)
 	p.temp.bigWs = make([]*crypto.ECPoint, partyCount)
 	p.temp.betas = make([]*big.Int, partyCount)
-	p.temp.c1jis = make([]*big.Int, partyCount)
-	p.temp.c2jis = make([]*big.Int, partyCount)
-	p.temp.pi1jis = make([]*mta.ProofBob, partyCount)
-	p.temp.pi2jis = make([]*mta.ProofBobWC, partyCount)
-	p.temp.vjis = make([]*big.Int, partyCount)
+	p.temp.c1JIs = make([]*big.Int, partyCount)
+	p.temp.c2JIs = make([]*big.Int, partyCount)
+	p.temp.c2JISigRs = make([]*big.Int, partyCount)
+	p.temp.c2JISigSs = make([]*big.Int, partyCount)
+	p.temp.pI1JIs = make([]*mta.ProofBob, partyCount)
+	p.temp.pI2JIs = make([]*mta.ProofBobWC, partyCount)
+	p.temp.vJIs = make([]*big.Int, partyCount)
 	p.temp.bigGammaJs = make([]*crypto.ECPoint, partyCount)
 	p.temp.r5AbortData.AlphaIJ = make([][]byte, partyCount)
 	p.temp.r5AbortData.BetaJI = make([][]byte, partyCount)
-	p.temp.r7AbortData.VJI = make([][]byte, partyCount)
 	return p
 }
 

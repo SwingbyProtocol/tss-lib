@@ -8,6 +8,7 @@ package signing
 
 import (
 	"crypto/ecdsa"
+	"crypto/sha512"
 	"errors"
 	"fmt"
 	"math/big"
@@ -106,6 +107,8 @@ func FinalizeGetAndVerifyFinalSig(
 		return nil, nil, FinalizeWrapError(errors.New("identify abort assertion fail in phase 7"), ourP, culprits...)
 	}
 
+	// Calculate Recovery ID: It is not possible to compute the public key out of the signature itself;
+	// the Recovery ID is used to enable extracting the public key from the signature.
 	// byte v = if(R.X > curve.N) then 2 else 0) | (if R.Y.IsEven then 0 else 1);
 	recId := 0
 	if bigR.X().Cmp(N) > 0 {
@@ -171,17 +174,62 @@ func (round *finalization) Start() *tss.Error {
 
 	// Identifiable Abort Type 7 triggered during Phase 6 (GG20)
 	if round.abortingT7 {
+		common.Logger.Infof("round 8: Abort Type 7 code path triggered")
+	outer:
 		for j, msg := range round.temp.signRound7Messages {
 			if j == i {
 				continue
 			}
 			Pj := round.Parties().IDs()[j]
+
 			r7msgInner, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort)
 			if !ok {
 				common.Logger.Warnf("round 8: unexpected success message while in aborting mode: %+v", r7msgInner)
 				culprits = append(culprits, Pj)
 				continue
 			}
+			r7msg := r7msgInner.Abort
+
+			// content length sanity check
+			// note: the len equivalence of each of the slices in this msg have already been checked in ValidateBasic(), so just look at the UIJ slice here
+			if len(r7msg.GetUIJ()) != len(Ps) {
+				culprits = append(culprits, Pj)
+				continue
+			}
+
+			uIJs := common.ByteSlicesToBigInts(r7msg.GetUIJ())
+			uRandIJs := common.ByteSlicesToBigInts(r7msg.GetURandIJ())
+			c2SigRs := common.ByteSlicesToBigInts(r7msg.GetC2SigsR())
+			c2SigSs := common.ByteSlicesToBigInts(r7msg.GetC2SigsS())
+
+			// the paillier public key for the P we received this msg from
+			paiPKJ := round.key.PaillierPKs[j]
+
+			for k, uIJ := range uIJs {
+				if k == i {
+					continue
+				}
+				// the pubkey (big X) of the P that the Pj received this from
+				// we should be able to verify that the sig<R,S> matches with the cipher-text we compute using the provided randomness
+				pkJ := round.key.BigXj[k]
+				uRandIJ := uRandIJs[k]
+				c2IJ, _, err := paiPKJ.EncryptWithChosenRandomness(uIJ, uRandIJ)
+				if err != nil {
+					culprits = append(culprits, Pj)
+					continue outer
+				}
+				c2JIHash := sha512.Sum512_256(c2IJ.Bytes())
+				if ok := ecdsa.Verify(
+					pkJ.ToECDSAPubKey(),
+					c2JIHash[:],
+					c2SigRs[k],
+					c2SigSs[k],
+				); !ok {
+					culprits = append(culprits, Ps[k])
+					continue outer
+				}
+			}
+
 		}
 
 		return round.WrapError(errors.New("round 7 consistency check failed: y != bigSJ products, Type 7 identified abort, culprits known"), culprits...)

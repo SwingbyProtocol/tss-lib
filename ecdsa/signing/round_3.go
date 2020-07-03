@@ -7,6 +7,8 @@
 package signing
 
 import (
+	"crypto/ecdsa"
+	"crypto/sha512"
 	"errors"
 	"math/big"
 	"sync"
@@ -31,8 +33,9 @@ func (round *round3) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
-	alphas := make([]*big.Int, len(round.Parties().IDs()))
-	us := make([]*big.Int, len(round.Parties().IDs()))
+	alphaIJs := make([]*big.Int, len(round.Parties().IDs()))
+	uIJs := make([]*big.Int, len(round.Parties().IDs()))
+	uRandIJ := make([]*big.Int, len(round.Parties().IDs()))
 
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
 	wg := sync.WaitGroup{}
@@ -55,7 +58,7 @@ func (round *round3) Start() *tss.Error {
 				proofBob,
 				round.key.H1j[i],
 				round.key.H2j[i],
-				round.temp.cis[j],
+				round.temp.c1Is[j],
 				new(big.Int).SetBytes(r2msg.GetC1()),
 				round.key.NTildej[i],
 				round.key.PaillierSK)
@@ -63,7 +66,7 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(err, Pj)
 				return
 			}
-			alphas[j] = alphaIJ
+			alphaIJs[j] = alphaIJ
 			round.temp.r5AbortData.AlphaIJ[j] = alphaIJ.Bytes()
 		}(j, Pj)
 		// Alice_end_wc
@@ -75,11 +78,11 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: UnmarshalProofBobWC failed"), Pj)
 				return
 			}
-			uIj, err := mta.AliceEndWC(
+			uIJ, uIJRand, err := mta.AliceEndWC(
 				round.key.PaillierPKs[i],
 				proofBobWC,
 				round.temp.bigWs[j],
-				round.temp.cis[j],
+				round.temp.c1Is[j],
 				new(big.Int).SetBytes(r2msg.GetC2()),
 				round.key.NTildej[i],
 				round.key.H1j[i],
@@ -89,7 +92,21 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(err, Pj)
 				return
 			}
-			us[j] = uIj
+			// for Type 7 identified abort; proves the cipher-text's origin during P2P MtA messaging if we enter abort mode later on
+			pkJ := round.key.BigXj[j]
+			c2JIHash := sha512.Sum512_256(r2msg.GetC2())
+			if ok := ecdsa.Verify(
+				pkJ.ToECDSAPubKey(),
+				c2JIHash[:],
+				new(big.Int).SetBytes(r2msg.GetC2SigR()),
+				new(big.Int).SetBytes(r2msg.GetC2SigS()),
+			); !ok {
+				// TODO: do we want to let this fall through to get exposed during Type 7 abort?
+				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: C2 ECDSA signature verify failed"), Pj)
+				return
+			}
+			uIJs[j] = uIJ
+			uRandIJ[j] = uIJRand
 		}(j, Pj)
 	}
 
@@ -103,6 +120,9 @@ func (round *round3) Start() *tss.Error {
 	if len(culprits) > 0 {
 		return round.WrapError(errors.New("failed to calculate Alice_end or Alice_end_wc"), culprits...)
 	}
+	// for identifying aborts in round 7: uIJs, revealed during Type 7 identified abort
+	round.temp.r7AbortData.UIJ = common.BigIntsToBytes(uIJs)
+	round.temp.r7AbortData.URandIJ = common.BigIntsToBytes(uRandIJ)
 
 	q := tss.EC().Params().N
 	modN := common.ModInt(q)
@@ -118,9 +138,9 @@ func (round *round3) Start() *tss.Error {
 		if j == i {
 			continue
 		}
-		deltaI = modN.Add(deltaI, alphas[j].Add(alphas[j], round.temp.betas[j]))
-		beta := modN.Sub(zero, round.temp.vjis[j])
-		sigmaI = modN.Add(sigmaI, us[j].Add(us[j], beta))
+		deltaI = modN.Add(deltaI, alphaIJs[j].Add(alphaIJs[j], round.temp.betas[j]))
+		beta := modN.Sub(zero, round.temp.vJIs[j])
+		sigmaI = modN.Add(sigmaI, uIJs[j].Add(uIJs[j], beta))
 	}
 
 	// gg20: calculate T_i = g^sigma_i h^l_i

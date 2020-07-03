@@ -82,8 +82,9 @@ func TestShareProtocolWC(t *testing.T) {
 	betaPrm, cB, pfB, err := BobMidWC(pk, pf, b, cA, NTildei, h1i, h2i, NTildej, h1j, h2j, gBPoint)
 	assert.NoError(t, err)
 
-	alpha, err := AliceEndWC(pk, pfB, gBPoint, cA, cB, NTildei, h1i, h2i, sk)
+	alpha, alphaRand, err := AliceEndWC(pk, pfB, gBPoint, cA, cB, NTildei, h1i, h2i, sk)
 	assert.NoError(t, err)
+	assert.NotNil(t, alphaRand)
 
 	// expect: alpha = ab + betaPrm
 	aTimesB := new(big.Int).Mul(a, b)

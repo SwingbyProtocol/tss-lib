@@ -8,6 +8,7 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"crypto/elliptic"
 	"encoding/binary"
 	"encoding/json"
@@ -96,6 +97,14 @@ func (p *ECPoint) ToProtobufPoint() *common.ECPoint {
 	return &common.ECPoint{
 		X: p.X().Bytes(),
 		Y: p.Y().Bytes(),
+	}
+}
+
+func (p *ECPoint) ToECDSAPubKey() *ecdsa.PublicKey {
+	return &ecdsa.PublicKey{
+		Curve: p.curve,
+		X:     p.X(),
+		Y:     p.Y(),
 	}
 }
 

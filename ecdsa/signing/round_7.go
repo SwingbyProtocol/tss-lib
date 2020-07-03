@@ -36,6 +36,7 @@ func (round *round7) Start() *tss.Error {
 
 	// Identifiable Abort Type 5 triggered during Phase 5 (GG20)
 	if round.abortingT5 {
+		common.Logger.Infof("round 7: Abort Type 5 code path triggered")
 	outer:
 		for j, msg := range round.temp.signRound6Messages {
 			if j == i {
@@ -159,7 +160,9 @@ func (round *round7) Start() *tss.Error {
 		round.abortingT7 = true
 		common.Logger.Warnf("round 7: consistency check failed: y != bigSJ products, entering Type 7 identified abort")
 
-		round.temp.r7AbortData.VJI = common.BigIntsToBytes(round.temp.vjis)
+		// parts of the abort msg that were not done by this round - c2 signatures conversion to byte arrays
+		round.temp.r7AbortData.C2SigsR = common.BigIntsToBytes(round.temp.c2JISigRs)
+		round.temp.r7AbortData.C2SigsS = common.BigIntsToBytes(round.temp.c2JISigSs)
 
 		// If we abort here, one-round mode won't matter now - we will proceed to round "8" anyway.
 		r7msg := NewSignRound7MessageAbort(Pi, &round.temp.r7AbortData)

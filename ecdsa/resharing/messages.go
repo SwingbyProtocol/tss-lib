@@ -138,7 +138,7 @@ func (m *DGRound2Message1) UnmarshalH2() *big.Int {
 
 func (m *DGRound2Message1) UnmarshalPaillierProof() paillier.Proof {
 	var pf paillier.Proof
-	ints := common.MultiBytesToBigInts(m.PaillierProof)
+	ints := common.ByteSlicesToBigInts(m.PaillierProof)
 	copy(pf[:], ints[:paillier.ProofIters])
 	return pf
 }
