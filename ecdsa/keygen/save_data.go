@@ -45,7 +45,7 @@ type (
 		BigXj       []*crypto.ECPoint     // Xj
 		PaillierPKs []*paillier.PublicKey // pkj
 
-		// used for test assertions (may be discarded)
+		// the ECDSA public key
 		ECDSAPub *crypto.ECPoint // y
 	}
 )

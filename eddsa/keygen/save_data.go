@@ -31,7 +31,7 @@ type (
 		// public keys (Xj = uj*G for each Pj)
 		BigXj []*crypto.ECPoint // Xj
 
-		// used for test assertions (may be discarded)
+		// the EdDSA public key
 		EDDSAPub *crypto.ECPoint // y
 	}
 )
