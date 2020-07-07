@@ -72,7 +72,7 @@ func (round *round1) Start() *tss.Error {
 	// set "k"-related temporary variables, also used for identified aborts later in the protocol
 	{
 		kIBz := kI.Bytes()
-		round.temp.KI = kIBz
+		round.temp.KI = kIBz // now part of the OneRoundData struct
 		round.temp.r5AbortData.KI = kIBz
 		round.temp.r7AbortData.KI = kIBz
 		round.temp.cAKI = cA // used for the ZK proof in round 5
@@ -137,17 +137,15 @@ func (round *round1) NextRound() tss.Round {
 // helper to call into PrepareForSigning()
 func (round *round1) prepare() error {
 	i := round.PartyID().Index
-
-	xi := round.key.Xi
-	ks := round.key.Ks
-	bigXs := round.key.BigXj
-
+	xi, ks, bigXs := round.key.Xi, round.key.Ks, round.key.BigXj
 	if round.Threshold()+1 > len(ks) {
 		return fmt.Errorf("t+1=%d is not satisfied by the key count of %d", round.Threshold()+1, len(ks))
 	}
-	wI, bigWs := PrepareForSigning(i, len(ks), xi, ks, bigXs)
-
-	round.temp.wI = wI
-	round.temp.bigWs = bigWs
+	if wI, bigWs, err := PrepareForSigning(i, len(ks), xi, ks, bigXs); err != nil {
+		return err
+	} else {
+		round.temp.wI = wI
+		round.temp.bigWs = bigWs
+	}
 	return nil
 }
