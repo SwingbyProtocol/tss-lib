@@ -31,9 +31,6 @@ message SignRound1Message2 {
 message SignRound2Message {
     bytes c1 = 1;
     bytes c2 = 2;
-    /* For Type 7 identified abort; proves the cipher-text's origin in P2P MtA messaging */
-    bytes c2_sig_r = 5;
-    bytes c2_sig_s = 6;
     repeated bytes proof_bob = 3;
     repeated bytes proof_bob_wc = 4;
 }
@@ -96,8 +93,6 @@ message SignRound7Message {
         bytes k_rand_i = 2;
         repeated bytes u_i_j = 3;
         repeated bytes u_rand_i_j = 4;
-        repeated bytes c2_sigs_s = 5;
-        repeated bytes c2_sigs_r = 6;
     }
     oneof content {
         bytes s_i = 1;

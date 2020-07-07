@@ -69,8 +69,6 @@ type (
 		betas, // return value of Bob_mid
 		c1JIs,
 		c2JIs,
-		c2JISigRs,
-		c2JISigSs,
 		vJIs []*big.Int // return value of Bob_mid_wc
 		pI1JIs []*mta.ProofBob
 		pI2JIs []*mta.ProofBobWC
@@ -127,8 +125,6 @@ func NewLocalParty(
 	p.temp.betas = make([]*big.Int, partyCount)
 	p.temp.c1JIs = make([]*big.Int, partyCount)
 	p.temp.c2JIs = make([]*big.Int, partyCount)
-	p.temp.c2JISigRs = make([]*big.Int, partyCount)
-	p.temp.c2JISigSs = make([]*big.Int, partyCount)
 	p.temp.pI1JIs = make([]*mta.ProofBob, partyCount)
 	p.temp.pI2JIs = make([]*mta.ProofBobWC, partyCount)
 	p.temp.vJIs = make([]*big.Int, partyCount)

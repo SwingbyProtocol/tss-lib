@@ -7,15 +7,11 @@
 package signing
 
 import (
-	"crypto/ecdsa"
-	"crypto/rand"
-	"crypto/sha512"
 	"errors"
 	"sync"
 
 	errorspkg "github.com/pkg/errors"
 
-	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto/mta"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -30,12 +26,6 @@ func (round *round2) Start() *tss.Error {
 
 	i := round.PartyID().Index
 	round.ok[i] = true
-
-	// for Type 7 identified abort; see usage below
-	skI := &ecdsa.PrivateKey{
-		PublicKey: *round.key.BigXj[i].ToECDSAPubKey(),
-		D:         round.key.Xi,
-	}
 
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
 	wg := sync.WaitGroup{}
@@ -102,12 +92,6 @@ func (round *round2) Start() *tss.Error {
 			round.temp.vJIs[j] = vJI
 			round.temp.pI2JIs[j] = pi2JI
 			round.temp.c2JIs[j] = c2JI
-			// for Type 7 identified abort; proves the cipher-text's origin during P2P MtA messaging if we enter abort mode later on
-			c2JIHash := sha512.Sum512_256(c2JI.Bytes())
-			if round.temp.c2JISigRs[j], round.temp.c2JISigSs[j], err = ecdsa.Sign(rand.Reader, skI, c2JIHash[:]); err != nil {
-				errChs <- round.WrapError(err, Pj)
-				return
-			}
 		}(j, Pj)
 	}
 	// consume error channels; wait for goroutines
@@ -130,14 +114,9 @@ func (round *round2) Start() *tss.Error {
 			round.temp.c1JIs[j],
 			round.temp.pI1JIs[j],
 			round.temp.c2JIs[j],
-			round.temp.c2JISigRs[j],
-			round.temp.c2JISigSs[j],
 			round.temp.pI2JIs[j])
 		round.out <- r2msg
 	}
-	// for Type 7 identified abort; if we enter abort mode in round 7
-	round.temp.r7AbortData.C2SigsR = common.BigIntsToBytes(round.temp.c2JISigRs)
-	round.temp.r7AbortData.C2SigsS = common.BigIntsToBytes(round.temp.c2JISigSs)
 	return nil
 }
 

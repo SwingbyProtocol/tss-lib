@@ -101,7 +101,7 @@ func NewSignRound2Message(
 	to, from *tss.PartyID,
 	c1JI *big.Int,
 	pi1JI *mta.ProofBob,
-	c2JI, c2JiSigR, c2JiSigS *big.Int,
+	c2JI *big.Int,
 	pi2JI *mta.ProofBobWC,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
@@ -114,8 +114,6 @@ func NewSignRound2Message(
 	content := &SignRound2Message{
 		C1:         c1JI.Bytes(),
 		C2:         c2JI.Bytes(),
-		C2SigR:     c2JiSigR.Bytes(),
-		C2SigS:     c2JiSigS.Bytes(),
 		ProofBob:   pfBob[:],
 		ProofBobWc: pfBobWC[:],
 	}
@@ -127,8 +125,6 @@ func (m *SignRound2Message) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyBytes(m.GetC1()) &&
 		common.NonEmptyBytes(m.GetC2()) &&
-		common.NonEmptyBytes(m.GetC2SigR(), 32/8) &&
-		common.NonEmptyBytes(m.GetC2SigS(), 32/8) &&
 		common.NonEmptyMultiBytes(m.GetProofBob(), mta.ProofBobBytesParts) &&
 		common.NonEmptyMultiBytes(m.GetProofBobWc(), mta.ProofBobWCBytesParts)
 }
@@ -419,8 +415,6 @@ func NewSignRound7MessageAbort(
 	// this hack makes the ValidateBasic pass because the [i] index position for this P is empty in these arrays
 	data.GetUIJ()[from.Index] = []byte{1}
 	data.GetURandIJ()[from.Index] = []byte{1}
-	data.GetC2SigsR()[from.Index] = []byte{1}
-	data.GetC2SigsS()[from.Index] = []byte{1}
 	content := &SignRound7Message{
 		Content: &SignRound7Message_Abort{Abort: data},
 	}
@@ -440,9 +434,7 @@ func (m *SignRound7Message) ValidateBasic() bool {
 			common.NonEmptyBytes(c.Abort.GetKI()) &&
 			common.NonEmptyBytes(c.Abort.GetKRandI()) &&
 			common.NonEmptyMultiBytes(c.Abort.GetUIJ()) &&
-			common.NonEmptyMultiBytes(c.Abort.GetURandIJ(), len(c.Abort.GetUIJ())) &&
-			common.NonEmptyMultiBytes(c.Abort.GetC2SigsR(), len(c.Abort.GetUIJ())) &&
-			common.NonEmptyMultiBytes(c.Abort.GetC2SigsS(), len(c.Abort.GetUIJ()))
+			common.NonEmptyMultiBytes(c.Abort.GetURandIJ(), len(c.Abort.GetUIJ()))
 	default:
 		return false
 	}
