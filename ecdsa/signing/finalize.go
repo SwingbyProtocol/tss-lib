@@ -7,8 +7,8 @@
 package signing
 
 import (
+	"bytes"
 	"crypto/ecdsa"
-	"crypto/sha512"
 	"errors"
 	"fmt"
 	"math/big"
@@ -199,39 +199,28 @@ func (round *finalization) Start() *tss.Error {
 
 			uIJs := common.ByteSlicesToBigInts(r7msg.GetUIJ())
 			uRandIJs := common.ByteSlicesToBigInts(r7msg.GetURandIJ())
-			c2SigRs := common.ByteSlicesToBigInts(r7msg.GetC2SigsR())
-			c2SigSs := common.ByteSlicesToBigInts(r7msg.GetC2SigsS())
+
+			// re-encrypt k_i to make sure it matches the one we have "on record"
+			cA, err := round.key.PaillierPKs[j].EncryptWithChosenRandomness(
+				new(big.Int).SetBytes(r7msg.GetKI()),
+				new(big.Int).SetBytes(r7msg.GetKRandI()))
+			r1msg1 := round.temp.signRound1Message1s[j].Content().(*SignRound1Message1)
+			if err != nil || !bytes.Equal(cA.Bytes(), r1msg1.GetC()) {
+				culprits = append(culprits, Pj)
+				continue
+			}
 
 			// the paillier public key for the P we received this msg from
 			paiPKJ := round.key.PaillierPKs[j]
 
-			for k, uIJ := range uIJs {
-				if k == i {
-					continue
-				}
-				// the pubkey (big X) of the P that the Pj received this from
-				// we should be able to verify that the sig<R,S> matches with the cipher-text we compute using the provided randomness
-				pkJ := round.key.BigXj[k]
-				uRandIJ := uRandIJs[k]
-				c2IJ, _, err := paiPKJ.EncryptWithChosenRandomness(uIJ, uRandIJ)
-				if err != nil {
-					culprits = append(culprits, Pj)
-					continue outer
-				}
-				c2JIHash := sha512.Sum512_256(c2IJ.Bytes())
-				if ok := ecdsa.Verify(
-					pkJ.ToECDSAPubKey(),
-					c2JIHash[:],
-					c2SigRs[k],
-					c2SigSs[k],
-				); !ok {
-					culprits = append(culprits, Ps[k])
-					continue outer
-				}
+			uIJ, uRandIJ := uIJs[i], uRandIJs[i]
+			cB, err := paiPKJ.EncryptWithChosenRandomness(uIJ, uRandIJ)
+			if err != nil || !bytes.Equal(cB.Bytes(), round.temp.c2JIs[j].Bytes()) {
+				culprits = append(culprits, Pj)
+				continue outer
 			}
 
 		}
-
 		return round.WrapError(errors.New("round 7 consistency check failed: y != bigSJ products, Type 7 identified abort, culprits known"), culprits...)
 	}
 

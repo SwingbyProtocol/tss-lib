@@ -73,10 +73,10 @@ func (round *round1) Start() *tss.Error {
 	{
 		kIBz := kI.Bytes()
 		round.temp.KI = kIBz
-		round.temp.cAKI = cA // used or the ZK proof in round 5
-		round.temp.rAKI = rA
 		round.temp.r5AbortData.KI = kIBz
 		round.temp.r7AbortData.KI = kIBz
+		round.temp.cAKI = cA // used for the ZK proof in round 5
+		round.temp.rAKI = rA
 		round.temp.r7AbortData.KRandI = rA.Bytes()
 	}
 

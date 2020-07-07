@@ -108,16 +108,15 @@ func GenerateKeyPair(modulusBitLen int, timeout time.Duration, optionalConcurren
 
 // ----- //
 
-func (pk *PublicKey) EncryptWithChosenRandomness(m, rnd *big.Int) (c *big.Int, x *big.Int, err error) {
-	if rnd == nil || rnd.Cmp(zero) == 0 {
-		return nil, nil, errors.New("EncryptWithChosenRandomness() requires non-zero randomness")
+func (pk *PublicKey) EncryptWithChosenRandomness(m, x *big.Int) (c *big.Int, err error) {
+	if x == nil || x.Cmp(zero) == 0 {
+		return nil, errors.New("EncryptWithChosenRandomness() requires non-zero randomness")
 	}
 	if m.Cmp(zero) == -1 || m.Cmp(pk.N) != -1 { // m < 0 || m >= N ?
-		return nil, nil, ErrMessageTooLong
+		return nil, ErrMessageTooLong
 	}
 	// https://docs.rs/paillier/0.2.0/src/paillier/core.rs.html#236
 	modNSq := common.ModInt(pk.NSquare())
-	x = modNSq.Exp(rnd, pk.N)
 	// 1. gamma^m mod N2
 	Gm := modNSq.Exp(pk.Gamma(), m)
 	// 2. x^N mod N2

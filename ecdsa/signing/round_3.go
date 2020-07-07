@@ -7,8 +7,6 @@
 package signing
 
 import (
-	"crypto/ecdsa"
-	"crypto/sha512"
 	"errors"
 	"math/big"
 	"sync"
@@ -34,7 +32,8 @@ func (round *round3) Start() *tss.Error {
 	i := Pi.Index
 
 	alphaIJs := make([]*big.Int, len(round.Parties().IDs()))
-	uIJs := make([]*big.Int, len(round.Parties().IDs()))
+	uIJs := make([]*big.Int, len(round.Parties().IDs()))    // mod q'd
+	uIJRecs := make([]*big.Int, len(round.Parties().IDs())) // raw recovered
 	uRandIJ := make([]*big.Int, len(round.Parties().IDs()))
 
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
@@ -78,7 +77,7 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: UnmarshalProofBobWC failed"), Pj)
 				return
 			}
-			uIJ, uIJRand, err := mta.AliceEndWC(
+			uIJ, uIJRec, uIJRand, err := mta.AliceEndWC(
 				round.key.PaillierPKs[i],
 				proofBobWC,
 				round.temp.bigWs[j],
@@ -92,20 +91,8 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(err, Pj)
 				return
 			}
-			// for Type 7 identified abort; proves the cipher-text's origin during P2P MtA messaging if we enter abort mode later on
-			pkJ := round.key.BigXj[j]
-			c2JIHash := sha512.Sum512_256(r2msg.GetC2())
-			if ok := ecdsa.Verify(
-				pkJ.ToECDSAPubKey(),
-				c2JIHash[:],
-				new(big.Int).SetBytes(r2msg.GetC2SigR()),
-				new(big.Int).SetBytes(r2msg.GetC2SigS()),
-			); !ok {
-				// TODO: do we want to let this fall through to get exposed during Type 7 abort?
-				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: C2 ECDSA signature verify failed"), Pj)
-				return
-			}
-			uIJs[j] = uIJ
+			uIJs[j] = uIJ       // mod q'd
+			uIJRecs[j] = uIJRec // raw recovered
 			uRandIJ[j] = uIJRand
 		}(j, Pj)
 	}
@@ -121,7 +108,7 @@ func (round *round3) Start() *tss.Error {
 		return round.WrapError(errors.New("failed to calculate Alice_end or Alice_end_wc"), culprits...)
 	}
 	// for identifying aborts in round 7: uIJs, revealed during Type 7 identified abort
-	round.temp.r7AbortData.UIJ = common.BigIntsToBytes(uIJs)
+	round.temp.r7AbortData.UIJ = common.BigIntsToBytes(uIJRecs)
 	round.temp.r7AbortData.URandIJ = common.BigIntsToBytes(uRandIJ)
 
 	q := tss.EC().Params().N
