@@ -67,29 +67,6 @@ func (p *ECPoint) Sub(b *ECPoint) (*ECPoint, error) {
 	return p.Add(b.Neg())
 }
 
-func (p *ECPoint) SubPoint(other *ECPoint) (*ECPoint, error) {
-	order := p.curve.Params().P
-	modP := common.ModInt(order)
-	x, y := other.X(), other.Y()
-	minusY := modP.Sub(order, y)
-	xVec := x.Bytes()
-	yVec := minusY.Bytes()
-	tmpX := make([]byte, 32-len(xVec), 32)
-	tmpX = append(tmpX, xVec...)
-	if len(tmpX) != 32 {
-		return nil, errors.New("SubPoint(): len(tmpX) != 32")
-	}
-	xVec = tmpX
-	tmpY := make([]byte, 32-len(yVec), 32)
-	tmpY = append(tmpY, yVec...)
-	if len(tmpY) != 32 {
-		return nil, errors.New("SubPoint(): len(tmpY) != 32")
-	}
-	yVec = tmpY
-	minusPoint := NewECPointNoCurveCheck(p.curve, new(big.Int).SetBytes(xVec), new(big.Int).SetBytes(yVec))
-	return p.Add(minusPoint)
-}
-
 func (p *ECPoint) Neg() *ECPoint {
 	order := p.curve.Params().P
 	negY := new(big.Int).Neg(p.Y())

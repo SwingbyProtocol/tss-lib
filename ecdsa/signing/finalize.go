@@ -261,7 +261,7 @@ func (round *finalization) Start() *tss.Error {
 					continue
 				}
 				gWJKI := round.temp.bigWs[j].ScalarMultBytes(kIs[i])
-				gNus[i][j], _ = gWJKI.SubPoint(gMus[i][j])
+				gNus[i][j], _ = gWJKI.Sub(gMus[i][j])
 			}
 		}
 		// compute g^sigma_i's
