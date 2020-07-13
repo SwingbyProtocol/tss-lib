@@ -162,7 +162,7 @@ func (pf *STProof) ValidateBasic() bool {
 
 // ----- //
 
-func calculateTAndU(q *big.Int, a *big.Int, c *big.Int, sigmaI *big.Int, b *big.Int, lI *big.Int) (t *big.Int, u *big.Int) {
+func calculateTAndU(q, a, c, sigmaI, b, lI *big.Int) (t, u *big.Int) {
 	modQ := common.ModInt(q)
 	t = modQ.Add(a, new(big.Int).Mul(c, sigmaI))
 	u = modQ.Add(b, new(big.Int).Mul(c, lI))
