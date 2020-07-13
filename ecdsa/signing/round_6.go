@@ -30,13 +30,10 @@ func (round *round6) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
-	// sigma_i can be discarded here; its only use is to be multiplied with r to become s_i = m*k + r*sigma_i
-	sigmaI := round.temp.sigmaI
-	round.temp.sigmaI = zero
+	bigR, _ := crypto.NewECPointFromProtobuf(round.temp.BigR)
 
-	// bigR is stored as bytes for the OneRoundData protobuf struct
-	bigRX, bigRY := new(big.Int).SetBytes(round.temp.BigR.GetX()), new(big.Int).SetBytes(round.temp.BigR.GetY())
-	bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
+	sigmaI := round.temp.sigmaI
+	// note: sigma_i is no longer discarded here; it's optionally used in the type 7 identified abort later on
 
 	errs := make(map[*tss.PartyID]error)
 	bigRBarJProducts := (*crypto.ECPoint)(nil)
@@ -112,16 +109,26 @@ func (round *round6) Start() *tss.Error {
 	TI, lI := round.temp.TI, round.temp.lI
 	bigSI := bigR.ScalarMult(sigmaI)
 
+	// R^sigma_i proof used in type 7 aborts
+	{
+		sigmaPf, err := zkp.NewECSigmaIProof(tss.EC(), sigmaI, bigR, bigSI)
+		if err != nil {
+			return round.WrapError(err, Pi)
+		}
+		round.temp.r7AbortData.EcddhProofA1 = sigmaPf.A1.ToProtobufPoint()
+		round.temp.r7AbortData.EcddhProofA2 = sigmaPf.A2.ToProtobufPoint()
+		round.temp.r7AbortData.EcddhProofZ = sigmaPf.Z.Bytes()
+	}
+
 	h, err := crypto.ECBasePoint2(tss.EC())
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
-	stProof, err := zkp.NewSTProof(TI, bigR, h, sigmaI, lI)
+	stPf, err := zkp.NewSTProof(TI, bigR, h, sigmaI, lI)
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
-
-	r6msg := NewSignRound6MessageSuccess(Pi, bigSI, stProof)
+	r6msg := NewSignRound6MessageSuccess(Pi, bigSI, stPf)
 	round.temp.signRound6Messages[i] = r6msg
 	round.out <- r6msg
 	return nil

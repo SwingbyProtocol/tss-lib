@@ -23,7 +23,7 @@ import (
 	"github.com/binance-chain/tss-lib/tss"
 )
 
-// ECPoint convenience helper
+// ECPoint represents a point on an elliptic curve in affine form. It is designed to be immutable
 type ECPoint struct {
 	curve        elliptic.Curve
 	coords       [2]*big.Int
@@ -64,26 +64,64 @@ func (p *ECPoint) Y() *big.Int {
 	return new(big.Int).Set(p.coords[1])
 }
 
-func (p *ECPoint) Add(p1 *ECPoint) (*ECPoint, error) {
-	x, y := p.curve.Add(p.X(), p.Y(), p1.X(), p1.Y())
+func (p *ECPoint) Add(b *ECPoint) (*ECPoint, error) {
+	x, y := p.curve.Add(p.X(), p.Y(), b.X(), b.Y())
 	return NewECPoint(p.curve, x, y)
 }
 
-func (p *ECPoint) ScalarMult(k *big.Int) *ECPoint {
-	x, y := p.curve.ScalarMult(p.X(), p.Y(), k.Bytes())
+func (p *ECPoint) Sub(b *ECPoint) (*ECPoint, error) {
+	return p.Add(b.Neg())
+}
+
+func (p *ECPoint) SubPoint(other *ECPoint) (*ECPoint, error) {
+	order := p.curve.Params().P
+	modP := common.ModInt(order)
+	x, y := other.X(), other.Y()
+	minusY := modP.Sub(order, y)
+	xVec := x.Bytes()
+	yVec := minusY.Bytes()
+	tmpX := make([]byte, 32-len(xVec), 32)
+	tmpX = append(tmpX, xVec...)
+	if len(tmpX) != 32 {
+		return nil, errors.New("SubPoint(): len(tmpX) != 32")
+	}
+	xVec = tmpX
+	tmpY := make([]byte, 32-len(yVec), 32)
+	tmpY = append(tmpY, yVec...)
+	if len(tmpY) != 32 {
+		return nil, errors.New("SubPoint(): len(tmpY) != 32")
+	}
+	yVec = tmpY
+	minusPoint := NewECPointNoCurveCheck(p.curve, new(big.Int).SetBytes(xVec), new(big.Int).SetBytes(yVec))
+	return p.Add(minusPoint)
+}
+
+func (p *ECPoint) Neg() *ECPoint {
+	order := p.curve.Params().P
+	negY := new(big.Int).Neg(p.Y())
+	negY.Mod(negY, order) // ok here because we're describing a curve point.
+	return NewECPointNoCurveCheck(p.curve, p.X(), negY)
+}
+
+func (p *ECPoint) ScalarMultBytes(k []byte) *ECPoint {
+	x, y := p.curve.ScalarMult(p.X(), p.Y(), k)
 	newP, _ := NewECPoint(p.curve, x, y) // it must be on the curve, no need to check.
 	return newP
+}
+
+func (p *ECPoint) ScalarMult(k *big.Int) *ECPoint {
+	return p.ScalarMultBytes(k.Bytes())
 }
 
 func (p *ECPoint) IsOnCurve() bool {
 	return isOnCurve(p.curve, p.coords[0], p.coords[1])
 }
 
-func (p *ECPoint) Equals(p2 *ECPoint) bool {
-	if p == nil || p2 == nil {
+func (p *ECPoint) Equals(b *ECPoint) bool {
+	if p == nil || b == nil {
 		return false
 	}
-	return p.X().Cmp(p2.X()) == 0 && p.Y().Cmp(p2.Y()) == 0
+	return p.X().Cmp(b.X()) == 0 && p.Y().Cmp(b.Y()) == 0
 }
 
 func (p *ECPoint) SetCurve(curve elliptic.Curve) *ECPoint {
@@ -101,6 +139,20 @@ func (p *ECPoint) ValidateBasic() bool {
 
 func (p *ECPoint) EightInvEight() *ECPoint {
 	return p.ScalarMult(eight).ScalarMult(eightInv)
+}
+
+func (p *ECPoint) Bytes() []byte {
+	bzX, bzY := p.X().Bytes(), p.Y().Bytes()
+	byteSize := p.curve.Params().BitSize / 8
+	tmpX := make([]byte, byteSize-len(bzX), byteSize) // pad
+	tmpY := make([]byte, byteSize-len(bzY), byteSize)
+	if 0 < len(bzX) {
+		tmpX = append(tmpX, bzX...)
+	}
+	if 0 < len(bzY) {
+		tmpY = append(tmpY, bzY...)
+	}
+	return append(tmpX, tmpY...)
 }
 
 func (p *ECPoint) ToProtobufPoint() *common.ECPoint {

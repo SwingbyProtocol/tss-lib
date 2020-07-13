@@ -32,9 +32,9 @@ func (round *round3) Start() *tss.Error {
 	i := Pi.Index
 
 	alphaIJs := make([]*big.Int, len(round.Parties().IDs()))
-	uIJs := make([]*big.Int, len(round.Parties().IDs()))    // mod q'd
-	uIJRecs := make([]*big.Int, len(round.Parties().IDs())) // raw recovered
-	uRandIJ := make([]*big.Int, len(round.Parties().IDs()))
+	muIJs := make([]*big.Int, len(round.Parties().IDs()))    // mod q'd
+	muIJRecs := make([]*big.Int, len(round.Parties().IDs())) // raw recovered
+	muRandIJ := make([]*big.Int, len(round.Parties().IDs()))
 
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
 	wg := sync.WaitGroup{}
@@ -77,7 +77,7 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(errorspkg.Wrapf(err, "MtA: UnmarshalProofBobWC failed"), Pj)
 				return
 			}
-			uIJ, uIJRec, uIJRand, err := mta.AliceEndWC(
+			muIJ, muIJRec, muIJRand, err := mta.AliceEndWC(
 				round.key.PaillierPKs[i],
 				proofBobWC,
 				round.temp.bigWs[j],
@@ -91,9 +91,9 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(err, Pj)
 				return
 			}
-			uIJs[j] = uIJ       // mod q'd
-			uIJRecs[j] = uIJRec // raw recovered
-			uRandIJ[j] = uIJRand
+			muIJs[j] = muIJ       // mod q'd
+			muIJRecs[j] = muIJRec // raw recovered
+			muRandIJ[j] = muIJRand
 		}(j, Pj)
 	}
 
@@ -107,9 +107,9 @@ func (round *round3) Start() *tss.Error {
 	if len(culprits) > 0 {
 		return round.WrapError(errors.New("failed to calculate Alice_end or Alice_end_wc"), culprits...)
 	}
-	// for identifying aborts in round 7: uIJs, revealed during Type 7 identified abort
-	round.temp.r7AbortData.UIJ = common.BigIntsToBytes(uIJRecs)
-	round.temp.r7AbortData.URandIJ = common.BigIntsToBytes(uRandIJ)
+	// for identifying aborts in round 7: muIJs, revealed during Type 7 identified abort
+	round.temp.r7AbortData.UIJ = common.BigIntsToBytes(muIJRecs)
+	round.temp.r7AbortData.URandIJ = common.BigIntsToBytes(muRandIJ)
 
 	q := tss.EC().Params().N
 	modN := common.ModInt(q)
@@ -125,9 +125,11 @@ func (round *round3) Start() *tss.Error {
 		if j == i {
 			continue
 		}
-		deltaI = modN.Add(deltaI, alphaIJs[j].Add(alphaIJs[j], round.temp.betas[j]))
 		beta := modN.Sub(zero, round.temp.vJIs[j])
-		sigmaI = modN.Add(sigmaI, uIJs[j].Add(uIJs[j], beta))
+		deltaI.Add(deltaI, alphaIJs[j].Add(alphaIJs[j], round.temp.betas[j]))
+		sigmaI.Add(sigmaI, muIJs[j].Add(muIJs[j], beta))
+		deltaI.Mod(deltaI, q)
+		sigmaI.Mod(sigmaI, q)
 	}
 
 	// gg20: calculate T_i = g^sigma_i h^l_i

@@ -156,6 +156,9 @@ func (round *round7) Start() *tss.Error {
 	if 0 < len(culprits) {
 		return round.WrapError(multiErr, culprits...)
 	}
+
+	round.temp.rI = bigR
+	round.temp.BigSJ = bigSJ
 	if y := round.key.ECDSAPub; !bigSJProducts.Equals(y) {
 		round.abortingT7 = true
 		common.Logger.Warnf("round 7: consistency check failed: y != bigSJ products, entering Type 7 identified abort")
@@ -166,8 +169,6 @@ func (round *round7) Start() *tss.Error {
 		round.out <- r7msg
 		return nil
 	}
-	round.temp.rI = bigR
-	round.temp.BigSJ = bigSJ
 
 	// PRE-PROCESSING FINISHED
 	// If we are in one-round signing mode (msg is nil), we will exit out with the current state here and we are done.
