@@ -27,7 +27,9 @@ const (
 	TaskNameFinalize = "signing-finalize"
 )
 
+// -----
 // One Round Finalization (async/offline)
+// -----
 
 // FinalizeGetOurSigShare is called in one-round signing mode after the online rounds have finished to compute s_i.
 func FinalizeGetOurSigShare(state *SignatureData, msg *big.Int) (sI *big.Int) {
@@ -94,7 +96,7 @@ func FinalizeGetAndVerifyFinalSig(
 			continue
 		}
 
-		// identify aborts for phase 7
+		// identify aborts of "type 8" in phase 7
 		// verify that R^S_i = Rdash_i^m * S_i^r
 		bigRBarIM, bigSIR, bigRSI := bigRBarJ.ScalarMult(msg), bigSI.ScalarMult(r), bigR.ScalarMult(sJ)
 		bigRBarIMBigSIR, err := bigRBarIM.Add(bigSIR)
@@ -158,7 +160,10 @@ func FinalizeWrapError(err error, victim *tss.PartyID, culprits ...*tss.PartyID)
 	return tss.NewError(err, TaskNameFinalize, -1, victim, culprits...)
 }
 
-// Full Online Finalization
+// -----
+// Full Online Finalization &
+// Identify Aborts of "Type 7"
+// ------
 
 func (round *finalization) Start() *tss.Error {
 	if round.started {
@@ -242,15 +247,15 @@ func (round *finalization) Start() *tss.Error {
 					continue outer
 				}
 			}
-
 			// compute g^mu_i_j
 			for k, mu := range mus {
 				if k == j {
 					continue
 				}
-				gMus[j][k] = crypto.ScalarBaseMult(tss.EC(), new(big.Int).Mod(mu, q))
+				gMus[j][k] = crypto.ScalarBaseMult(tss.EC(), mu.Mod(mu, q))
 			}
 		}
+		bigR := round.temp.rI
 		if 0 < len(culprits) {
 			goto fail
 		}
@@ -277,15 +282,10 @@ func (round *finalization) Start() *tss.Error {
 				gSigmaI, _ = gSigmaI.Add(gMuIJ)
 				gSigmaI, _ = gSigmaI.Add(gNuJI)
 			}
-			bigR := round.temp.rI
 			bigSI, _ := crypto.NewECPointFromProtobuf(round.temp.BigSJ[P.Id])
 			if !gSigmaIPfs[i].VerifySigmaI(tss.EC(), gSigmaI, bigR, bigSI) {
 				culprits = append(culprits, P)
 				continue
-			}
-			if i == Pi.Index {
-				common.Logger.Warnf("ARE THE SIGMAI's EQUAL?",
-					crypto.ScalarBaseMult(tss.EC(), round.temp.sigmaI).Equals(gSigmaI))
 			}
 		}
 	fail:
