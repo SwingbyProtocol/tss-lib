@@ -4,7 +4,7 @@
 // terms governing use, modification, and redistribution, is contained in the
 // file LICENSE at the root of the source code distribution tree.
 
-// port of https://github.com/KZen-networks/multi-party-ecdsa/blob/fd3607b07a3327e0cb8ad053255ae1013e0ca18b/src/utilities/zk_pdl_with_slack/mod.rs
+// go port of https://github.com/KZen-networks/multi-party-ecdsa/blob/fd3607b07a3327e0cb8ad053255ae1013e0ca18b/src/utilities/zk_pdl_with_slack/mod.rs
 
 package zkp
 
@@ -77,11 +77,11 @@ func NewPDLwSlackProof(wit PDLwSlackWitness, st PDLwSlackStatement) PDLwSlackPro
 	return PDLwSlackProof{z, u1, u2, u3, s1, s2, s3}
 }
 
-func (p PDLwSlackProof) Verify(st PDLwSlackStatement) bool {
+func (pf PDLwSlackProof) Verify(st PDLwSlackStatement) bool {
 	q := tss.EC().Params().N
 
-	e := common.SHA512_256i(st.G.X(), st.G.Y(), st.Q.X(), st.Q.Y(), st.CipherText, p.Z, p.U1.X(), p.U1.Y(), p.U2, p.U3)
-	gS1 := st.G.ScalarMult(p.S1)
+	e := common.SHA512_256i(st.G.X(), st.G.Y(), st.Q.X(), st.Q.Y(), st.CipherText, pf.Z, pf.U1.X(), pf.U1.Y(), pf.U2, pf.U3)
+	gS1 := st.G.ScalarMult(pf.S1)
 	eFeNeg := new(big.Int).Sub(q, e)
 	yMinusE := st.Q.ScalarMult(eFeNeg)
 	u1Test, err := gS1.Add(yMinusE)
@@ -90,21 +90,21 @@ func (p PDLwSlackProof) Verify(st PDLwSlackStatement) bool {
 	}
 
 	nOne, eNeg := new(big.Int).Add(st.PK.N, one), new(big.Int).Neg(e)
-	u2TestTmp := commitmentUnknownOrder(nOne, p.S2, st.PK.NSquare(), p.S1, st.PK.N)
+	u2TestTmp := commitmentUnknownOrder(nOne, pf.S2, st.PK.NSquare(), pf.S1, st.PK.N)
 	u2Test := commitmentUnknownOrder(u2TestTmp, st.CipherText, st.PK.NSquare(), one, eNeg)
-	u3TestTmp := commitmentUnknownOrder(st.H1, st.H2, st.NTilde, p.S1, p.S3)
-	u3Test := commitmentUnknownOrder(u3TestTmp, p.Z, st.NTilde, one, eNeg)
+	u3TestTmp := commitmentUnknownOrder(st.H1, st.H2, st.NTilde, pf.S1, pf.S3)
+	u3Test := commitmentUnknownOrder(u3TestTmp, pf.Z, st.NTilde, one, eNeg)
 
-	return p.U1.Equals(u1Test) &&
-		p.U2.Cmp(u2Test) == 0 &&
-		p.U3.Cmp(u3Test) == 0
+	return pf.U1.Equals(u1Test) &&
+		pf.U2.Cmp(u2Test) == 0 &&
+		pf.U3.Cmp(u3Test) == 0
 }
 
-func (p PDLwSlackProof) Marshal() ([][]byte, error) {
+func (pf PDLwSlackProof) Marshal() ([][]byte, error) {
 	cb := cmts.NewBuilder()
-	cb = cb.AddPart(p.Z)
-	cb = cb.AddPart(p.U1.X(), p.U1.Y(), p.U2, p.U3)
-	cb = cb.AddPart(p.S1, p.S2, p.S3)
+	cb = cb.AddPart(pf.Z)
+	cb = cb.AddPart(pf.U1.X(), pf.U1.Y(), pf.U2, pf.U3)
+	cb = cb.AddPart(pf.S1, pf.S2, pf.S3)
 	ints, err := cb.Secrets()
 	if err != nil {
 		return nil, err
@@ -162,3 +162,5 @@ func commitmentUnknownOrder(h1, h2, NTilde, x, r *big.Int) (com *big.Int) {
 	com = modNTilde.Mul(h1X, h2R)
 	return
 }
+
+// TODO: add tests
