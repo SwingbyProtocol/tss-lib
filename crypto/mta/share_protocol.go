@@ -100,15 +100,15 @@ func AliceEndWC(
 	B *crypto.ECPoint,
 	cA, cB, NTildeA, h1A, h2A *big.Int,
 	sk *paillier.PrivateKey,
-) (uIJ, uIJRec, uIJRand *big.Int, err error) {
+) (muIJ, muIJRec, muIJRand *big.Int, err error) {
 	if !pf.Verify(pkA, NTildeA, h1A, h2A, cA, cB, B) {
 		err = errors.New("ProofBobWC.Verify() returned false")
 		return
 	}
-	if uIJRec, uIJRand, err = sk.DecryptAndRecoverRandomness(cB); err != nil {
+	if muIJRec, muIJRand, err = sk.DecryptAndRecoverRandomness(cB); err != nil {
 		return
 	}
 	q := tss.EC().Params().N
-	uIJ = new(big.Int).Mod(uIJRec, q)
+	muIJ = new(big.Int).Mod(muIJRec, q)
 	return
 }

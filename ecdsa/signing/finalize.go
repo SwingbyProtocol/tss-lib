@@ -18,6 +18,8 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
+	"github.com/binance-chain/tss-lib/crypto/paillier"
+	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -175,12 +177,27 @@ func (round *finalization) Start() *tss.Error {
 	// Identifiable Abort Type 7 triggered during Phase 6 (GG20)
 	if round.abortingT7 {
 		common.Logger.Infof("round 8: Abort Type 7 code path triggered")
+		q := tss.EC().Params().N
+		kIs := make([][]byte, len(Ps))
+		gMus := make([][]*crypto.ECPoint, len(Ps))
+		gNus := make([][]*crypto.ECPoint, len(Ps))
+		gSigmaIPfs := make([]*zkp.ECDDHProof, len(Ps))
+		for i := range gMus {
+			gMus[i] = make([]*crypto.ECPoint, len(Ps))
+		}
+		for j := range gNus {
+			gNus[j] = make([]*crypto.ECPoint, len(Ps))
+		}
 	outer:
 		for j, msg := range round.temp.signRound7Messages {
-			if j == i {
-				continue
-			}
 			Pj := round.Parties().IDs()[j]
+			var err error
+			var paiPKJ *paillier.PublicKey
+			if j == i {
+				paiPKJ = &round.key.PaillierSK.PublicKey
+			} else {
+				paiPKJ = round.key.PaillierPKs[j]
+			}
 
 			r7msgInner, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort)
 			if !ok {
@@ -190,6 +207,13 @@ func (round *finalization) Start() *tss.Error {
 			}
 			r7msg := r7msgInner.Abort
 
+			// keep k_i and the g^sigma_i proof for later
+			kIs[j] = r7msg.GetKI()
+			if gSigmaIPfs[j], err = r7msg.UnmarshalSigmaIProof(); err != nil {
+				culprits = append(culprits, Pj)
+				continue
+			}
+
 			// content length sanity check
 			// note: the len equivalence of each of the slices in this msg have already been checked in ValidateBasic(), so just look at the UIJ slice here
 			if len(r7msg.GetUIJ()) != len(Ps) {
@@ -197,11 +221,8 @@ func (round *finalization) Start() *tss.Error {
 				continue
 			}
 
-			uIJs := common.ByteSlicesToBigInts(r7msg.GetUIJ())
-			uRandIJs := common.ByteSlicesToBigInts(r7msg.GetURandIJ())
-
 			// re-encrypt k_i to make sure it matches the one we have "on record"
-			cA, err := round.key.PaillierPKs[j].EncryptWithChosenRandomness(
+			cA, err := paiPKJ.EncryptWithChosenRandomness(
 				new(big.Int).SetBytes(r7msg.GetKI()),
 				new(big.Int).SetBytes(r7msg.GetKRandI()))
 			r1msg1 := round.temp.signRound1Message1s[j].Content().(*SignRound1Message1)
@@ -210,17 +231,64 @@ func (round *finalization) Start() *tss.Error {
 				continue
 			}
 
-			// the paillier public key for the P we received this msg from
-			paiPKJ := round.key.PaillierPKs[j]
+			mus := common.ByteSlicesToBigInts(r7msg.GetUIJ())
+			muRands := common.ByteSlicesToBigInts(r7msg.GetURandIJ())
 
-			uIJ, uRandIJ := uIJs[i], uRandIJs[i]
-			cB, err := paiPKJ.EncryptWithChosenRandomness(uIJ, uRandIJ)
-			if err != nil || !bytes.Equal(cB.Bytes(), round.temp.c2JIs[j].Bytes()) {
-				culprits = append(culprits, Pj)
-				continue outer
+			// check correctness of mu_i_j
+			if muIJ, muRandIJ := mus[i], muRands[i]; j != i {
+				cB, err := paiPKJ.EncryptWithChosenRandomness(muIJ, muRandIJ)
+				if err != nil || !bytes.Equal(cB.Bytes(), round.temp.c2JIs[j].Bytes()) {
+					culprits = append(culprits, Pj)
+					continue outer
+				}
 			}
 
+			// compute g^mu_i_j
+			for k, mu := range mus {
+				if k == j {
+					continue
+				}
+				gMus[j][k] = crypto.ScalarBaseMult(tss.EC(), new(big.Int).Mod(mu, q))
+			}
 		}
+		if 0 < len(culprits) {
+			goto fail
+		}
+		// compute g^nu_j_i's
+		for i := range Ps {
+			for j := range Ps {
+				if j == i {
+					continue
+				}
+				gWJKI := round.temp.bigWs[j].ScalarMultBytes(kIs[i])
+				gNus[i][j], _ = gWJKI.SubPoint(gMus[i][j])
+			}
+		}
+		// compute g^sigma_i's
+		for i, P := range Ps {
+			gWIMulKi := round.temp.bigWs[i].ScalarMultBytes(kIs[i])
+			gSigmaI := gWIMulKi
+			for j := range Ps {
+				if j == i {
+					continue
+				}
+				// add sum g^mu_i_j, sum g^nu_j_i
+				gMuIJ, gNuJI := gMus[i][j], gNus[j][i]
+				gSigmaI, _ = gSigmaI.Add(gMuIJ)
+				gSigmaI, _ = gSigmaI.Add(gNuJI)
+			}
+			bigR := round.temp.rI
+			bigSI, _ := crypto.NewECPointFromProtobuf(round.temp.BigSJ[P.Id])
+			if !gSigmaIPfs[i].VerifySigmaI(tss.EC(), gSigmaI, bigR, bigSI) {
+				culprits = append(culprits, P)
+				continue
+			}
+			if i == Pi.Index {
+				common.Logger.Warnf("ARE THE SIGMAI's EQUAL?",
+					crypto.ScalarBaseMult(tss.EC(), round.temp.sigmaI).Equals(gSigmaI))
+			}
+		}
+	fail:
 		return round.WrapError(errors.New("round 7 consistency check failed: y != bigSJ products, Type 7 identified abort, culprits known"), culprits...)
 	}
 

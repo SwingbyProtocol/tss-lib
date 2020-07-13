@@ -434,8 +434,29 @@ func (m *SignRound7Message) ValidateBasic() bool {
 			common.NonEmptyBytes(c.Abort.GetKI()) &&
 			common.NonEmptyBytes(c.Abort.GetKRandI()) &&
 			common.NonEmptyMultiBytes(c.Abort.GetUIJ()) &&
-			common.NonEmptyMultiBytes(c.Abort.GetURandIJ(), len(c.Abort.GetUIJ()))
+			common.NonEmptyMultiBytes(c.Abort.GetURandIJ(), len(c.Abort.GetUIJ())) &&
+			c.Abort.GetEcddhProofA1() != nil &&
+			c.Abort.GetEcddhProofA1().ValidateBasic() &&
+			c.Abort.GetEcddhProofA2() != nil &&
+			c.Abort.GetEcddhProofA2().ValidateBasic() &&
+			common.NonEmptyBytes(c.Abort.GetEcddhProofZ())
 	default:
 		return false
 	}
+}
+
+func (m *SignRound7Message_AbortData) UnmarshalSigmaIProof() (*zkp.ECDDHProof, error) {
+	a1, err := crypto.NewECPointFromProtobuf(m.GetEcddhProofA1())
+	if err != nil {
+		return nil, err
+	}
+	a2, err := crypto.NewECPointFromProtobuf(m.GetEcddhProofA2())
+	if err != nil {
+		return nil, err
+	}
+	return &zkp.ECDDHProof{
+		A1: a1,
+		A2: a2,
+		Z:  new(big.Int).SetBytes(m.GetEcddhProofZ()),
+	}, nil
 }

@@ -58,5 +58,11 @@ func PrepareForSigning(i, pax int, xi *big.Int, ks []*big.Int, bigXs []*crypto.E
 		}
 		bigWs[j] = bigWj
 	}
+
+	// assertion: g^w_i == W_i
+	if !crypto.ScalarBaseMult(tss.EC(), wi).Equals(bigWs[i]) {
+		err = fmt.Errorf("assertion failed: g^w_i == W_i")
+		return
+	}
 	return
 }

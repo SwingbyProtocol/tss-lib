@@ -93,6 +93,9 @@ message SignRound7Message {
         bytes k_rand_i = 2;
         repeated bytes u_i_j = 3;
         repeated bytes u_rand_i_j = 4;
+        ECPoint ecddh_proof_a1 = 5;
+        ECPoint ecddh_proof_a2 = 6;
+        bytes ecddh_proof_z = 7;
     }
     oneof content {
         bytes s_i = 1;

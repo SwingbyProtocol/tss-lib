@@ -71,10 +71,7 @@ func (round *round5) Start() *tss.Error {
 
 	// compute R and Rdash_i
 	bigR = bigR.ScalarMult(deltaInv)
-	round.temp.BigR = &common.ECPoint{
-		X: bigR.X().Bytes(),
-		Y: bigR.Y().Bytes(),
-	}
+	round.temp.BigR = bigR.ToProtobufPoint()
 	r := bigR.X()
 
 	// used in FinalizeGetOurSigShare
