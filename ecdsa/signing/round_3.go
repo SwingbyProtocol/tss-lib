@@ -119,6 +119,7 @@ func (round *round3) Start() *tss.Error {
 	sigmaI := modN.Mul(kI, round.temp.wI)
 
 	// clear wI from temp memory
+	round.temp.wI.Set(zero)
 	round.temp.wI = zero
 
 	for j := range round.Parties().IDs() {
@@ -131,6 +132,8 @@ func (round *round3) Start() *tss.Error {
 		deltaI.Mod(deltaI, q)
 		sigmaI.Mod(sigmaI, q)
 	}
+	// nil sensitive data for gc
+	round.temp.betas, round.temp.vJIs = nil, nil
 
 	// gg20: calculate T_i = g^sigma_i h^l_i
 	lI := common.GetRandomPositiveInt(q)

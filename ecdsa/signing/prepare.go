@@ -29,7 +29,7 @@ func PrepareForSigning(i, pax int, xi *big.Int, ks []*big.Int, bigXs []*crypto.E
 	}
 
 	// 2-4.
-	wi = xi
+	wi = new(big.Int).Set(xi)
 	for j := 0; j < pax; j++ {
 		if j == i {
 			continue
