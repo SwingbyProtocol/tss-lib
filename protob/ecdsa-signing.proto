@@ -91,8 +91,8 @@ message SignRound7Message {
     message AbortData {
         bytes k_i = 1;
         bytes k_rand_i = 2;
-        repeated bytes u_i_j = 3;
-        repeated bytes u_rand_i_j = 4;
+        repeated bytes mu_i_j = 3;
+        repeated bytes mu_rand_i_j = 4;
         ECPoint ecddh_proof_a1 = 5;
         ECPoint ecddh_proof_a2 = 6;
         bytes ecddh_proof_z = 7;

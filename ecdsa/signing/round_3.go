@@ -108,8 +108,8 @@ func (round *round3) Start() *tss.Error {
 		return round.WrapError(errors.New("failed to calculate Alice_end or Alice_end_wc"), culprits...)
 	}
 	// for identifying aborts in round 7: muIJs, revealed during Type 7 identified abort
-	round.temp.r7AbortData.UIJ = common.BigIntsToBytes(muIJRecs)
-	round.temp.r7AbortData.URandIJ = common.BigIntsToBytes(muRandIJ)
+	round.temp.r7AbortData.MuIJ = common.BigIntsToBytes(muIJRecs)
+	round.temp.r7AbortData.MuRandIJ = common.BigIntsToBytes(muRandIJ)
 
 	q := tss.EC().Params().N
 	modN := common.ModInt(q)

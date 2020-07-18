@@ -221,7 +221,7 @@ func (round *finalization) Start() *tss.Error {
 
 			// content length sanity check
 			// note: the len equivalence of each of the slices in this msg have already been checked in ValidateBasic(), so just look at the UIJ slice here
-			if len(r7msg.GetUIJ()) != len(Ps) {
+			if len(r7msg.GetMuIJ()) != len(Ps) {
 				culprits = append(culprits, Pj)
 				continue
 			}
@@ -236,8 +236,8 @@ func (round *finalization) Start() *tss.Error {
 				continue
 			}
 
-			mus := common.ByteSlicesToBigInts(r7msg.GetUIJ())
-			muRands := common.ByteSlicesToBigInts(r7msg.GetURandIJ())
+			mus := common.ByteSlicesToBigInts(r7msg.GetMuIJ())
+			muRands := common.ByteSlicesToBigInts(r7msg.GetMuRandIJ())
 
 			// check correctness of mu_i_j
 			if muIJ, muRandIJ := mus[i], muRands[i]; j != i {
