@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync/atomic"
 
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 	"github.com/btcsuite/btcd/btcec"
@@ -25,9 +26,10 @@ import (
 
 // ECPoint represents a point on an elliptic curve in affine form. It is designed to be immutable
 type ECPoint struct {
-	curve        elliptic.Curve
-	coords       [2]*big.Int
-	onCurveKnown bool
+	curve  elliptic.Curve
+	coords [2]*big.Int
+	// get/set with atomic; avoids a data race in ValidateBasic
+	onCurveKnown uint32
 }
 
 var (
@@ -40,13 +42,13 @@ func NewECPoint(curve elliptic.Curve, X, Y *big.Int) (*ECPoint, error) {
 	if !isOnCurve(curve, X, Y) {
 		return nil, fmt.Errorf("NewECPoint: the given point is not on the elliptic curve")
 	}
-	return &ECPoint{curve, [2]*big.Int{X, Y}, true}, nil
+	return &ECPoint{curve, [2]*big.Int{X, Y}, 1}, nil
 }
 
 // Creates a new ECPoint without checking that the coordinates are on the elliptic curve.
 // Only use this function when you are completely sure that the point is already on the curve.
 func NewECPointNoCurveCheck(curve elliptic.Curve, X, Y *big.Int) *ECPoint {
-	return &ECPoint{curve, [2]*big.Int{X, Y}, false}
+	return &ECPoint{curve, [2]*big.Int{X, Y}, 0}
 }
 
 func NewECPointFromProtobuf(p *common.ECPoint) (*ECPoint, error) {
@@ -107,9 +109,10 @@ func (p *ECPoint) SetCurve(curve elliptic.Curve) *ECPoint {
 }
 
 func (p *ECPoint) ValidateBasic() bool {
-	res := p != nil && p.coords[0] != nil && p.coords[1] != nil && (p.onCurveKnown || p.IsOnCurve())
-	if res && !p.onCurveKnown {
-		p.onCurveKnown = true
+	onCurveKnown := atomic.LoadUint32(&p.onCurveKnown) == 1
+	res := p != nil && p.coords[0] != nil && p.coords[1] != nil && (onCurveKnown || p.IsOnCurve())
+	if res && !onCurveKnown {
+		atomic.StoreUint32(&p.onCurveKnown, 1)
 	}
 	return res
 }
