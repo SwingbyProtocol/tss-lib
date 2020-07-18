@@ -33,7 +33,10 @@ func (round *round6) Start() *tss.Error {
 	bigR, _ := crypto.NewECPointFromProtobuf(round.temp.BigR)
 
 	sigmaI := round.temp.sigmaI
-	// note: sigma_i is no longer discarded here; it's optionally used in the type 7 identified abort later on
+	defer func() {
+		round.temp.sigmaI.Set(zero)
+		round.temp.sigmaI = zero
+	}()
 
 	errs := make(map[*tss.PartyID]error)
 	bigRBarJProducts := (*crypto.ECPoint)(nil)
@@ -104,12 +107,13 @@ func (round *round6) Start() *tss.Error {
 			return nil
 		}
 	}
+	// wipe sensitive data for gc, not used from here
+	round.temp.r5AbortData = SignRound6Message_AbortData{}
+
 	round.temp.BigRBarJ = BigRBarJ
 
-	TI, lI := round.temp.TI, round.temp.lI
-	bigSI := bigR.ScalarMult(sigmaI)
-
 	// R^sigma_i proof used in type 7 aborts
+	bigSI := bigR.ScalarMult(sigmaI)
 	{
 		sigmaPf, err := zkp.NewECSigmaIProof(tss.EC(), sigmaI, bigR, bigSI)
 		if err != nil {
@@ -124,10 +128,15 @@ func (round *round6) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
+	TI, lI := round.temp.TI, round.temp.lI
 	stPf, err := zkp.NewSTProof(TI, bigR, h, sigmaI, lI)
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
+	// wipe sensitive data for gc
+	round.temp.lI.Set(zero)
+	round.temp.TI, round.temp.lI = nil, nil
+
 	r6msg := NewSignRound6MessageSuccess(Pi, bigSI, stPf)
 	round.temp.signRound6Messages[i] = r6msg
 	round.out <- r6msg

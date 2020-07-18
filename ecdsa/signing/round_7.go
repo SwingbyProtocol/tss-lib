@@ -169,6 +169,8 @@ func (round *round7) Start() *tss.Error {
 		round.out <- r7msg
 		return nil
 	}
+	// wipe sensitive data for gc, not used from here
+	round.temp.r7AbortData = SignRound7Message_AbortData{}
 
 	// PRE-PROCESSING FINISHED
 	// If we are in one-round signing mode (msg is nil), we will exit out with the current state here and we are done.
