@@ -8,7 +8,6 @@ package keygen
 
 import (
 	"errors"
-	"fmt"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -40,7 +39,6 @@ func (round *round1) Start() *tss.Error {
 
 	// 1. calculate "partial" key share ui
 	ui := common.GetRandomPositiveInt(tss.EC().Params().N)
-	fmt.Printf("-=-=======%v\n", tss.EC().Params().N)
 	round.temp.ui = ui
 
 	// 2. compute the vss shares
