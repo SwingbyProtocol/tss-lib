@@ -17,6 +17,15 @@ build: protob
 	go fmt ./...
 
 ########################################
+### Format
+
+fmt:
+	@go fmt ./...
+
+lint:
+	@golangci-lint run
+
+########################################
 ### Testing
 
 test_unit:
