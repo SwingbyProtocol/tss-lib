@@ -10,10 +10,12 @@ import (
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
+	"github.com/binance-chain/tss-lib/crypto"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/dlnp"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	zkp "github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -35,7 +37,7 @@ func NewKGRound1Message(
 	from *tss.PartyID,
 	ct cmt.HashCommitment,
 	paillierPK *paillier.PublicKey,
-	nTildeI, h1I, h2I *big.Int,
+	nTildeI, h1I, h2I, proofNSquareFree, randIntProofNSquareFree *big.Int,
 	dlnProof1, dlnProof2 *dlnp.Proof,
 ) (tss.ParsedMessage, error) {
 	meta := tss.MessageRouting{
@@ -58,6 +60,8 @@ func NewKGRound1Message(
 		H2:         h2I.Bytes(),
 		Dlnproof_1: dlnProof1Bz,
 		Dlnproof_2: dlnProof2Bz,
+		ProofNSquareFree: proofNSquareFree.Bytes(),
+		RandIntProofNSquareFree: randIntProofNSquareFree.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg), nil
@@ -93,6 +97,14 @@ func (m *KGRound1Message) UnmarshalH1() *big.Int {
 
 func (m *KGRound1Message) UnmarshalH2() *big.Int {
 	return new(big.Int).SetBytes(m.GetH2())
+}
+
+func (m *KGRound1Message) UnmarshalProofNSquareFree() *big.Int {
+	return new(big.Int).SetBytes(m.GetProofNSquareFree())
+}
+
+func (m *KGRound1Message) UnmarshalRandomIntProofNSquareFree() *big.Int {
+	return new(big.Int).SetBytes(m.GetRandIntProofNSquareFree())
 }
 
 func (m *KGRound1Message) UnmarshalDLNProof1() (*dlnp.Proof, error) {
@@ -162,21 +174,25 @@ func (m *KGRound2Message2) UnmarshalDeCommitment() []*big.Int {
 
 func NewKGRound3Message(
 	from *tss.PartyID,
-	proof paillier.Proof,
+	paillierProof paillier.Proof,
+	zkProofxi zkp.DLogProof,
+
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
 	}
-	pfBzs := make([][]byte, len(proof))
+	pfBzs := make([][]byte, len(paillierProof))
 	for i := range pfBzs {
-		if proof[i] == nil {
+		if paillierProof[i] == nil {
 			continue
 		}
-		pfBzs[i] = proof[i].Bytes()
+		pfBzs[i] = paillierProof[i].Bytes()
 	}
 	content := &KGRound3Message{
 		PaillierProof: pfBzs,
+		ProofXiAlpha: zkProofxi.Alpha.ToProtobufPoint(),
+		ProofXiT: zkProofxi.T.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -194,4 +210,15 @@ func (m *KGRound3Message) UnmarshalProofInts() paillier.Proof {
 		pf[i] = new(big.Int).SetBytes(proofBzs[i])
 	}
 	return pf
+}
+
+func (m *KGRound3Message) UnmarshalXiProof() (*zkp.DLogProof, error) {
+	point, err := crypto.NewECPointFromProtobuf(m.GetProofXiAlpha())
+	if err != nil {
+		return nil, err
+	}
+	return &zkp.DLogProof{
+		Alpha: point,
+		T:     new(big.Int).SetBytes(m.GetProofXiT()),
+	}, nil
 }

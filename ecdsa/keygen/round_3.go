@@ -17,6 +17,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -166,7 +167,14 @@ func (round *round3) Start() *tss.Error {
 		if len(culprits) > 0 {
 			return round.WrapError(errors.New("adding Vc[c].ScalarMult(z) to BigXj resulted in a point not on the curve"), culprits...)
 		}
+
 		round.save.BigXj = bigXj
+	}
+
+	// 3.1 Phase 3 compute Schnorr's ZK proof of knowledge of xi
+	zkProofxi, err := zkp.NewDLogProof(xi, round.save.BigXj[PIdx])
+	if err != nil {
+		return round.WrapError(errors2.Wrapf(err, "NewDLogProof(xi, Xi)"))
 	}
 
 	// 17. compute and SAVE the ECDSA public key `y`
@@ -181,8 +189,8 @@ func (round *round3) Start() *tss.Error {
 
 	// BROADCAST paillier proof for Pi
 	ki := round.PartyID().KeyInt()
-	proof := round.save.PaillierSK.Proof(ki, ecdsaPubKey)
-	r3msg := NewKGRound3Message(round.PartyID(), proof)
+	paillierProof := round.save.PaillierSK.Proof(ki, ecdsaPubKey)
+	r3msg := NewKGRound3Message(round.PartyID(), paillierProof, *zkProofxi)
 	round.temp.kgRound3Messages[PIdx] = r3msg
 	round.out <- r3msg
 	return nil
