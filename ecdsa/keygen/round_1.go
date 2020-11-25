@@ -96,7 +96,7 @@ func (round *round1) Start() *tss.Error {
 	randIntProofNSquareFreei := common.GetRandomPositiveInt(NTildei)
 
 	// Using Euler's totient function: phi(N)=phi(P)(Q)=(P-1)(Q-1)=2p2q
-	phiNTildei := new(big.Int).Mul(new(big.Int).Mul(big.NewInt(4),p), q)
+	phiNTildei := new(big.Int).Mul(new(big.Int).Mul(big.NewInt(4), p), q)
 	bigM := new(big.Int).ModInverse(NTildei, phiNTildei)
 	proofNSquareFree := common.ModInt(NTildei).Exp(randIntProofNSquareFreei, bigM)
 
@@ -121,7 +121,7 @@ func (round *round1) Start() *tss.Error {
 	{
 		msg, err := NewKGRound1Message(
 			round.PartyID(), cmt.C, &preParams.PaillierSK.PublicKey, preParams.NTildei, preParams.H1i, preParams.H2i,
-				proofNSquareFree, randIntProofNSquareFreei, dlnProof1, dlnProof2)
+			proofNSquareFree, randIntProofNSquareFreei, dlnProof1, dlnProof2)
 		if err != nil {
 			return round.WrapError(err, Pi)
 		}

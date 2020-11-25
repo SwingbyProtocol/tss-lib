@@ -53,14 +53,14 @@ func NewKGRound1Message(
 		return nil, err
 	}
 	content := &KGRound1Message{
-		Commitment: ct.Bytes(),
-		PaillierN:  paillierPK.N.Bytes(),
-		NTilde:     nTildeI.Bytes(),
-		H1:         h1I.Bytes(),
-		H2:         h2I.Bytes(),
-		Dlnproof_1: dlnProof1Bz,
-		Dlnproof_2: dlnProof2Bz,
-		ProofNSquareFree: proofNSquareFree.Bytes(),
+		Commitment:              ct.Bytes(),
+		PaillierN:               paillierPK.N.Bytes(),
+		NTilde:                  nTildeI.Bytes(),
+		H1:                      h1I.Bytes(),
+		H2:                      h2I.Bytes(),
+		Dlnproof_1:              dlnProof1Bz,
+		Dlnproof_2:              dlnProof2Bz,
+		ProofNSquareFree:        proofNSquareFree.Bytes(),
 		RandIntProofNSquareFree: randIntProofNSquareFree.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
@@ -191,8 +191,8 @@ func NewKGRound3Message(
 	}
 	content := &KGRound3Message{
 		PaillierProof: pfBzs,
-		ProofXiAlpha: zkProofxi.Alpha.ToProtobufPoint(),
-		ProofXiT: zkProofxi.T.Bytes(),
+		ProofXiAlpha:  zkProofxi.Alpha.ToProtobufPoint(),
+		ProofXiT:      zkProofxi.T.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)

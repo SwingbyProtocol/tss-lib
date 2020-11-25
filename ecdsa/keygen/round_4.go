@@ -36,7 +36,7 @@ func (round *round4) Start() *tss.Error {
 	r3msgs := round.temp.kgRound3Messages
 	type channelOut struct {
 		unWrappedErr error
-		ok bool
+		ok           bool
 	}
 	chs := make([]chan channelOut, len(r3msgs))
 	for i := range chs {
