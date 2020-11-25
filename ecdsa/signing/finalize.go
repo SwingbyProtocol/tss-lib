@@ -157,7 +157,7 @@ func FinalizeGetAndVerifyFinalSig(
 }
 
 func FinalizeWrapError(err error, victim *tss.PartyID, culprits ...*tss.PartyID) *tss.Error {
-	return tss.NewError(err, TaskNameFinalize, -1, victim, culprits...)
+	return tss.NewError(err, TaskNameFinalize, 8, victim, culprits...)
 }
 
 // -----
@@ -320,7 +320,7 @@ func (round *finalization) Start() *tss.Error {
 	}
 	data, _, err := FinalizeGetAndVerifyFinalSig(round.data, pk, round.temp.m, round.PartyID(), ourSI, otherSIs)
 	if err != nil {
-		return round.WrapError(err, Pi)
+		return err
 	}
 	round.data = data
 	round.end <- round.data
