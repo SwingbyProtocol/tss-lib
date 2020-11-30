@@ -7,6 +7,7 @@
 package keygen
 
 import (
+	"crypto/ecdsa"
 	"errors"
 	"math/big"
 
@@ -76,6 +77,15 @@ func (round *round3) Start() *tss.Error {
 				Threshold: round.Threshold(),
 				ID:        round.PartyID().KeyInt(),
 				Share:     r2msg1.UnmarshalShare(),
+			}
+			authEcdsaSignature := r2msg1.UnmarshalAuthEcdsaSignature()
+
+			authEcdsaSignatureOk := ecdsa.Verify(round.save.AuthenticationPKs[j], HashShare(&PjShare),
+				authEcdsaSignature.r, authEcdsaSignature.s)
+			if !authEcdsaSignatureOk {
+				ch <- vssOut{errors.New("ecdsa signature of VSS share for authentication failed"),
+					nil}
+				return
 			}
 			if ok = PjShare.Verify(round.Threshold(), PjVs); !ok {
 				ch <- vssOut{errors.New("vss verify failed"), nil}

@@ -7,6 +7,7 @@
 package keygen
 
 import (
+	"crypto/ecdsa"
 	"encoding/hex"
 	"math/big"
 
@@ -18,7 +19,8 @@ import (
 
 type (
 	LocalPreParams struct {
-		PaillierSK *paillier.PrivateKey // ski
+		PaillierSK          *paillier.PrivateKey // ski
+		AuthEcdsaPrivateKey *ecdsa.PrivateKey
 		NTildei,
 		H1i, H2i,
 		Alpha, Beta,
@@ -42,8 +44,9 @@ type (
 		NTildej, H1j, H2j []*big.Int
 
 		// public keys (Xj = uj*G for each Pj)
-		BigXj       []*crypto.ECPoint     // Xj
-		PaillierPKs []*paillier.PublicKey // pkj
+		BigXj             []*crypto.ECPoint     // Xj
+		PaillierPKs       []*paillier.PublicKey // pkj
+		AuthenticationPKs []*ecdsa.PublicKey    // auth_yj
 
 		// the ECDSA public key
 		ECDSAPub *crypto.ECPoint // y

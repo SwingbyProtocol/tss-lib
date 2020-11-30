@@ -7,6 +7,8 @@
 package keygen
 
 import (
+	"crypto/ecdsa"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"math/big"
@@ -28,16 +30,20 @@ func (round *round2) Start() *tss.Error {
 
 	// 6. verify dln proofs, store r1 message pieces, ensure uniqueness of h1j, h2j
 	h1H2Map := make(map[string]struct{}, len(round.temp.kgRound1Messages)*2)
+	authSignatures := make([]*ECDSASignature, len(round.temp.kgRound1Messages))
+	authSignaturesFailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
 	dlnProof1FailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
 	dlnProof2FailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
 	squareFreeProofFailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
 	wg := new(sync.WaitGroup)
 	for j, msg := range round.temp.kgRound1Messages {
 		r1msg := msg.Content().(*KGRound1Message)
-		H1j, H2j, NTildej :=
+		H1j, H2j, NTildej, authEcdsaPKj, authEcdsaSigj :=
 			r1msg.UnmarshalH1(),
 			r1msg.UnmarshalH2(),
-			r1msg.UnmarshalNTilde()
+			r1msg.UnmarshalNTilde(),
+			r1msg.UnmarshalAuthEcdsaPK(),
+			r1msg.UnmarshalAuthEcdsaSignature()
 		if H1j.Cmp(H2j) == 0 {
 			return round.WrapError(errors.New("h1j and h2j were equal for this party"), msg.GetFrom())
 		}
@@ -52,7 +58,7 @@ func (round *round2) Start() *tss.Error {
 			}
 			h1H2Map[h1JHex], h1H2Map[h2JHex] = struct{}{}, struct{}{}
 		}
-		wg.Add(3)
+		wg.Add(4)
 		go func(j int, msg tss.ParsedMessage, r1msg *KGRound1Message, H1j, H2j, NTildej *big.Int) {
 			if dlnProof1, err := r1msg.UnmarshalDLNProof1(); err != nil || !dlnProof1.Verify(H1j, H2j, NTildej) {
 				dlnProof1FailCulprits[j] = msg.GetFrom()
@@ -76,6 +82,22 @@ func (round *round2) Start() *tss.Error {
 			}
 			wg.Done()
 		}(j, msg, r1msg, NTildej)
+
+		// Signing the share
+		go func(j int, msg tss.ParsedMessage) {
+			hash := HashPaillierKey(round.save.PaillierPKs[j])
+			verifies := ecdsa.Verify(authEcdsaPKj, hash, authEcdsaSigj.r, authEcdsaSigj.s)
+			if !verifies {
+				authSignaturesFailCulprits[j] = msg.GetFrom()
+			} else {
+				r, s, err := ecdsa.Sign(rand.Reader, round.save.AuthEcdsaPrivateKey, HashShare(round.temp.shares[j]))
+				authSignatures[j] = NewECDSASignature(r, s)
+				if err != nil {
+					authSignaturesFailCulprits[j] = msg.GetFrom()
+				}
+			}
+			wg.Done()
+		}(j, msg)
 	}
 	wg.Wait()
 	for _, culprit := range append(dlnProof1FailCulprits, dlnProof2FailCulprits...) {
@@ -88,19 +110,26 @@ func (round *round2) Start() *tss.Error {
 			return round.WrapError(errors.New("N square-free proof verification failed"), culprit)
 		}
 	}
+	for _, culprit := range authSignaturesFailCulprits {
+		if culprit != nil {
+			return round.WrapError(errors.New("ecdsa signature of Paillier PK for authentication failed"), culprit)
+		}
+	}
 	// save NTilde_j, h1_j, h2_j, ...
 	for j, msg := range round.temp.kgRound1Messages {
 		if j == i {
 			continue
 		}
 		r1msg := msg.Content().(*KGRound1Message)
-		paillierPK, H1j, H2j, NTildej, KGC :=
+		paillierPK, authEcdsaPKj, H1j, H2j, NTildej, KGC :=
 			r1msg.UnmarshalPaillierPK(),
+			r1msg.UnmarshalAuthEcdsaPK(),
 			r1msg.UnmarshalH1(),
 			r1msg.UnmarshalH2(),
 			r1msg.UnmarshalNTilde(),
 			r1msg.UnmarshalCommitment()
 		round.save.PaillierPKs[j] = paillierPK // used in round 4
+		round.save.AuthenticationPKs[j] = authEcdsaPKj
 		round.save.NTildej[j] = NTildej
 		round.save.H1j[j], round.save.H2j[j] = H1j, H2j
 		round.temp.KGCs[j] = KGC
@@ -109,7 +138,7 @@ func (round *round2) Start() *tss.Error {
 	// 5. p2p send share ij to Pj
 	shares := round.temp.shares
 	for j, Pj := range round.Parties().IDs() {
-		r2msg1 := NewKGRound2Message1(Pj, round.PartyID(), shares[j])
+		r2msg1 := NewKGRound2Message1(Pj, round.PartyID(), shares[j], authSignatures[j])
 		// do not send to this Pj, but store for round 3
 		if j == i {
 			round.temp.kgRound2Message1s[j] = r2msg1

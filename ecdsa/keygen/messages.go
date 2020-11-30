@@ -7,6 +7,7 @@
 package keygen
 
 import (
+	"crypto/ecdsa"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -37,6 +38,8 @@ func NewKGRound1Message(
 	from *tss.PartyID,
 	ct cmt.HashCommitment,
 	paillierPK *paillier.PublicKey,
+	authEcdsaPK *ecdsa.PublicKey,
+	authEcdsaSignature *ECDSASignature,
 	nTildeI, h1I, h2I, proofNSquareFree, randIntProofNSquareFree *big.Int,
 	dlnProof1, dlnProof2 *dlnp.Proof,
 ) (tss.ParsedMessage, error) {
@@ -53,15 +56,19 @@ func NewKGRound1Message(
 		return nil, err
 	}
 	content := &KGRound1Message{
-		Commitment:              ct.Bytes(),
-		PaillierN:               paillierPK.N.Bytes(),
-		NTilde:                  nTildeI.Bytes(),
-		H1:                      h1I.Bytes(),
-		H2:                      h2I.Bytes(),
-		Dlnproof_1:              dlnProof1Bz,
-		Dlnproof_2:              dlnProof2Bz,
-		ProofNSquareFree:        proofNSquareFree.Bytes(),
-		RandIntProofNSquareFree: randIntProofNSquareFree.Bytes(),
+		Commitment:                    ct.Bytes(),
+		PaillierN:                     paillierPK.N.Bytes(),
+		NTilde:                        nTildeI.Bytes(),
+		H1:                            h1I.Bytes(),
+		H2:                            h2I.Bytes(),
+		Dlnproof_1:                    dlnProof1Bz,
+		Dlnproof_2:                    dlnProof2Bz,
+		ProofNSquareFree:              proofNSquareFree.Bytes(),
+		RandIntProofNSquareFree:       randIntProofNSquareFree.Bytes(),
+		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
+		AuthenticationEcdsaPublicKeyY: authEcdsaPK.Y.Bytes(),
+		AuthenticationEcdsaSigR:       authEcdsaSignature.r.Bytes(),
+		AuthenticationEcdsaSigS:       authEcdsaSignature.s.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg), nil
@@ -85,6 +92,18 @@ func (m *KGRound1Message) UnmarshalCommitment() *big.Int {
 
 func (m *KGRound1Message) UnmarshalPaillierPK() *paillier.PublicKey {
 	return &paillier.PublicKey{N: new(big.Int).SetBytes(m.GetPaillierN())}
+}
+
+func (m *KGRound1Message) UnmarshalAuthEcdsaPK() *ecdsa.PublicKey {
+	return &ecdsa.PublicKey{X: new(big.Int).SetBytes(m.GetAuthenticationEcdsaPublicKeyX()),
+		Y:     new(big.Int).SetBytes(m.GetAuthenticationEcdsaPublicKeyY()),
+		Curve: tss.EC(),
+	}
+}
+
+func (m *KGRound1Message) UnmarshalAuthEcdsaSignature() *ECDSASignature {
+	return NewECDSASignature(new(big.Int).SetBytes(m.AuthenticationEcdsaSigR),
+		new(big.Int).SetBytes(m.AuthenticationEcdsaSigS))
 }
 
 func (m *KGRound1Message) UnmarshalNTilde() *big.Int {
@@ -120,6 +139,7 @@ func (m *KGRound1Message) UnmarshalDLNProof2() (*dlnp.Proof, error) {
 func NewKGRound2Message1(
 	to, from *tss.PartyID,
 	share *vss.Share,
+	authenticationEcdsaSig *ECDSASignature,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
@@ -127,7 +147,9 @@ func NewKGRound2Message1(
 		IsBroadcast: false,
 	}
 	content := &KGRound2Message1{
-		Share: share.Share.Bytes(),
+		Share:                   share.Share.Bytes(),
+		AuthenticationEcdsaSigR: authenticationEcdsaSig.r.Bytes(),
+		AuthenticationEcdsaSigS: authenticationEcdsaSig.s.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -140,6 +162,11 @@ func (m *KGRound2Message1) ValidateBasic() bool {
 
 func (m *KGRound2Message1) UnmarshalShare() *big.Int {
 	return new(big.Int).SetBytes(m.Share)
+}
+
+func (m *KGRound2Message1) UnmarshalAuthEcdsaSignature() *ECDSASignature {
+	return NewECDSASignature(new(big.Int).SetBytes(m.AuthenticationEcdsaSigR),
+		new(big.Int).SetBytes(m.AuthenticationEcdsaSigS))
 }
 
 // ----- //

@@ -16,13 +16,17 @@ import "protob/shared.proto";
 message KGRound1Message {
     bytes commitment = 1;
     bytes paillier_n = 2;
-    bytes n_tilde = 3;
-    bytes h1 = 4;
-    bytes h2 = 5;
-    repeated bytes dlnproof_1 = 6;
-    repeated bytes dlnproof_2 = 7;
-    bytes proof_n_square_free = 8;
-    bytes rand_int_proof_n_square_free = 9;
+    bytes authentication_ecdsa_public_key_x = 3;
+    bytes authentication_ecdsa_public_key_y = 4;
+    bytes authentication_ecdsa_sig_r = 5;
+    bytes authentication_ecdsa_sig_s = 6;
+    bytes n_tilde = 7;
+    bytes h1 = 8;
+    bytes h2 = 9;
+    repeated bytes dlnproof_1 = 10;
+    repeated bytes dlnproof_2 = 11;
+    bytes proof_n_square_free = 12;
+    bytes rand_int_proof_n_square_free = 13;
 
 }
 
@@ -31,6 +35,8 @@ message KGRound1Message {
  */
 message KGRound2Message1 {
     bytes share = 1;
+    bytes authentication_ecdsa_sig_r = 2;
+    bytes authentication_ecdsa_sig_s = 3;
 }
 
 /*
