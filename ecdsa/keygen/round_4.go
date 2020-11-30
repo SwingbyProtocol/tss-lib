@@ -58,8 +58,7 @@ func (round *round4) Start() *tss.Error {
 			ch <- channelOut{nil, ok}
 		}(r3msg.UnmarshalProofInts(), j, chs[j])
 
-		zkProofxi, err := r3msg.UnmarshalXiProof()
-		if err != nil {
+		if zkProofxi, err := r3msg.UnmarshalXiProof(); err != nil {
 			common.Logger.Error("error unmarshalling the xj ZK proof for party %v", Ps[j])
 			return round.WrapError(fmt.Errorf("error unmarshalling the xj ZK proof for party %v", Ps[j]))
 		} else {

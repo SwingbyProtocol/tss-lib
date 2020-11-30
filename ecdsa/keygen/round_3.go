@@ -174,13 +174,13 @@ func (round *round3) Start() *tss.Error {
 	// 3.1 Phase 3 compute Schnorr's ZK proof of knowledge of xi
 	zkProofxi, err := zkp.NewDLogProof(xi, round.save.BigXj[PIdx])
 	if err != nil {
-		return round.WrapError(errors2.Wrapf(err, "NewDLogProof(xi, Xi)"))
+		return round.WrapError(errors2.Wrapf(err, "NewDLogProof(xi, Xi)"), Ps[PIdx])
 	}
 
 	// 17. compute and SAVE the ECDSA public key `y`
 	ecdsaPubKey, err := crypto.NewECPoint(tss.EC(), Vc[0].X(), Vc[0].Y())
 	if err != nil {
-		return round.WrapError(errors2.Wrapf(err, "public key is not on the curve"))
+		return round.WrapError(errors2.Wrapf(err, "public key is not on the curve"), Ps[PIdx])
 	}
 	round.save.ECDSAPub = ecdsaPubKey
 

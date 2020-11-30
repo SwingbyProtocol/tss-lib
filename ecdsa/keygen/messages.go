@@ -74,6 +74,8 @@ func (m *KGRound1Message) ValidateBasic() bool {
 		common.NonEmptyBytes(m.GetNTilde()) &&
 		common.NonEmptyBytes(m.GetH1()) &&
 		common.NonEmptyBytes(m.GetH2()) &&
+		common.NonEmptyBytes(m.GetProofNSquareFree()) &&
+		common.NonEmptyBytes(m.GetRandIntProofNSquareFree()) &&
 		// expected len of dln proof = sizeof(int64) + len(alpha) + len(t)
 		common.NonEmptyMultiBytes(m.GetDlnproof_1(), 2+(dlnp.Iterations*2)) &&
 		common.NonEmptyMultiBytes(m.GetDlnproof_2(), 2+(dlnp.Iterations*2))

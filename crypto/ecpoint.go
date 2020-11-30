@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 
 	"github.com/btcsuite/btcd/btcec"
+
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 
 	"github.com/binance-chain/tss-lib/common"
