@@ -104,7 +104,7 @@ func (round *round2) Start() *tss.Error {
 	wg.Wait()
 	var multiErr error
 	culpritSet := make(map[*tss.PartyID]struct{})
-	var culpritSetAndErrors = func (arrayCulprits []*tss.PartyID, errorMessage string) {
+	var culpritSetAndErrors = func(arrayCulprits []*tss.PartyID, errorMessage string) {
 		for _, culprit := range arrayCulprits {
 			if culprit != nil {
 				multiErr = multierror.Append(multiErr,
