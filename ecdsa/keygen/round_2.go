@@ -14,6 +14,8 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/hashicorp/go-multierror"
+
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -100,20 +102,30 @@ func (round *round2) Start() *tss.Error {
 		}(j, msg)
 	}
 	wg.Wait()
-	for _, culprit := range append(dlnProof1FailCulprits, dlnProof2FailCulprits...) {
-		if culprit != nil {
-			return round.WrapError(errors.New("dln proof verification failed"), culprit)
+	var multiErr error
+	culpritSet := make(map[*tss.PartyID]struct{})
+	var culpritSetAndErrors = func (arrayCulprits []*tss.PartyID, errorMessage string) {
+		for _, culprit := range arrayCulprits {
+			if culprit != nil {
+				multiErr = multierror.Append(multiErr,
+					round.WrapError(errors.New(errorMessage), culprit))
+				culpritSet[culprit] = struct{}{}
+			}
 		}
 	}
-	for _, culprit := range squareFreeProofFailCulprits {
-		if culprit != nil {
-			return round.WrapError(errors.New("N square-free proof verification failed"), culprit)
-		}
+	culpritSetAndErrors(append(dlnProof1FailCulprits, dlnProof2FailCulprits...),
+		"dln proof verification failed")
+	culpritSetAndErrors(squareFreeProofFailCulprits,
+		"big N square-free proof verification failed")
+	culpritSetAndErrors(authSignaturesFailCulprits,
+		"ecdsa signature of Paillier PK for authentication failed")
+	uniqueCulprits := make([]*tss.PartyID, 0, len(culpritSet))
+	for aCulprit := range culpritSet {
+		uniqueCulprits = append(uniqueCulprits, aCulprit)
 	}
-	for _, culprit := range authSignaturesFailCulprits {
-		if culprit != nil {
-			return round.WrapError(errors.New("ecdsa signature of Paillier PK for authentication failed"), culprit)
-		}
+
+	if multiErr != nil {
+		return round.WrapError(multiErr, uniqueCulprits...)
 	}
 	// save NTilde_j, h1_j, h2_j, ...
 	for j, msg := range round.temp.kgRound1Messages {
