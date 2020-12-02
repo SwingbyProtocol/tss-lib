@@ -8,6 +8,8 @@ syntax = "proto3";
 
 option go_package = "github.com/binance-chain/tss-lib/ecdsa/keygen";
 
+import "protob/shared.proto";
+
 /*
  * Represents a BROADCAST message sent during Round 1 of the ECDSA TSS keygen protocol.
  */
@@ -19,6 +21,9 @@ message KGRound1Message {
     bytes h2 = 5;
     repeated bytes dlnproof_1 = 6;
     repeated bytes dlnproof_2 = 7;
+    bytes proof_n_square_free = 8;
+    bytes rand_int_proof_n_square_free = 9;
+
 }
 
 /*
@@ -40,4 +45,6 @@ message KGRound2Message2 {
  */
 message KGRound3Message {
     repeated bytes paillier_proof = 1;
+    ECPoint proof_xi_alpha = 2;
+    bytes proof_xi_t = 3;
 }

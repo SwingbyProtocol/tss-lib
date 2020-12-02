@@ -92,6 +92,14 @@ func (round *round1) Start() *tss.Error {
 		preParams.P,
 		preParams.Q,
 		preParams.NTildei
+
+	randIntProofNSquareFreei := common.GetRandomPositiveInt(NTildei)
+
+	// Using Euler's totient function: phi(N)=phi(P)(Q)=(P-1)(Q-1)=2p2q
+	phiNTildei := new(big.Int).Mul(new(big.Int).Mul(big.NewInt(4), p), q)
+	bigM := new(big.Int).ModInverse(NTildei, phiNTildei)
+	proofNSquareFree := common.ModInt(NTildei).Exp(randIntProofNSquareFreei, bigM)
+
 	dlnProof1 := dlnp.NewProof(h1i, h2i, alpha, p, q, NTildei)
 	dlnProof2 := dlnp.NewProof(h2i, h1i, beta, p, q, NTildei)
 
@@ -112,7 +120,8 @@ func (round *round1) Start() *tss.Error {
 	// BROADCAST commitments, paillier pk + proof; round 1 message
 	{
 		msg, err := NewKGRound1Message(
-			round.PartyID(), cmt.C, &preParams.PaillierSK.PublicKey, preParams.NTildei, preParams.H1i, preParams.H2i, dlnProof1, dlnProof2)
+			round.PartyID(), cmt.C, &preParams.PaillierSK.PublicKey, preParams.NTildei, preParams.H1i, preParams.H2i,
+			proofNSquareFree, randIntProofNSquareFreei, dlnProof1, dlnProof2)
 		if err != nil {
 			return round.WrapError(err, Pi)
 		}

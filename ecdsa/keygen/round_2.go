@@ -12,6 +12,9 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/hashicorp/go-multierror"
+
+	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -29,6 +32,7 @@ func (round *round2) Start() *tss.Error {
 	h1H2Map := make(map[string]struct{}, len(round.temp.kgRound1Messages)*2)
 	dlnProof1FailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
 	dlnProof2FailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
+	squareFreeProofFailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
 	wg := new(sync.WaitGroup)
 	for j, msg := range round.temp.kgRound1Messages {
 		r1msg := msg.Content().(*KGRound1Message)
@@ -50,7 +54,7 @@ func (round *round2) Start() *tss.Error {
 			}
 			h1H2Map[h1JHex], h1H2Map[h2JHex] = struct{}{}, struct{}{}
 		}
-		wg.Add(2)
+		wg.Add(3)
 		go func(j int, msg tss.ParsedMessage, r1msg *KGRound1Message, H1j, H2j, NTildej *big.Int) {
 			if dlnProof1, err := r1msg.UnmarshalDLNProof1(); err != nil || !dlnProof1.Verify(H1j, H2j, NTildej) {
 				dlnProof1FailCulprits[j] = msg.GetFrom()
@@ -63,12 +67,42 @@ func (round *round2) Start() *tss.Error {
 			}
 			wg.Done()
 		}(j, msg, r1msg, H1j, H2j, NTildej)
+
+		// Verifying the proof that Nj is square-free
+		go func(j int, msg tss.ParsedMessage, r1msg *KGRound1Message, NTildej *big.Int) {
+			yNj := common.ModInt(NTildej).Exp(r1msg.UnmarshalProofNSquareFree(), NTildej)
+			randIntProofNSquareFreej := r1msg.UnmarshalRandomIntProofNSquareFree()
+
+			if yNj.Cmp(randIntProofNSquareFreej) != 0 {
+				squareFreeProofFailCulprits[j] = msg.GetFrom()
+			}
+			wg.Done()
+		}(j, msg, r1msg, NTildej)
 	}
 	wg.Wait()
+	var multiErr error
+	culpritSet := make(map[*tss.PartyID]struct{})
 	for _, culprit := range append(dlnProof1FailCulprits, dlnProof2FailCulprits...) {
 		if culprit != nil {
-			return round.WrapError(errors.New("dln proof verification failed"), culprit)
+			multiErr = multierror.Append(multiErr,
+				round.WrapError(errors.New("dln proof verification failed"), culprit))
+			culpritSet[culprit] = struct{}{}
 		}
+	}
+	for _, culprit := range squareFreeProofFailCulprits {
+		if culprit != nil {
+			multiErr = multierror.Append(multiErr,
+				round.WrapError(errors.New("N square-free proof verification failed"), culprit))
+			culpritSet[culprit] = struct{}{}
+		}
+	}
+	uniqueCulprits := make([]*tss.PartyID, 0, len(culpritSet))
+	for aCulprit := range culpritSet {
+		uniqueCulprits = append(uniqueCulprits, aCulprit)
+	}
+
+	if multiErr != nil {
+		return round.WrapError(multiErr, uniqueCulprits...)
 	}
 	// save NTilde_j, h1_j, h2_j, ...
 	for j, msg := range round.temp.kgRound1Messages {

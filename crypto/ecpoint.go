@@ -17,8 +17,9 @@ import (
 	"math/big"
 	"sync/atomic"
 
-	"github.com/decred/dcrd/dcrec/edwards/v2"
 	"github.com/btcsuite/btcd/btcec"
+
+	"github.com/decred/dcrd/dcrec/edwards/v2"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
