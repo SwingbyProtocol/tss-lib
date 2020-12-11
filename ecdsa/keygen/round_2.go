@@ -40,12 +40,14 @@ func (round *round2) Start() *tss.Error {
 	wg := new(sync.WaitGroup)
 	for j, msg := range round.temp.kgRound1Messages {
 		r1msg := msg.Content().(*KGRound1Message)
-		H1j, H2j, NTildej, authEcdsaPKj, authEcdsaSigj :=
+		paillierPKj, H1j, H2j, NTildej, authEcdsaPKj, authPaillierSigj :=
+			r1msg.UnmarshalPaillierPK(),
 			r1msg.UnmarshalH1(),
 			r1msg.UnmarshalH2(),
 			r1msg.UnmarshalNTilde(),
 			r1msg.UnmarshalAuthEcdsaPK(),
-			r1msg.UnmarshalAuthEcdsaSignature()
+			r1msg.UnmarshalAuthPaillierSignature()
+
 		if H1j.Cmp(H2j) == 0 {
 			return round.WrapError(errors.New("h1j and h2j were equal for this party"), msg.GetFrom())
 		}
@@ -85,14 +87,14 @@ func (round *round2) Start() *tss.Error {
 			wg.Done()
 		}(j, msg, r1msg, NTildej)
 
-		// Signing the share
+		// Verify the Paillier PK with the authentication PK and sign the share
 		go func(j int, msg tss.ParsedMessage) {
-			hash := HashPaillierKey(round.save.PaillierPKs[j])
-			verifies := ecdsa.Verify(authEcdsaPKj, hash, authEcdsaSigj.r, authEcdsaSigj.s)
+			verifies := ecdsa.Verify(authEcdsaPKj, HashPaillierKey(paillierPKj), authPaillierSigj.r, authPaillierSigj.s)
 			if !verifies {
 				authSignaturesFailCulprits[j] = msg.GetFrom()
 			} else {
-				r, s, err := ecdsa.Sign(rand.Reader, round.save.AuthEcdsaPrivateKey, HashShare(round.temp.shares[j]))
+				r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(round.save.AuthEcdsaPrivateKey),
+					HashShare(round.temp.shares[j]))
 				authSignatures[j] = NewECDSASignature(r, s)
 				if err != nil {
 					authSignaturesFailCulprits[j] = msg.GetFrom()
@@ -141,7 +143,7 @@ func (round *round2) Start() *tss.Error {
 			r1msg.UnmarshalNTilde(),
 			r1msg.UnmarshalCommitment()
 		round.save.PaillierPKs[j] = paillierPK // used in round 4
-		round.save.AuthenticationPKs[j] = authEcdsaPKj
+		round.save.AuthenticationPKs[j] = (*MarshallableEcdsaPublicKey)(authEcdsaPKj)
 		round.save.NTildej[j] = NTildej
 		round.save.H1j[j], round.save.H2j[j] = H1j, H2j
 		round.temp.KGCs[j] = KGC

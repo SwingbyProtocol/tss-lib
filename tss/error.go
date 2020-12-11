@@ -19,6 +19,12 @@ type Error struct {
 	culprits []*PartyID
 }
 
+type VictimAndCulprit struct {
+	Victim  *PartyID
+	Culprit *PartyID
+	Message string
+}
+
 func NewError(err error, task string, round int, victim *PartyID, culprits ...*PartyID) *Error {
 	return &Error{cause: err, task: task, round: round, victim: victim, culprits: culprits}
 }
@@ -47,6 +53,24 @@ func (err *Error) Error() string {
 		return fmt.Sprintf("task %s, party %v, round %d, culprits %s: %s",
 			err.task, err.victim, err.round, err.culprits, err.cause.Error())
 	}
-	return fmt.Sprintf("task %s, party %v, round %d: %s",
-		err.task, err.victim, err.round, err.cause.Error())
+	if err.victim != nil {
+		return fmt.Sprintf("task %s, party %v, round %d: %s",
+			err.task, err.victim, err.round, err.cause.Error())
+	}
+	return fmt.Sprintf("task %s, round %d: %s",
+		err.task, err.round, err.cause.Error())
+}
+
+func (vc *VictimAndCulprit) Error() string {
+	message := ""
+	if vc.Culprit != nil {
+		message = fmt.Sprintf("culprit party: %s", vc.Culprit)
+	}
+	if vc.Victim != nil {
+		message = message + fmt.Sprintf(" victim party: %s", vc.Victim)
+	}
+	if len(vc.Message) > 0 {
+		message = message + " " + vc.Message
+	}
+	return message
 }

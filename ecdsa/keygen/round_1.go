@@ -83,11 +83,12 @@ func (round *round1) Start() *tss.Error {
 	}
 
 	// Sign the Paillier PK
-	r, s, err := ecdsa.Sign(rand.Reader, preParams.AuthEcdsaPrivateKey, HashPaillierKey(&preParams.PaillierSK.PublicKey))
+	r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(preParams.AuthEcdsaPrivateKey),
+		HashPaillierKey(&preParams.PaillierSK.PublicKey))
 	if err != nil {
 		return round.WrapError(errors.New("ecdsa signature for authentication failed"), Pi)
 	}
-	authEcdsaSignature := NewECDSASignature(r, s)
+	authPaillierSignaturei := NewECDSASignature(r, s)
 	round.save.LocalPreParams = *preParams
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
@@ -130,8 +131,9 @@ func (round *round1) Start() *tss.Error {
 	// BROADCAST commitments, paillier pk + proof; round 1 message
 	{
 		msg, err := NewKGRound1Message(
-			round.PartyID(), cmt.C, &preParams.PaillierSK.PublicKey, &preParams.AuthEcdsaPrivateKey.PublicKey,
-			authEcdsaSignature,
+			round.PartyID(), cmt.C, &preParams.PaillierSK.PublicKey,
+			&preParams.AuthEcdsaPrivateKey.PublicKey,
+			authPaillierSignaturei,
 			preParams.NTildei, preParams.H1i, preParams.H2i,
 			proofNSquareFree, randIntProofNSquareFreei, dlnProof1, dlnProof2)
 		if err != nil {

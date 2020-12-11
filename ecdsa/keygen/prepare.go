@@ -145,7 +145,7 @@ consumer:
 
 	preParams := &LocalPreParams{
 		PaillierSK:          paiSK,
-		AuthEcdsaPrivateKey: authEcdsaKey,
+		AuthEcdsaPrivateKey: (*MarshallableEcdsaPrivateKey)(authEcdsaKey),
 		NTildei:             NTildei,
 		H1i:                 h1i,
 		H2i:                 h2i,

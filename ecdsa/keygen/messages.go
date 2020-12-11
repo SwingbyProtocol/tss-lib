@@ -29,6 +29,7 @@ var (
 		(*KGRound2Message1)(nil),
 		(*KGRound2Message2)(nil),
 		(*KGRound3Message)(nil),
+		(*KGRound3MessageAbortMode)(nil),
 	}
 )
 
@@ -39,7 +40,7 @@ func NewKGRound1Message(
 	ct cmt.HashCommitment,
 	paillierPK *paillier.PublicKey,
 	authEcdsaPK *ecdsa.PublicKey,
-	authEcdsaSignature *ECDSASignature,
+	authPaillierSignature *ECDSASignature,
 	nTildeI, h1I, h2I, proofNSquareFree, randIntProofNSquareFree *big.Int,
 	dlnProof1, dlnProof2 *dlnp.Proof,
 ) (tss.ParsedMessage, error) {
@@ -67,8 +68,8 @@ func NewKGRound1Message(
 		RandIntProofNSquareFree:       randIntProofNSquareFree.Bytes(),
 		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
 		AuthenticationEcdsaPublicKeyY: authEcdsaPK.Y.Bytes(),
-		AuthenticationEcdsaSigR:       authEcdsaSignature.r.Bytes(),
-		AuthenticationEcdsaSigS:       authEcdsaSignature.s.Bytes(),
+		AuthenticationPaillierSigR:    authPaillierSignature.r.Bytes(),
+		AuthenticationPaillierSigS:    authPaillierSignature.s.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg), nil
@@ -103,9 +104,9 @@ func (m *KGRound1Message) UnmarshalAuthEcdsaPK() *ecdsa.PublicKey {
 	}
 }
 
-func (m *KGRound1Message) UnmarshalAuthEcdsaSignature() *ECDSASignature {
-	return NewECDSASignature(new(big.Int).SetBytes(m.AuthenticationEcdsaSigR),
-		new(big.Int).SetBytes(m.AuthenticationEcdsaSigS))
+func (m *KGRound1Message) UnmarshalAuthPaillierSignature() *ECDSASignature {
+	return NewECDSASignature(new(big.Int).SetBytes(m.GetAuthenticationPaillierSigR()),
+		new(big.Int).SetBytes(m.GetAuthenticationPaillierSigS()))
 }
 
 func (m *KGRound1Message) UnmarshalNTilde() *big.Int {
@@ -250,4 +251,63 @@ func (m *KGRound3Message) UnmarshalXiProof() (*zkp.DLogProof, error) {
 		Alpha: point,
 		T:     new(big.Int).SetBytes(m.GetProofXiT()),
 	}, nil
+}
+
+// ----- //
+
+func NewKGRound3MessageAbortMode(
+	from *tss.PartyID,
+	suspiciousVssShareWithAuthSigMessages []*VSSShareWithAuthSigMessage,
+) tss.ParsedMessage {
+	meta := tss.MessageRouting{
+		From:        from,
+		IsBroadcast: true,
+	}
+	content := &KGRound3MessageAbortMode{SuspiciousVsss: suspiciousVssShareWithAuthSigMessages,
+		PlaintiffParty: uint32(from.Index)}
+	msg := tss.NewMessageWrapper(meta, content)
+	return tss.NewMessage(meta, content, msg)
+}
+
+func (m *KGRound3MessageAbortMode) ValidateBasic() bool {
+	if m == nil {
+		return false
+	}
+	for _, b := range m.GetSuspiciousVsss() {
+		ok := common.NonEmptyBytes(b.GetAuthSigPk().X) &&
+			common.NonEmptyBytes(b.GetAuthSigPk().Y) &&
+			common.NonEmptyBytes(b.GetVssId()) &&
+			common.NonEmptyBytes(b.GetVssSigma())
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *KGRound3MessageAbortMode) UnmarshalFeldmanCheckFailureEvidence() ([]*FeldmanCheckFailureEvidence, int) {
+	suspiciousVsss := m.GetSuspiciousVsss()
+	feldmanCheckFailures := make([]*FeldmanCheckFailureEvidence, len(suspiciousVsss))
+	for n, vsss := range suspiciousVsss {
+		share := vss.Share{Share: new(big.Int).SetBytes(vsss.GetVssSigma()),
+			ID:        new(big.Int).SetBytes(vsss.GetVssId()),
+			Threshold: int(vsss.GetVssThreshold()),
+		}
+		pk := ecdsa.PublicKey{X: new(big.Int).SetBytes(vsss.GetAuthSigPk().GetX()),
+			Y:     new(big.Int).SetBytes(vsss.GetAuthSigPk().GetY()),
+			Curve: tss.EC()}
+		authEcdsaSignature := ECDSASignature{r: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureR()),
+			s: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureS())}
+		var KGDj = make([]*big.Int, len(vsss.GetKGDj()))
+		for a, k := range vsss.GetKGDj() {
+			KGDj[a] = new(big.Int).SetBytes(k)
+		}
+
+		e := FeldmanCheckFailureEvidence{sigmaji: &share, authSignaturePkj: pk,
+			accusedPartyj:      vsss.GetAccusedParty(),
+			KGDj:               KGDj,
+			authEcdsaSignature: &authEcdsaSignature}
+		feldmanCheckFailures[n] = &e
+	}
+	return feldmanCheckFailures, int(m.GetPlaintiffParty())
 }
