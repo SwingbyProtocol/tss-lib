@@ -80,6 +80,7 @@ func (round *round4) startInAbortMode(i int, Ps tss.SortedPartyIDs, abortr3msgs 
 				plaintiffParty, evidence.accusedPartyj)
 
 			authSignaturesAreEqual := len(round.save.AuthenticationPKs) > int(evidence.accusedPartyj) &&
+				round.save.AuthenticationPKs[int(evidence.accusedPartyj)] != nil &&
 				evidence.authSignaturePkj.Equal((*ecdsa.PublicKey)(round.save.AuthenticationPKs[int(evidence.accusedPartyj)]))
 
 			authEcdsaSignatureOk := ecdsa.Verify(&evidence.authSignaturePkj, HashShare(evidence.sigmaji),

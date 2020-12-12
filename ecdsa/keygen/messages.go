@@ -277,7 +277,11 @@ func (m *KGRound3MessageAbortMode) ValidateBasic() bool {
 		ok := common.NonEmptyBytes(b.GetAuthSigPk().X) &&
 			common.NonEmptyBytes(b.GetAuthSigPk().Y) &&
 			common.NonEmptyBytes(b.GetVssId()) &&
-			common.NonEmptyBytes(b.GetVssSigma())
+			common.NonEmptyBytes(b.GetVssSigma()) &&
+			common.NonEmptyBytes(b.GetAuthEcdsaSignatureR()) &&
+			common.NonEmptyBytes(b.GetAuthEcdsaSignatureS()) &&
+			common.NonEmptyMultiBytes(b.GetKGDj())
+
 		if !ok {
 			return false
 		}
