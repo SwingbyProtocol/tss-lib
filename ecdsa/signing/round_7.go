@@ -161,7 +161,8 @@ func (round *round7) Start() *tss.Error {
 	round.temp.BigSJ = bigSJ
 	if y := round.key.ECDSAPub; !bigSJProducts.Equals(y) {
 		round.abortingT7 = true
-		common.Logger.Warnf("round 7: consistency check failed: y != bigSJ products, entering Type 7 identified abort")
+		common.Logger.Warnf("party %v round 7: consistency check failed: y != bigSJ products, entering Type 7 identified abort",
+			Pi)
 
 		// If we abort here, one-round mode won't matter now - we will proceed to round "8" anyway.
 		r7msg := NewSignRound7MessageAbort(Pi, &round.temp.r7AbortData)
@@ -169,8 +170,6 @@ func (round *round7) Start() *tss.Error {
 		round.out <- r7msg
 		return nil
 	}
-	// wipe sensitive data for gc, not used from here
-	round.temp.r7AbortData = SignRound7Message_AbortData{}
 
 	// PRE-PROCESSING FINISHED
 	// If we are in one-round signing mode (msg is nil), we will exit out with the current state here and we are done.
@@ -203,6 +202,10 @@ func (round *round7) Update() (bool, *tss.Error) {
 		if msg == nil || !round.CanAccept(msg) {
 			return false, nil
 		}
+		r7msg := msg.Content().(*SignRound7Message)
+		if r7msg.GetAbort() != nil {
+			round.abortingT7 = true
+		}
 		round.ok[j] = true
 	}
 	return true, nil
@@ -223,5 +226,11 @@ func (round *round7) NextRound() tss.Round {
 	}
 	// Continuing the full online protocol.
 	round.started = false
-	return &finalization{round}
+	if !round.abortingT7 {
+		// wipe sensitive data for gc, not used from here
+		round.temp.r7AbortData = SignRound7Message_AbortData{}
+
+		return &finalization{&abortPrep{round}}
+	}
+	return &abortPrep{round}
 }

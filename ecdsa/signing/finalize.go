@@ -270,20 +270,20 @@ func (round *finalization) Start() *tss.Error {
 			}
 		}
 		// compute g^sigma_i's
-		for i, P := range Ps {
-			gWIMulKi := round.temp.bigWs[i].ScalarMultBytes(kIs[i])
+		for _i, P := range Ps {
+			gWIMulKi := round.temp.bigWs[_i].ScalarMultBytes(kIs[_i])
 			gSigmaI := gWIMulKi
 			for j := range Ps {
-				if j == i {
+				if j == _i {
 					continue
 				}
 				// add sum g^mu_i_j, sum g^nu_j_i
-				gMuIJ, gNuJI := gMus[i][j], gNus[j][i]
+				gMuIJ, gNuJI := gMus[_i][j], gNus[j][_i]
 				gSigmaI, _ = gSigmaI.Add(gMuIJ)
 				gSigmaI, _ = gSigmaI.Add(gNuJI)
 			}
 			bigSI, _ := crypto.NewECPointFromProtobuf(round.temp.BigSJ[P.Id])
-			if !gSigmaIPfs[i].VerifySigmaI(tss.EC(), gSigmaI, bigR, bigSI) {
+			if !gSigmaIPfs[_i].VerifySigmaI(tss.EC(), gSigmaI, bigR, bigSI) {
 				culprits = append(culprits, P)
 				continue
 			}
