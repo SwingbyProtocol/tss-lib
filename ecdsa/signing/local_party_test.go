@@ -186,7 +186,7 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 	}
 
 	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
-		if errUpdate.Culprits()!= nil && len(errUpdate.Culprits())>0 {
+		if errUpdate.Culprits() != nil && len(errUpdate.Culprits()) > 0 {
 			errCh <- errUpdate
 		}
 	}
@@ -293,4 +293,3 @@ signing:
 		}
 	}
 }
-
