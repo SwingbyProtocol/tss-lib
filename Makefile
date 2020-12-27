@@ -39,7 +39,7 @@ test_unit_race:
 	go test -timeout 60m -race $(PACKAGES)
 
 test:
-	make test_unit
+	make test_unit_race
 
 ########################################
 ### Pre Commit
