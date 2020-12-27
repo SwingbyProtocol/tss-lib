@@ -7,6 +7,8 @@
 package keygen
 
 import (
+	"crypto/ecdsa"
+	"crypto/rand"
 	"errors"
 	"math/big"
 	"runtime"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
+	"github.com/binance-chain/tss-lib/tss"
 )
 
 const (
@@ -44,6 +47,7 @@ func GeneratePreParams(timeout time.Duration, optionalConcurrency ...int) (*Loca
 
 	// prepare for concurrent Paillier and safe prime generation
 	paiCh := make(chan *paillier.PrivateKey, 1)
+	authECDSACh := make(chan *ecdsa.PrivateKey, 1)
 	sgpCh := make(chan []*common.GermainSafePrime, 1)
 
 	// 4. generate Paillier public key E_i, private key and proof
@@ -59,6 +63,19 @@ func GeneratePreParams(timeout time.Duration, optionalConcurrency ...int) (*Loca
 		common.Logger.Infof("paillier modulus generated. took %s\n", time.Since(start))
 		ch <- PiPaillierSk
 	}(paiCh)
+
+	// 4.5 generate an ECDSA key pair to authenticate the player's signature share.
+	go func(ch chan<- *ecdsa.PrivateKey) {
+		common.Logger.Info("generating the ECDSA keys for party authentication, please wait...")
+		start := time.Now()
+		key, err := ecdsa.GenerateKey(tss.EC(), rand.Reader)
+		if err != nil {
+			ch <- nil
+			return
+		}
+		common.Logger.Infof("party auth ECDSA keys generated. took %s\n", time.Since(start))
+		ch <- key
+	}(authECDSACh)
 
 	// 5-7. generate safe primes for ZKPs used later on
 	go func(ch chan<- []*common.GermainSafePrime) {
@@ -80,6 +97,7 @@ func GeneratePreParams(timeout time.Duration, optionalConcurrency ...int) (*Loca
 	// errors can be thrown in the following code; consume chans to end goroutines here
 	var sgps []*common.GermainSafePrime
 	var paiSK *paillier.PrivateKey
+	var authEcdsaKey *ecdsa.PrivateKey
 consumer:
 	for {
 		select {
@@ -92,14 +110,21 @@ consumer:
 				!sgps[0].SafePrime().ProbablyPrime(30) || !sgps[1].SafePrime().ProbablyPrime(30) {
 				return nil, errors.New("timeout or error while generating the safe primes")
 			}
-			if paiSK != nil {
+			if paiSK != nil && authEcdsaKey != nil {
+				break consumer
+			}
+		case authEcdsaKey = <-authECDSACh:
+			if authEcdsaKey == nil {
+				return nil, errors.New("timeout or error while generating the ECDSA party authentication keys")
+			}
+			if sgps != nil && paiSK != nil {
 				break consumer
 			}
 		case paiSK = <-paiCh:
 			if paiSK == nil {
 				return nil, errors.New("timeout or error while generating the Paillier secret key")
 			}
-			if sgps != nil {
+			if sgps != nil && authEcdsaKey != nil {
 				break consumer
 			}
 		}
@@ -119,14 +144,15 @@ consumer:
 	h2i := modNTildeI.Exp(h1i, alpha)
 
 	preParams := &LocalPreParams{
-		PaillierSK: paiSK,
-		NTildei:    NTildei,
-		H1i:        h1i,
-		H2i:        h2i,
-		Alpha:      alpha,
-		Beta:       beta,
-		P:          p,
-		Q:          q,
+		PaillierSK:          paiSK,
+		AuthEcdsaPrivateKey: (*MarshallableEcdsaPrivateKey)(authEcdsaKey),
+		NTildei:             NTildei,
+		H1i:                 h1i,
+		H2i:                 h2i,
+		Alpha:               alpha,
+		Beta:                beta,
+		P:                   p,
+		Q:                   q,
 	}
 	return preParams, nil
 }

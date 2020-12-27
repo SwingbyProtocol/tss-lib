@@ -51,7 +51,14 @@ type (
 		vs            vss.Vs
 		shares        vss.Shares
 		deCommitPolyG cmt.HashDeCommitment
+		abortTriggers []AbortTrigger
 	}
+)
+
+type AbortTrigger int
+
+const (
+	FeldmanCheckFailure AbortTrigger = iota
 )
 
 // Exported, used in `tss` client
@@ -140,6 +147,8 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	case *KGRound2Message2:
 		p.temp.kgRound2Message2s[fromPIdx] = msg
 	case *KGRound3Message:
+		p.temp.kgRound3Messages[fromPIdx] = msg
+	case *KGRound3MessageAbortMode:
 		p.temp.kgRound3Messages[fromPIdx] = msg
 	default: // unrecognised message, just ignore!
 		common.Logger.Warnf("unrecognised message ignored: %v", msg)

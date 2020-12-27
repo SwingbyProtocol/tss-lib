@@ -86,6 +86,10 @@ func (round *base) WrapError(err error, culprits ...*tss.PartyID) *tss.Error {
 	return tss.NewError(err, TaskName, round.number, round.PartyID(), culprits...)
 }
 
+func (round *base) WrapMultiError(err error, victim *tss.PartyID, culprits ...*tss.PartyID) *tss.Error {
+	return tss.NewError(err, TaskName, round.number, victim, culprits...)
+}
+
 // ----- //
 
 // `ok` tracks parties which have been verified by Update()
@@ -93,4 +97,16 @@ func (round *base) resetOK() {
 	for j := range round.ok {
 		round.ok[j] = false
 	}
+}
+
+func (round *base) shouldTriggerAbort(trigger AbortTrigger) bool {
+	if len(round.temp.abortTriggers) == 0 {
+		return false
+	}
+	for _, t := range round.temp.abortTriggers {
+		if trigger == t {
+			return true
+		}
+	}
+	return false
 }

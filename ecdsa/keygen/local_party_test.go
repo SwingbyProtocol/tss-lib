@@ -14,9 +14,12 @@ import (
 	"math/big"
 	"os"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -152,7 +155,9 @@ func TestBadMessageCulprits(t *testing.T) {
 		assert.FailNow(t, err.Error())
 	}
 
-	badMsg, _ := NewKGRound1Message(pIDs[1], zero, &paillier.PublicKey{N: zero}, zero, zero, zero, zero, zero, new(dlnp.Proof), new(dlnp.Proof))
+	badMsg, _ := NewKGRound1Message(pIDs[1], zero, &paillier.PublicKey{N: zero},
+		&ecdsa.PublicKey{Curve: tss.EC(), X: zero, Y: zero}, NewECDSASignature(zero, zero),
+		zero, zero, zero, zero, zero, new(dlnp.Proof), new(dlnp.Proof))
 	ok, err2 := lp.Update(badMsg)
 	t.Log(err2)
 	assert.False(t, ok)
@@ -166,6 +171,289 @@ func TestBadMessageCulprits(t *testing.T) {
 		err2.Error())
 }
 
+// The function will change the Feldman shares at the end of round 1
+// making party 1 send a bad share to party 0
+func sharedPartyUpdaterInjectingFeldmanError(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
+	// do not send a message from this party back to itself
+	if party.PartyID() == msg.GetFrom() {
+		return
+	}
+	bz, _, err := msg.WireBytes()
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+	pMsg, err := tss.ParseWireMessage(bz, msg.GetFrom(), msg.IsBroadcast())
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+
+	// Intercepting a round 1 broadcast message and changing a share
+	// Making party 1 send bad share to party 0 in round 2
+	if "KGRound1Message" == msg.Type() && party.PartyID().Index == 1 {
+		if msg.GetFrom().Index != 1 && msg.IsBroadcast() {
+			common.Logger.Debugf("current party: %v", party.PartyID())
+			round := party.FirstRound().(*round1)
+			retries := 0
+			for (round.temp.shares == nil || len(round.temp.shares) < 1) && retries < 10 {
+				common.Logger.Debug("waiting for parties to start...")
+				time.Sleep(2 * time.Second)
+				retries++
+			}
+
+			// injecting a (probably) incorrect share
+			round.temp.shares[0].Share = new(big.Int).Add(round.temp.shares[0].Share, big.NewInt(1))
+		}
+	}
+
+	if _, err := party.Update(pMsg); err != nil {
+		errCh <- err
+	}
+}
+
+// Testing abort identification in keygen.
+// The test will change a Feldman share. When the bad share is identified,
+// the player must be accused and finally blamed as culprit.
+func TestIdentifiableAbortFeldmanShareFail(t *testing.T) {
+	setUp("info")
+
+	threshold := testThreshold
+	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
+	if err != nil {
+		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...",
+			err)
+		pIDs = tss.GenerateTestPartyIDs(testParticipants)
+	}
+
+	p2pCtx := tss.NewPeerContext(pIDs)
+	parties := make([]*LocalParty, 0, len(pIDs))
+
+	errCh := make(chan *tss.Error, len(pIDs))
+	outCh := make(chan tss.Message, len(pIDs))
+	endCh := make(chan LocalPartySaveData, len(pIDs))
+
+	updater := sharedPartyUpdaterInjectingFeldmanError
+
+	parties, errCh = initTheParties(pIDs, p2pCtx, threshold, fixtures, outCh, endCh, parties, errCh)
+
+	// PHASE: keygen
+keygen:
+	for {
+		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
+		select {
+		case err := <-errCh:
+			// We expect an error
+			assert.Error(t, err, "should have thrown an abort identification error")
+			msg := err.Cause().Error()
+			assert.Truef(t, strings.Contains(msg, "abort identification - error in the Feldman share verification"),
+				"the error detected should have been for abort identification")
+			mError := err.Cause().(*multierror.Error)
+			assert.Greaterf(t, len(mError.Errors), 0, "too few errors returned", len(mError.Errors))
+			vc := (mError.Errors[0]).(*tss.VictimAndCulprit)
+			assert.Truef(t, vc.Victim != nil && vc.Victim.Index == 0,
+				"the victim should have been 0 but it was %v instead", vc.Victim.Index)
+			assert.Truef(t, vc.Culprit != nil && vc.Culprit.Index == 1,
+				"the culprit should have been 1 but it was %v instead", vc.Culprit.Index)
+			break keygen
+
+		case msg := <-outCh:
+			if handleMessage(t, msg, parties, updater, errCh) {
+				return
+			}
+		case _ = <-endCh:
+			assert.FailNow(t, "the end channel should not have returned")
+			break keygen
+		}
+	}
+}
+
+// When a round 2 broadcast is detected, set an abort flag to trigger
+// a false Feldman check failure.
+func sharedPartyUpdaterFalseFeldmanFramingError(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
+	// do not send a message from this party back to itself
+	if party.PartyID() == msg.GetFrom() {
+		return
+	}
+	bz, _, err := msg.WireBytes()
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+	pMsg, err := tss.ParseWireMessage(bz, msg.GetFrom(), msg.IsBroadcast())
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+
+	// Intercepting a round 2 broadcast message
+	if msg.Type() == "KGRound2Message2" && msg.IsBroadcast() && msg.GetFrom().Index == 0 && party.PartyID().Index == 1 {
+		common.Logger.Debugf("party %s at round 2 - msg %s from %s", party.PartyID(), msg.Type(), msg.GetFrom())
+		tlp := party.(*LocalParty)
+		tlp.temp.abortTriggers = []AbortTrigger{FeldmanCheckFailure}
+	}
+
+	if _, err := party.Update(pMsg); err != nil {
+		errCh <- err
+	}
+
+}
+
+// Testing abort identification in keygen.
+// The test will trigger a false Feldman check failure.
+// The abort identification will label the case as the plaintiff trying to frame the accused player.
+func TestIdentifiableAbortFalseFeldmanFraming(t *testing.T) {
+	setUp("info")
+
+	threshold := testThreshold
+	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
+	if err != nil {
+		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...",
+			err)
+		pIDs = tss.GenerateTestPartyIDs(testParticipants)
+	}
+
+	p2pCtx := tss.NewPeerContext(pIDs)
+	parties := make([]*LocalParty, 0, len(pIDs))
+
+	errCh := make(chan *tss.Error, len(pIDs))
+	outCh := make(chan tss.Message, len(pIDs))
+	endCh := make(chan LocalPartySaveData, len(pIDs))
+
+	updater := sharedPartyUpdaterFalseFeldmanFramingError
+
+	parties, errCh = initTheParties(pIDs, p2pCtx, threshold, fixtures, outCh, endCh, parties, errCh)
+
+	// PHASE: keygen
+keygen:
+	for {
+		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
+		select {
+		case err := <-errCh:
+			// We expect an error
+			assert.Error(t, err, "should have thrown an abort identification error")
+			msg := err.Cause().Error()
+			assert.Truef(t, strings.Contains(msg, "abort identification - the plaintiff party tried to frame the accused one"),
+				"the error detected should have been a framing case in abort identification")
+			mError := err.Cause().(*multierror.Error)
+			assert.Greaterf(t, len(mError.Errors), 0, "too few errors returned", len(mError.Errors))
+			vc := (mError.Errors[0]).(*tss.VictimAndCulprit)
+			assert.EqualValues(t, vc.Culprit.Index, 1,
+				"the 1st culprit should have been 1 but it was %d instead", vc.Culprit.Index)
+			break keygen
+
+		case msg := <-outCh:
+			if handleMessage(t, msg, parties, updater, errCh) {
+				return
+			}
+		case _ = <-endCh:
+			assert.FailNow(t, "the end channel should not have returned")
+			break keygen
+		}
+	}
+}
+
+// When a round 2 broadcast is detected, set an abort flag to trigger
+// a false Feldman check failure. Then taint the evidence by changing the share.
+// It should blame the plaintiff during the abort identification.
+func sharedPartyUpdaterTaintFeldmanShareFramingError(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
+	// do not send a message from this party back to itself
+	if party.PartyID() == msg.GetFrom() {
+		return
+	}
+	bz, _, err := msg.WireBytes()
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+	pMsg, err := tss.ParseWireMessage(bz, msg.GetFrom(), msg.IsBroadcast())
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+
+	// Intercepting a round 2 broadcast message and triggering a Feldman check failure
+	if msg.Type() == "KGRound2Message2" && msg.IsBroadcast() && msg.GetFrom().Index == 0 && party.PartyID().Index == 1 {
+		common.Logger.Debugf("intercepting message %s from %s", msg.Type(), msg.GetFrom())
+		tlp := party.(*LocalParty)
+		tlp.temp.abortTriggers = []AbortTrigger{FeldmanCheckFailure}
+	} else if msg.Type() == "KGRound3MessageAbortMode" && msg.IsBroadcast() && party.PartyID().Index == 0 {
+		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
+		r3msg := pMsg.Content().(*KGRound3MessageAbortMode)
+
+		// Tainting the signature
+		r3msg.SuspiciousVsss[0].AuthSigPk.X[0] = 1 + r3msg.SuspiciousVsss[0].AuthSigPk.X[0]
+		r3msg.SuspiciousVsss[0].AuthSigPk.X[1] = 1 + r3msg.SuspiciousVsss[0].AuthSigPk.X[1]
+		r3msg.SuspiciousVsss[0].AuthSigPk.Y[0] = 1 + r3msg.SuspiciousVsss[0].AuthSigPk.Y[0]
+		r3msg.SuspiciousVsss[0].AuthSigPk.Y[1] = 1 + r3msg.SuspiciousVsss[0].AuthSigPk.Y[1]
+		meta := tss.MessageRouting{
+			From:        msg.GetFrom(),
+			To:          msg.GetTo(),
+			IsBroadcast: true,
+		}
+		// repackaging the message
+		pMsg = tss.NewMessage(meta, r3msg, tss.NewMessageWrapper(meta, r3msg))
+	}
+
+	if _, err := party.Update(pMsg); err != nil {
+		errCh <- err
+	}
+}
+
+// Testing abort identification in keygen.
+// The test will taint the Feldman signature after triggering a false Feldman check failure.
+// The abort identification will label the case as the plaintiff trying to frame the accused player.
+func TestIdentifiableAbortTaintFeldmanShareFraming(t *testing.T) {
+	setUp("info")
+
+	threshold := testThreshold
+	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
+	if err != nil {
+		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...",
+			err)
+		pIDs = tss.GenerateTestPartyIDs(testParticipants)
+	}
+
+	p2pCtx := tss.NewPeerContext(pIDs)
+	parties := make([]*LocalParty, 0, len(pIDs))
+
+	errCh := make(chan *tss.Error, len(pIDs))
+	outCh := make(chan tss.Message, len(pIDs))
+	endCh := make(chan LocalPartySaveData, len(pIDs))
+
+	updater := sharedPartyUpdaterTaintFeldmanShareFramingError
+
+	parties, errCh = initTheParties(pIDs, p2pCtx, threshold, fixtures, outCh, endCh, parties, errCh)
+
+	// PHASE: keygen
+keygen:
+	for {
+		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
+		select {
+		case err := <-errCh:
+			// We expect an error
+			assert.Error(t, err, "should have thrown an abort identification error")
+			msg := err.Cause().Error()
+			assert.Truef(t, strings.Contains(msg, "abort identification - the plaintiff party tried to frame the accused one"),
+				"the error detected should have been a framing case in abort identification")
+			mError := err.Cause().(*multierror.Error)
+			assert.Greaterf(t, len(mError.Errors), 0, "too few errors returned", len(mError.Errors))
+			vc := (mError.Errors[0]).(*tss.VictimAndCulprit)
+			assert.EqualValues(t, vc.Culprit.Index, 1,
+				"the 1st culprit should have been 1 but it was %d instead", vc.Culprit.Index)
+			break keygen
+
+		case msg := <-outCh:
+			if handleMessage(t, msg, parties, updater, errCh) {
+				return
+			}
+		case _ = <-endCh:
+			assert.FailNow(t, "the end channel should not have returned")
+			break keygen
+		}
+	}
+}
+
 func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	setUp("info")
 
@@ -174,7 +462,8 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	threshold := testThreshold
 	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
 	if err != nil {
-		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
+		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...",
+			err)
 		pIDs = tss.GenerateTestPartyIDs(testParticipants)
 	}
 
@@ -189,22 +478,7 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 
 	startGR := runtime.NumGoroutine()
 
-	// init the parties
-	for i := 0; i < len(pIDs); i++ {
-		var P *LocalParty
-		params := tss.NewParameters(p2pCtx, pIDs[i], len(pIDs), threshold)
-		if i < len(fixtures) {
-			P = NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*LocalParty)
-		} else {
-			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
-		}
-		parties = append(parties, P)
-		go func(P *LocalParty) {
-			if err := P.Start(); err != nil {
-				errCh <- err
-			}
-		}(P)
-	}
+	parties, errCh = initTheParties(pIDs, p2pCtx, threshold, fixtures, outCh, endCh, parties, errCh)
 
 	// PHASE: keygen
 	var ended int32
@@ -218,20 +492,8 @@ keygen:
 			break keygen
 
 		case msg := <-outCh:
-			dest := msg.GetTo()
-			if dest == nil { // broadcast!
-				for _, P := range parties {
-					if P.PartyID().Index == msg.GetFrom().Index {
-						continue
-					}
-					go updater(P, msg, errCh)
-				}
-			} else { // point-to-point!
-				if dest[0].Index == msg.GetFrom().Index {
-					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
-					return
-				}
-				go updater(parties[dest[0].Index], msg, errCh)
+			if handleMessage(t, msg, parties, updater, errCh) {
+				return
 			}
 
 		case save := <-endCh:
@@ -335,6 +597,45 @@ keygen:
 			}
 		}
 	}
+}
+
+func handleMessage(t *testing.T, msg tss.Message, parties []*LocalParty, updater func(party tss.Party, msg tss.Message, errCh chan<- *tss.Error), errCh chan *tss.Error) bool {
+	dest := msg.GetTo()
+	if dest == nil { // broadcast!
+		for _, P := range parties {
+			if P.PartyID().Index == msg.GetFrom().Index {
+				continue
+			}
+			go updater(P, msg, errCh)
+		}
+	} else { // point-to-point!
+		if dest[0].Index == msg.GetFrom().Index {
+			t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
+			return true
+		}
+		go updater(parties[dest[0].Index], msg, errCh)
+	}
+	return false
+}
+
+func initTheParties(pIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, threshold int, fixtures []LocalPartySaveData, outCh chan tss.Message, endCh chan LocalPartySaveData, parties []*LocalParty, errCh chan *tss.Error) ([]*LocalParty, chan *tss.Error) {
+	// init the parties
+	for i := 0; i < len(pIDs); i++ {
+		var P *LocalParty
+		params := tss.NewParameters(p2pCtx, pIDs[i], len(pIDs), threshold)
+		if i < len(fixtures) {
+			P = NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*LocalParty)
+		} else {
+			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
+		}
+		parties = append(parties, P)
+		go func(P *LocalParty) {
+			if err := P.Start(); err != nil {
+				errCh <- err
+			}
+		}(P)
+	}
+	return parties, errCh
 }
 
 func tryWriteTestFixtureFile(t *testing.T, index int, data LocalPartySaveData) {

@@ -7,6 +7,8 @@
 package keygen
 
 import (
+	"crypto/ecdsa"
+	"crypto/rand"
 	"errors"
 	"math/big"
 
@@ -79,6 +81,14 @@ func (round *round1) Start() *tss.Error {
 			return round.WrapError(errors.New("pre-params generation failed"), Pi)
 		}
 	}
+
+	// Sign the Paillier PK
+	r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(preParams.AuthEcdsaPrivateKey),
+		HashPaillierKey(&preParams.PaillierSK.PublicKey))
+	if err != nil {
+		return round.WrapError(errors.New("ecdsa signature for authentication failed"), Pi)
+	}
+	authPaillierSignaturei := NewECDSASignature(r, s)
 	round.save.LocalPreParams = *preParams
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
@@ -114,13 +124,17 @@ func (round *round1) Start() *tss.Error {
 
 	// for this P: SAVE de-commitments, paillier keys for round 2
 	round.save.PaillierSK = preParams.PaillierSK
+	round.save.AuthEcdsaPrivateKey = preParams.AuthEcdsaPrivateKey
 	round.save.PaillierPKs[i] = &preParams.PaillierSK.PublicKey
 	round.temp.deCommitPolyG = cmt.D
 
 	// BROADCAST commitments, paillier pk + proof; round 1 message
 	{
 		msg, err := NewKGRound1Message(
-			round.PartyID(), cmt.C, &preParams.PaillierSK.PublicKey, preParams.NTildei, preParams.H1i, preParams.H2i,
+			round.PartyID(), cmt.C, &preParams.PaillierSK.PublicKey,
+			&preParams.AuthEcdsaPrivateKey.PublicKey,
+			authPaillierSignaturei,
+			preParams.NTildei, preParams.H1i, preParams.H2i,
 			proofNSquareFree, randIntProofNSquareFreei, dlnProof1, dlnProof2)
 		if err != nil {
 			return round.WrapError(err, Pi)
