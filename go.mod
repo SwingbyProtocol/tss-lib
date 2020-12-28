@@ -12,6 +12,7 @@ require (
 	github.com/ipfs/go-log/v2 v2.1.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
+	github.com/olekukonko/tablewriter v0.0.4
 	github.com/otiai10/mint v1.3.1 // indirect
 	github.com/otiai10/primes v0.0.0-20180210170552-f6d2a1ba97c4
 	github.com/pkg/errors v0.9.1
@@ -19,6 +20,7 @@ require (
 	go.uber.org/zap v1.15.0 // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/mod v0.3.0 // indirect
+	golang.org/x/text v0.3.0
 	golang.org/x/tools v0.0.0-20200616133436-c1934b75d054 // indirect
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
@@ -27,4 +29,3 @@ require (
 )
 
 replace github.com/agl/ed25519 => github.com/binance-chain/edwards25519 v0.0.0-20200305024217-f36fc4b53d43
-

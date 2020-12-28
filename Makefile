@@ -1,5 +1,9 @@
 MODULE = github.com/binance-chain/tss-lib
 PACKAGES = $(shell go list ./... | grep -v '/vendor/')
+ENTRYPOINT = ./cmd/...
+LD_FLAGS = -s -w
+BUILD_FLAGS = -trimpath -ldflags "$(LD_FLAGS)"
+BUILD_OUT = ./build/
 
 all: protob test
 
@@ -13,9 +17,6 @@ protob:
 		protoc --go_out=module=$(MODULE):. ./protob/$$file.proto ; \
 	done
 
-build: protob
-	go fmt ./...
-
 ########################################
 ### Format
 
@@ -24,6 +25,24 @@ fmt:
 
 lint:
 	@golangci-lint run
+
+########################################
+### Build
+
+build: fmt
+	@echo "--> Building bench tools"
+	mkdir -p ./build
+	go build ${BUILD_FLAGS} -o ${BUILD_OUT} ${ENTRYPOINT}
+	@echo "\n--> Build complete"
+
+########################################
+### Benchmarking
+
+benchgen: fmt
+	go run ./cmd/tss-benchgen benchdata
+
+benchsign: fmt
+	go run ./cmd/tss-benchsign benchdata
 
 ########################################
 ### Testing
@@ -51,5 +70,4 @@ pre_commit: build test
 # To avoid unintended conflicts with file names, always add to .PHONY
 # # unless there is a reason not to.
 # # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: protob build test_unit test_unit_race test
-
+.PHONY: protob build test_unit test_unit_race test benchgen benchsign
