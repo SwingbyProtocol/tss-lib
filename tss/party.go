@@ -34,12 +34,12 @@ type Party interface {
 	setRound(Round) *Error
 	round() Round
 	advance()
-	lock()
-	unlock()
+	Lock()
+	Unlock()
 }
 
 type BaseParty struct {
-	mtx        sync.Mutex
+	Mtx        sync.Mutex
 	rnd        Round
 	FirstRound Round
 }
@@ -102,18 +102,18 @@ func (p *BaseParty) advance() {
 }
 
 func (p *BaseParty) lock() {
-	p.mtx.Lock()
+	p.Mtx.Lock()
 }
 
 func (p *BaseParty) unlock() {
-	p.mtx.Unlock()
+	p.Mtx.Unlock()
 }
 
 // ----- //
 
 func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
-	p.lock()
-	defer p.unlock()
+	p.Lock()
+	defer p.Unlock()
 	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
 		return p.WrapError(fmt.Errorf("could not start. this party has an invalid PartyID: %+v", p.PartyID()))
 	}
@@ -145,12 +145,12 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
 	}
-	// lock the mutex. need this mtx unlock hook; L108 is recursive so cannot use defer
+	// lock the mutex. need this Mtx unlock hook; L108 is recursive so cannot use defer
 	r := func(ok bool, err *Error) (bool, *Error) {
-		p.unlock()
+		p.Unlock()
 		return ok, err
 	}
-	p.lock() // data is written to P state below
+	p.Lock() // data is written to P state below
 	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
 	if p.round() != nil {
 		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(), msg.String())
@@ -174,7 +174,7 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 				// finished! the round implementation will have sent the data through the `end` channel.
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
 			}
-			p.unlock()                      // recursive so can't defer after return
+			p.Unlock()                      // recursive so can't defer after return
 			return BaseUpdate(p, msg, task) // re-run round update or finish)
 		}
 		return r(true, nil)

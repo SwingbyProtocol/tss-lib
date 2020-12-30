@@ -48,16 +48,19 @@ type (
 		// Trigger for when a consistency check fails during Phase 5 of the protocol, resulting in a Type 5 identifiable abort (GG20)
 		abortingT5 bool
 	}
+	round7AbortPrep struct {
+		*round6
+	}
 	// The final round for the one-round signing mode (see the README)
 	round7 struct {
-		*round6
+		*round7AbortPrep
 		abortingT7 bool
 	}
-	abortPrep struct {
+	finalizationAbortPrep struct {
 		*round7
 	}
 	finalization struct {
-		*abortPrep
+		*finalizationAbortPrep
 	}
 )
 
@@ -68,7 +71,9 @@ var (
 	_ tss.Round = (*round4)(nil)
 	_ tss.Round = (*round5)(nil)
 	_ tss.Round = (*round6)(nil)
+	_ tss.Round = (*round7AbortPrep)(nil)
 	_ tss.Round = (*round7)(nil)
+	_ tss.Round = (*finalizationAbortPrep)(nil)
 	_ tss.Round = (*finalization)(nil)
 )
 
