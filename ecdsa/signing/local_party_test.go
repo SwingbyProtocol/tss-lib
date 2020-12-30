@@ -259,11 +259,13 @@ signing:
 		case err := <-errCh:
 			assert.NotNil(t, err, "an error should have been produced")
 			assert.NotNil(t, err.Culprits(), "culprits should have been identified")
-			assert.EqualValues(t, len(err.Culprits()), 2, "there should have been 2 culprits")
+			assert.GreaterOrEqualf(t, len(err.Culprits()), 1, "there should have been at least one culprit")
 			for _, c := range err.Culprits() {
 				assert.True(t, c.Index == type7failureFromParty || c.Index == type7failureToParty,
 					"the culprit should have been one of the test parties")
 			}
+			assert.Regexp(t, ".*round 7 consistency check failed: y != bigSJ products, Type 7 identified abort.*", err.Error(),
+				"the error should have had a Type 7 identified abort message")
 			break signing
 
 		case msg := <-outCh:
