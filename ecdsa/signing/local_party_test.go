@@ -214,8 +214,9 @@ func sabotageRound6Message(toParty tss.Party, msg tss.Message, errCh chan<- *tss
 	}
 
 	parsedR6msg := NewSignRound6MessageSuccess(msg.GetFrom(), fakebigSI, stPf)
+	toParty.Lock()
 	round5.temp.signRound6Messages[msg.GetFrom().Index] = parsedR6msg
-
+	toParty.Unlock()
 	r6msg = parsedR6msg.Content().(*SignRound6Message)
 	meta := tss.MessageRouting{
 		From:        msg.GetFrom(),
