@@ -151,7 +151,6 @@ signing:
 
 const (
 	type7failureFromParty = 0
-	type7failureToParty   = 1
 )
 
 // Test a type 7 abort. Change the zk-proof in SignRound6Message to force a consistency check failure
@@ -173,8 +172,7 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 	}
 
 	// Intercepting a round 6 broadcast message to inject a bad zk-proof and trigger a type 7 abort
-	if msg.Type() == "SignRound6Message" && msg.IsBroadcast() && msg.GetFrom().Index == type7failureFromParty &&
-		party.PartyID().Index == type7failureToParty {
+	if msg.Type() == "SignRound6Message" && msg.IsBroadcast() && msg.GetFrom().Index == type7failureFromParty {
 		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
 		r6msg, meta, ok := sabotageRound6Message(party, msg, errCh, pMsg)
 		if !ok {
@@ -192,7 +190,7 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 }
 
 // Create a fake zk-proof and change the round 6 message
-func sabotageRound6Message(party tss.Party, msg tss.Message, errCh chan<- *tss.Error, pMsg tss.ParsedMessage) (*SignRound6Message, tss.MessageRouting, bool) {
+func sabotageRound6Message(toParty tss.Party, msg tss.Message, errCh chan<- *tss.Error, pMsg tss.ParsedMessage) (*SignRound6Message, tss.MessageRouting, bool) {
 	r6msg := pMsg.Content().(*SignRound6Message)
 	fakeh, _ := crypto.ECBasePoint2(tss.EC())
 	fakesigmaI := new(big.Int).SetInt64(1)
@@ -200,11 +198,10 @@ func sabotageRound6Message(party tss.Party, msg tss.Message, errCh chan<- *tss.E
 	fakeTI, err1 := crypto.ScalarBaseMult(tss.EC(), fakesigmaI).Add(fakeh.ScalarMult(fakesigmaI))
 	if err1 != nil {
 		common.Logger.Error("internal test error assembling fake TI for round 6 message")
-		errCh <- party.WrapError(err1)
+		errCh <- toParty.WrapError(err1)
 		return nil, tss.MessageRouting{}, false
 	}
-	round5_ := party.FirstRound().NextRound().NextRound().NextRound().NextRound()
-	round5 := (round5_).(*round5)
+	round5 := (toParty.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
 	r3msg := round5.temp.signRound3Messages[msg.GetFrom().Index].Content().(*SignRound3Message)
 	r3msg.TI = fakeTI.ToProtobufPoint()
 	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
@@ -212,14 +209,14 @@ func sabotageRound6Message(party tss.Party, msg tss.Message, errCh chan<- *tss.E
 	stPf, err2 := zkp.NewSTProof(fakeTI, bigR, fakeh, fakesigmaI, fakelI)
 	if err2 != nil {
 		common.Logger.Error("internal test error creating a new fake proof")
-		errCh <- party.WrapError(err2)
+		errCh <- toParty.WrapError(err2)
 		return nil, tss.MessageRouting{}, false
 	}
 
-	sabotageRound6Message := NewSignRound6MessageSuccess(party.PartyID(), fakebigSI, stPf)
-	round5.temp.signRound6Messages[int(party.PartyID().Index)] = sabotageRound6Message
+	parsedR6msg := NewSignRound6MessageSuccess(msg.GetFrom(), fakebigSI, stPf)
+	round5.temp.signRound6Messages[msg.GetFrom().Index] = parsedR6msg
 
-	r6msg = sabotageRound6Message.Content().(*SignRound6Message)
+	r6msg = parsedR6msg.Content().(*SignRound6Message)
 	meta := tss.MessageRouting{
 		From:        msg.GetFrom(),
 		To:          msg.GetTo(),
@@ -257,13 +254,12 @@ signing:
 		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
 		select {
 		case err := <-errCh:
+			common.Logger.Debugf("TODO err %v", err)
 			assert.NotNil(t, err, "an error should have been produced")
 			assert.NotNil(t, err.Culprits(), "culprits should have been identified")
-			assert.GreaterOrEqualf(t, len(err.Culprits()), 1, "there should have been at least one culprit")
-			for _, c := range err.Culprits() {
-				assert.True(t, c.Index == type7failureFromParty || c.Index == type7failureToParty,
-					"the culprit should have been one of the test parties")
-			}
+			assert.Equalf(t, len(err.Culprits()), 1, "there should have been one culprit")
+			assert.True(t, err.Culprits()[0].Index == type7failureFromParty,
+				"the culprit should have been party "+strconv.Itoa(type7failureFromParty))
 			assert.Regexp(t, ".*round 7 consistency check failed: y != bigSJ products, Type 7 identified abort.*", err.Error(),
 				"the error should have had a Type 7 identified abort message")
 			break signing
@@ -337,8 +333,8 @@ func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage
 	fakeBigRBarI := bigR.ScalarMult(fakekI)
 
 	proof, _ := r5msg.UnmarshalPDLwSlackProof()
-	round5Message := NewSignRound5Message(party.PartyID(), fakeBigRBarI, proof)
-	round5.temp.signRound6Messages[int(party.PartyID().Index)] = round5Message
+	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, proof)
+	round5.temp.signRound6Messages[msg.GetFrom().Index] = round5Message
 
 	r5msg = round5Message.Content().(*SignRound5Message)
 	meta := tss.MessageRouting{
@@ -485,8 +481,8 @@ func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.Parsed
 	}
 	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
 
-	round5Message := NewSignRound5Message(party.PartyID(), fakeBigRBarI, &pdlWSlackPf)
-	round5.temp.signRound6Messages[int(party.PartyID().Index)] = round5Message
+	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, &pdlWSlackPf)
+	round5.temp.signRound6Messages[msg.GetFrom().Index] = round5Message
 
 	r5msg = round5Message.Content().(*SignRound5Message)
 	meta := tss.MessageRouting{
