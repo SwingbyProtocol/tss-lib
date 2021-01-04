@@ -39,7 +39,7 @@ type Party interface {
 }
 
 type BaseParty struct {
-	Mtx        sync.Mutex
+	mtx        sync.Mutex
 	rnd        Round
 	FirstRound Round
 }
@@ -49,8 +49,8 @@ func (p *BaseParty) Running() bool {
 }
 
 func (p *BaseParty) WaitingFor() []*PartyID {
-	p.lock()
-	defer p.unlock()
+	p.Lock()
+	defer p.Unlock()
 	if p.rnd == nil {
 		return []*PartyID{}
 	}
@@ -101,12 +101,12 @@ func (p *BaseParty) advance() {
 	p.rnd = p.rnd.NextRound()
 }
 
-func (p *BaseParty) lock() {
-	p.Mtx.Lock()
+func (p *BaseParty) Lock() {
+	p.mtx.Lock()
 }
 
-func (p *BaseParty) unlock() {
-	p.Mtx.Unlock()
+func (p *BaseParty) Unlock() {
+	p.mtx.Unlock()
 }
 
 // ----- //
@@ -145,7 +145,7 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
 	}
-	// lock the mutex. need this Mtx unlock hook; L108 is recursive so cannot use defer
+	// lock the mutex. need this mtx unlock hook; L108 is recursive so cannot use defer
 	r := func(ok bool, err *Error) (bool, *Error) {
 		p.Unlock()
 		return ok, err

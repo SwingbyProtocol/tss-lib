@@ -106,14 +106,6 @@ func (p *LocalParty) Start() *tss.Error {
 	return tss.BaseStart(p, TaskName)
 }
 
-func (p *LocalParty) Lock() {
-	p.Mtx.Lock()
-}
-
-func (p *LocalParty) Unlock() {
-	p.Mtx.Unlock()
-}
-
 func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
 	return tss.BaseUpdate(p, msg, TaskName)
 }
