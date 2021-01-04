@@ -230,7 +230,7 @@ func (round *round7) NextRound() tss.Round {
 		// wipe sensitive data for gc, not used from here
 		round.temp.r7AbortData = SignRound7Message_AbortData{}
 
-		return &finalization{&abortPrep{round}}
+		return &finalization{&finalizationAbortPrep{round}}
 	}
-	return &abortPrep{round}
+	return &finalizationAbortPrep{round}
 }

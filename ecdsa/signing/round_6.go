@@ -54,9 +54,7 @@ func (round *round6) Start() *tss.Error {
 		// find products of all Rdash_i to ensure it equals the G point of the curve
 		if bigRBarJProducts == nil {
 			bigRBarJProducts = bigRBarJ
-			continue
-		}
-		if bigRBarJProducts, err = bigRBarJProducts.Add(bigRBarJ); err != nil {
+		} else if bigRBarJProducts, err = bigRBarJProducts.Add(bigRBarJ); err != nil {
 			errs[Pj] = err
 			continue
 		}
@@ -99,7 +97,7 @@ func (round *round6) Start() *tss.Error {
 		gX, gY := ec.Params().Gx, ec.Params().Gy
 		if bigRBarJProducts.X().Cmp(gX) != 0 || bigRBarJProducts.Y().Cmp(gY) != 0 {
 			round.abortingT5 = true
-			common.Logger.Warnf("round 6: consistency check failed: g != R products, entering Type 5 identified abort")
+			common.Logger.Warnf("party %v round 6: consistency check failed: g != R products, entering Type 5 identified abort", Pi)
 
 			r6msg := NewSignRound6MessageAbort(Pi, &round.temp.r5AbortData)
 			round.temp.signRound6Messages[i] = r6msg
@@ -107,8 +105,6 @@ func (round *round6) Start() *tss.Error {
 			return nil
 		}
 	}
-	// wipe sensitive data for gc, not used from here
-	round.temp.r5AbortData = SignRound6Message_AbortData{}
 
 	round.temp.BigRBarJ = BigRBarJ
 
@@ -151,6 +147,10 @@ func (round *round6) Update() (bool, *tss.Error) {
 		if msg == nil || !round.CanAccept(msg) {
 			return false, nil
 		}
+		r6msg := msg.Content().(*SignRound6Message)
+		if r6msg.GetAbort() != nil {
+			round.abortingT5 = true
+		}
 		round.ok[j] = true
 	}
 	return true, nil
@@ -165,5 +165,11 @@ func (round *round6) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *round6) NextRound() tss.Round {
 	round.started = false
-	return &round7{round, false}
+	if !round.abortingT5 {
+		// wipe sensitive data for gc, not used from here
+		round.temp.r5AbortData = SignRound6Message_AbortData{}
+
+		return &round7{&round7AbortPrep{round}, false}
+	}
+	return &round7AbortPrep{round}
 }

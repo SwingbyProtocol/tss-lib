@@ -10,24 +10,25 @@ import (
 
 // This round is only invoked when there is an abort in round 7. This round ensures that all the messages in
 // the last round have SignRound7Message_Abort content.
-func (round *finalizationAbortPrep) Start() *tss.Error {
+func (round *round7AbortPrep) Start() *tss.Error {
 	if round.started {
 		return round.WrapError(errors.New("round already started"))
 	}
-	round.number = 7
+	round.number = 6
 	round.started = true
 	round.resetOK()
 	Pi := round.PartyID()
 	i := Pi.Index
-	round.abortingT7 = true
-	r7msg := NewSignRound7MessageAbort(Pi, &round.temp.r7AbortData)
-	round.temp.signRound7Messages[i] = r7msg
-	round.out <- r7msg
+	round.abortingT5 = true
+
+	r6msg := NewSignRound6MessageAbort(Pi, &round.temp.r5AbortData)
+	round.temp.signRound6Messages[i] = r6msg
+	round.out <- r6msg
 	return nil
 }
 
-func (round *finalizationAbortPrep) Update() (bool, *tss.Error) {
-	for j, msg := range round.temp.signRound7Messages {
+func (round *round7AbortPrep) Update() (bool, *tss.Error) {
+	for j, msg := range round.temp.signRound6Messages {
 		if round.ok[j] {
 			continue
 		}
@@ -39,14 +40,14 @@ func (round *finalizationAbortPrep) Update() (bool, *tss.Error) {
 	return true, nil
 }
 
-func (round *finalizationAbortPrep) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort); ok {
+func (round *round7AbortPrep) CanAccept(msg tss.ParsedMessage) bool {
+	if _, ok := msg.Content().(*SignRound6Message).GetContent().(*SignRound6Message_Abort); ok {
 		return msg.IsBroadcast()
 	}
 	return false
 }
 
-func (round *finalizationAbortPrep) NextRound() tss.Round {
+func (round *round7AbortPrep) NextRound() tss.Round {
 	round.started = false
-	return &finalization{round}
+	return &round7{round, true}
 }

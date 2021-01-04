@@ -196,14 +196,16 @@ func sharedPartyUpdaterInjectingFeldmanError(party tss.Party, msg tss.Message, e
 			common.Logger.Debugf("current party: %v", party.PartyID())
 			round := party.FirstRound().(*round1)
 			retries := 0
+			party.Lock()
 			for (round.temp.shares == nil || len(round.temp.shares) < 1) && retries < 10 {
 				common.Logger.Debug("waiting for parties to start...")
 				time.Sleep(2 * time.Second)
 				retries++
 			}
-
 			// injecting a (probably) incorrect share
-			round.temp.shares[0].Share = new(big.Int).Add(round.temp.shares[0].Share, big.NewInt(1))
+			share := *round.temp.shares[0].Share
+			round.temp.shares[0].Share = new(big.Int).Add(&share, big.NewInt(1))
+			party.Unlock()
 		}
 	}
 

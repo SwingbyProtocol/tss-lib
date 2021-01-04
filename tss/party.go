@@ -34,8 +34,8 @@ type Party interface {
 	setRound(Round) *Error
 	round() Round
 	advance()
-	lock()
-	unlock()
+	Lock()
+	Unlock()
 }
 
 type BaseParty struct {
@@ -49,8 +49,8 @@ func (p *BaseParty) Running() bool {
 }
 
 func (p *BaseParty) WaitingFor() []*PartyID {
-	p.lock()
-	defer p.unlock()
+	p.Lock()
+	defer p.Unlock()
 	if p.rnd == nil {
 		return []*PartyID{}
 	}
@@ -101,19 +101,19 @@ func (p *BaseParty) advance() {
 	p.rnd = p.rnd.NextRound()
 }
 
-func (p *BaseParty) lock() {
+func (p *BaseParty) Lock() {
 	p.mtx.Lock()
 }
 
-func (p *BaseParty) unlock() {
+func (p *BaseParty) Unlock() {
 	p.mtx.Unlock()
 }
 
 // ----- //
 
 func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
-	p.lock()
-	defer p.unlock()
+	p.Lock()
+	defer p.Unlock()
 	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
 		return p.WrapError(fmt.Errorf("could not start. this party has an invalid PartyID: %+v", p.PartyID()))
 	}
@@ -147,10 +147,10 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 	}
 	// lock the mutex. need this mtx unlock hook; L108 is recursive so cannot use defer
 	r := func(ok bool, err *Error) (bool, *Error) {
-		p.unlock()
+		p.Unlock()
 		return ok, err
 	}
-	p.lock() // data is written to P state below
+	p.Lock() // data is written to P state below
 	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
 	if p.round() != nil {
 		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(), msg.String())
@@ -174,7 +174,7 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 				// finished! the round implementation will have sent the data through the `end` channel.
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
 			}
-			p.unlock()                      // recursive so can't defer after return
+			p.Unlock()                      // recursive so can't defer after return
 			return BaseUpdate(p, msg, task) // re-run round update or finish)
 		}
 		return r(true, nil)
