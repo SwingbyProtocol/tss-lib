@@ -59,6 +59,7 @@ type (
 		rAKI,
 		deltaI,
 		sigmaI,
+		keyDerivationDelta,
 		gammaI *big.Int
 		c1Is     []*big.Int
 		bigWs    []*crypto.ECPoint
@@ -96,6 +97,7 @@ func NewLocalParty(
 	msg *big.Int,
 	params *tss.Parameters,
 	key keygen.LocalPartySaveData,
+	keyDerivationDelta *big.Int,
 	out chan<- tss.Message,
 	end chan<- *SignatureData,
 ) tss.Party {
@@ -119,6 +121,7 @@ func NewLocalParty(
 	p.temp.signRound6Messages = make([]tss.ParsedMessage, partyCount)
 	p.temp.signRound7Messages = make([]tss.ParsedMessage, partyCount)
 	// temp data init
+	p.temp.keyDerivationDelta = keyDerivationDelta
 	p.temp.m = msg
 	p.temp.c1Is = make([]*big.Int, partyCount)
 	p.temp.bigWs = make([]*crypto.ECPoint, partyCount)
@@ -138,10 +141,11 @@ func NewLocalParty(
 func NewLocalPartyWithOneRoundSign(
 	params *tss.Parameters,
 	key keygen.LocalPartySaveData,
+	keyDerivationDelta *big.Int,
 	out chan<- tss.Message,
 	end chan<- *SignatureData,
 ) tss.Party {
-	return NewLocalParty(nil, params, key, out, end)
+	return NewLocalParty(nil, params, key, keyDerivationDelta, out, end)
 }
 
 func (p *LocalParty) FirstRound() tss.Round {
