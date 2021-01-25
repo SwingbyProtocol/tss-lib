@@ -25,6 +25,7 @@ type (
 		end     chan<- *SignatureData
 		ok      []bool // `ok` tracks parties which have been verified by Update()
 		started bool
+		ended bool
 		number  int
 	}
 	round1 struct {
@@ -75,6 +76,10 @@ var (
 	_ tss.Round = (*round7)(nil)
 	_ tss.Round = (*finalizationAbortPrep)(nil)
 	_ tss.Round = (*finalization)(nil)
+
+	_ tss.PreprocessingRound = (*round1)(nil)
+	_ tss.PreprocessingRound = (*round2)(nil)
+
 )
 
 // ----- //
@@ -89,15 +94,7 @@ func (round *base) RoundNumber() int {
 
 // CanProceed is inherited by other rounds
 func (round *base) CanProceed() bool {
-	if !round.started {
-		return false
-	}
-	for _, ok := range round.ok {
-		if !ok {
-			return false
-		}
-	}
-	return true
+	return round.started && round.ended
 }
 
 // WaitingFor is called by a Party for reporting back to the caller

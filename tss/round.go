@@ -6,6 +6,10 @@
 
 package tss
 
+import (
+	"github.com/Workiva/go-datastructures/queue"
+)
+
 type Round interface {
 	Params() *Parameters
 	Start() *Error
@@ -16,4 +20,15 @@ type Round interface {
 	NextRound() Round
 	WaitingFor() []*PartyID
 	WrapError(err error, culprits ...*PartyID) *Error
+}
+
+type QueueFunctionMap map[*queue.Queue]func(*ParsedMessage,*PartyID,*GenericParameters) *Error
+
+type PreprocessingRound interface {
+	Round
+	Preprocess() (*GenericParameters, *Error)
+	Process(*ParsedMessage, *PartyID, *GenericParameters) *Error
+	Postprocess(*GenericParameters) *Error
+	InboundQueuesToConsume() []*queue.Queue
+	OutboundQueuesWrittenTo() []*queue.Queue
 }

@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Workiva/go-datastructures/queue"
+
 	"github.com/binance-chain/tss-lib/common"
 )
 
@@ -79,7 +81,10 @@ func (p *BaseParty) ValidateMessage(msg ParsedMessage) (bool, *Error) {
 }
 
 func (p *BaseParty) String() string {
-	return fmt.Sprintf("round: %d", p.round().RoundNumber())
+	if p.round() != nil {
+		return fmt.Sprintf("round: %d", p.round().RoundNumber())
+	}
+	return "BaseParty (round nil)"
 }
 
 // -----
@@ -98,6 +103,7 @@ func (p *BaseParty) round() Round {
 }
 
 func (p *BaseParty) advance() {
+	common.Logger.Debugf("party %v at round %v is advancing", p, p.rnd.RoundNumber())
 	p.rnd = p.rnd.NextRound()
 }
 
@@ -111,9 +117,7 @@ func (p *BaseParty) Unlock() {
 
 // ----- //
 
-func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
-	p.Lock()
-	defer p.Unlock()
+func BaseStart(p Party, task string) *Error {
 	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
 		return p.WrapError(fmt.Errorf("could not start. this party has an invalid PartyID: %+v", p.PartyID()))
 	}
@@ -124,60 +128,114 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
 	if err := p.setRound(round); err != nil {
 		return err
 	}
-	if 1 < len(prepare) {
-		return p.WrapError(errors.New("too many prepare functions given to Start(); 1 allowed"))
-	}
-	if len(prepare) == 1 {
-		if err := prepare[0](round); err != nil {
-			return err
+	partyCount := len(p.round().Params().parties.IDs())
+	// p.Lock()
+	// defer p.Unlock()
+	for {
+		if p.round() == nil {
+			break
+		}
+		pRound := p.round().(PreprocessingRound)
+		parameters, errPP := pRound.Preprocess()
+		if errPP != nil {
+			return p.WrapError(errPP)
+		}
+		queues := pRound.InboundQueuesToConsume()
+		for _, queue := range queues {
+			elementsProcessed := 0
+			for elementsProcessed < partyCount-1 {
+				common.Logger.Debugf("party %s: %s round %d will read queue %p", p.round().Params().PartyID(),
+					task,
+					p.round().RoundNumber(), queue)
+				msgs, errQ := queue.Get(int64(partyCount))
+				if errQ != nil {
+					return p.WrapError(errQ)
+				}
+				e, done := processInParallel(p, task, msgs, pRound, parameters, &elementsProcessed)
+				if done {
+					return e
+				}
+			}
+			queue.Dispose()
+		}
+		common.Logger.Infof("party %s: %s round %d postproc starting", p.round().Params().PartyID(),
+			task, p.round().RoundNumber())
+		errO := pRound.Postprocess(parameters)
+		if errO != nil {
+			return p.WrapError(errO)
+		}
+		if round.CanProceed() {
+			p.advance()
+		} else {
+			common.Logger.Warnf("party %s: %s round %d cannot proceed", p.round().Params().PartyID(),
+				task, p.round().RoundNumber())
 		}
 	}
-	common.Logger.Infof("party %s: %s round %d starting", p.round().Params().PartyID(), task, 1)
 	defer func() {
-		common.Logger.Debugf("party %s: %s round %d finished", p.round().Params().PartyID(), task, 1)
+		common.Logger.Debugf("party %s: %s finished", p, task)
 	}()
-	return p.round().Start()
+	return nil
+}
+
+func processInParallel(p Party, task string, msgs []interface{}, pRound PreprocessingRound,
+parameters *GenericParameters, elementsProcessed *int) (*Error, bool) {
+	queueClone := new(queue.Queue)
+	if err := queueClone.Put(msgs); err != nil {
+		return p.WrapError(err), true
+	}
+	f := func(msgs_ interface{}) {
+		msgs2_ := msgs_.([]interface{})
+		for _, msg_ := range msgs2_ {
+			msg2 := msg_.(*MessageImpl)
+			common.Logger.Debugf("party %s: %s round %d proc (i) starting w/ msg %v",
+				p.round().Params().PartyID(),
+				task, p.round().RoundNumber(), FormatMessageImpl(*msg2))
+			msgO := NewMessage(msg2.MessageRouting, msg2.content, msg2.wire)
+			msg := &msgO
+			common.Logger.Debugf("party %s: %s round %d proc (ii) starting w/ msg %v",
+				p.round().Params().PartyID(),
+				task, p.round().RoundNumber(), FormatParsedMessage(*msg))
+
+			toP := (*msg).GetTo()
+			var errP *Error
+			if toP == nil {
+				errP = pRound.Process(msg, (*msg).GetFrom(), parameters)
+				if errP != nil {
+					common.Logger.Errorf("party %v error msg from %v, msg: %v, error %v",
+						p, msg2.From, FormatParsedMessage(*msg), errP)
+					return // TODO
+				}
+			} else { // P2P
+				errP = pRound.Process(msg, (*msg).GetTo()[0], parameters)
+			}
+			if errP != nil {
+				common.Logger.Errorf("party %v error %v", p, errP)
+				return // TODO
+			}
+			*elementsProcessed++
+		}
+	}
+	queue.ExecuteInParallel(queueClone, f)
+	common.Logger.Debugf("party %s: %s round %d proc processInParallel ending elementsProcessed: %v",
+		p.round().Params().PartyID(),
+		task, p.round().RoundNumber(), *elementsProcessed)
+	return nil, false
 }
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
-func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
+func BaseUpdate(p Party, msg ParsedMessage) (ok bool, err *Error) {
+
 	// fast-fail on an invalid message; do not lock the mutex yet
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
 	}
-	// lock the mutex. need this mtx unlock hook; L108 is recursive so cannot use defer
-	r := func(ok bool, err *Error) (bool, *Error) {
-		p.Unlock()
-		return ok, err
-	}
-	p.Lock() // data is written to P state below
-	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
+
 	if p.round() != nil {
-		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(), msg.String())
+		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(),
+			FormatParsedMessage(msg))
 	}
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
-		return r(false, err)
+		return false, err
 	}
-	if p.round() != nil {
-		common.Logger.Debugf("party %s: %s round %d update", p.round().Params().PartyID(), task, p.round().RoundNumber())
-		if _, err := p.round().Update(); err != nil {
-			return r(false, err)
-		}
-		if p.round().CanProceed() {
-			if p.advance(); p.round() != nil {
-				if err := p.round().Start(); err != nil {
-					return r(false, err)
-				}
-				rndNum := p.round().RoundNumber()
-				common.Logger.Infof("party %s: %s round %d started", p.round().Params().PartyID(), task, rndNum)
-			} else {
-				// finished! the round implementation will have sent the data through the `end` channel.
-				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
-			}
-			p.Unlock()                      // recursive so can't defer after return
-			return BaseUpdate(p, msg, task) // re-run round update or finish)
-		}
-		return r(true, nil)
-	}
-	return r(true, nil)
+	return true, nil
 }

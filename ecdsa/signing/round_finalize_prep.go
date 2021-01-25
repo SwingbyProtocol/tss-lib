@@ -17,16 +17,20 @@ func (round *finalizationAbortPrep) Start() *tss.Error {
 	round.number = 7
 	round.started = true
 	round.resetOK()
+	/*
 	Pi := round.PartyID()
 	i := Pi.Index
 	round.abortingT7 = true
 	r7msg := NewSignRound7MessageAbort(Pi, &round.temp.r7AbortData)
 	round.temp.signRound7Messages[i] = r7msg
 	round.out <- r7msg
+	TODO
+	 */
 	return nil
 }
 
 func (round *finalizationAbortPrep) Update() (bool, *tss.Error) {
+	/*
 	for j, msg := range round.temp.signRound7Messages {
 		if round.ok[j] {
 			continue
@@ -36,6 +40,8 @@ func (round *finalizationAbortPrep) Update() (bool, *tss.Error) {
 		}
 		round.ok[j] = true
 	}
+	TODO
+	 */
 	return true, nil
 }
 
