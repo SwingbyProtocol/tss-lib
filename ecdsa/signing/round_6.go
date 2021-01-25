@@ -8,14 +8,7 @@ package signing
 
 import (
 	"errors"
-	"fmt"
-	"math/big"
 
-	"github.com/hashicorp/go-multierror"
-
-	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -26,7 +19,7 @@ func (round *round6) Start() *tss.Error {
 	round.number = 6
 	round.started = true
 	round.resetOK()
-
+	/*
 	Pi := round.PartyID()
 	i := Pi.Index
 
@@ -37,6 +30,7 @@ func (round *round6) Start() *tss.Error {
 		round.temp.sigmaI.Set(zero)
 		round.temp.sigmaI = zero
 	}()
+
 
 	errs := make(map[*tss.PartyID]error)
 	bigRBarJProducts := (*crypto.ECPoint)(nil)
@@ -136,10 +130,13 @@ func (round *round6) Start() *tss.Error {
 	r6msg := NewSignRound6MessageSuccess(Pi, bigSI, stPf)
 	round.temp.signRound6Messages[i] = r6msg
 	round.out <- r6msg
+	TODO
+	 */
 	return nil
 }
 
 func (round *round6) Update() (bool, *tss.Error) {
+	/*
 	for j, msg := range round.temp.signRound6Messages {
 		if round.ok[j] {
 			continue
@@ -153,6 +150,8 @@ func (round *round6) Update() (bool, *tss.Error) {
 		}
 		round.ok[j] = true
 	}
+	TODO
+	 */
 	return true, nil
 }
 

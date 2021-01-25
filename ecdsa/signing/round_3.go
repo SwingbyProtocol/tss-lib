@@ -8,15 +8,7 @@ package signing
 
 import (
 	"errors"
-	"math/big"
-	"sync"
 
-	errorspkg "github.com/pkg/errors"
-
-	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto"
-	"github.com/binance-chain/tss-lib/crypto/mta"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -28,6 +20,7 @@ func (round *round3) Start() *tss.Error {
 	round.started = true
 	round.resetOK()
 
+	/*
 	Pi := round.PartyID()
 	i := Pi.Index
 
@@ -161,11 +154,12 @@ func (round *round3) Start() *tss.Error {
 	r3msg := NewSignRound3Message(Pi, deltaI, TI, tProof)
 	round.temp.signRound3Messages[i] = r3msg
 	round.out <- r3msg
+	*/
 	return nil
 }
 
 func (round *round3) Update() (bool, *tss.Error) {
-	for j, msg := range round.temp.signRound3Messages {
+	/* for j, msg := range round.temp.signRound3Messages {
 		if round.ok[j] {
 			continue
 		}
@@ -173,7 +167,7 @@ func (round *round3) Update() (bool, *tss.Error) {
 			return false, nil
 		}
 		round.ok[j] = true
-	}
+	}*/
 	return true, nil
 }
 

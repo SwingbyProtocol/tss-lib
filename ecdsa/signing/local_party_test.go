@@ -7,21 +7,16 @@
 package signing
 
 import (
-	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 	"runtime"
-	"strconv"
-	"sync/atomic"
 	"testing"
+	"time"
 
-	"github.com/btcsuite/btcd/btcec"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
@@ -59,7 +54,8 @@ func initTheParties(signPIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, thresh
 }
 
 func TestE2EConcurrent(t *testing.T) {
-	setUp("info")
+	setUp("debug")
+	startTime := time.Now()
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
@@ -79,9 +75,9 @@ func TestE2EConcurrent(t *testing.T) {
 
 	updater := test.SharedPartyUpdater
 
-	msg, parties, errCh := initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
+	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
 
-	var ended int32
+	// var ended int32
 signing:
 	for {
 		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
@@ -94,20 +90,29 @@ signing:
 		case msg := <-outCh:
 			dest := msg.GetTo()
 			if dest == nil {
+				common.Logger.Debugf("local_party_test broadcast msg %v", msg)
 				for _, P := range parties {
 					if P.PartyID().Index == msg.GetFrom().Index {
 						continue
 					}
+					common.Logger.Debugf("local_party_test broadcast msg %v will update for party %v", msg, P)
 					go updater(P, msg, errCh)
 				}
 			} else {
 				if dest[0].Index == msg.GetFrom().Index {
 					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
 				}
+				common.Logger.Debugf("local_party_test p2p msg %v will update for (to) party %v",
+					msg, parties[dest[0].Index])
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
 		case data := <-endCh:
+			elapsed := time.Since(startTime)
+			common.Logger.Infof("Test elapsed time: %v", elapsed)
+			common.Logger.Infof("Data: %v", data)
+			break signing
+			/*
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
 				t.Logf("Done. Received signature data from %d participants %+v", ended, data)
@@ -148,6 +153,8 @@ signing:
 
 				break signing
 			}
+
+			 */
 		}
 	}
 }
@@ -155,7 +162,7 @@ signing:
 const (
 	type7failureFromParty = 0
 )
-
+/*
 // Test a type 7 abort. Change the zk-proof in SignRound6Message to force a consistency check failure
 // in round 7 with y != bigSJ products.
 func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
@@ -191,7 +198,9 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 		}
 	}
 }
+*/
 
+/*
 // Create a fake zk-proof and change the round 6 message
 func sabotageRound6Message(toParty tss.Party, msg tss.Message, errCh chan<- *tss.Error, pMsg tss.ParsedMessage) (*SignRound6Message, tss.MessageRouting, bool) {
 	r6msg := pMsg.Content().(*SignRound6Message)
@@ -228,7 +237,9 @@ func sabotageRound6Message(toParty tss.Party, msg tss.Message, errCh chan<- *tss
 	}
 	return r6msg, meta, true
 }
+*/
 
+/*
 // Test a type 7 abort. Use a custom updater to change one round 6 message.
 func TestType7Abort(t *testing.T) {
 	setUp("debug")
@@ -290,6 +301,9 @@ signing:
 	}
 }
 
+ */
+
+/*
 const (
 	type4failureFromParty = 0
 )
@@ -409,7 +423,9 @@ signing:
 		}
 	}
 }
+*/
 
+/*
 //
 
 const (
@@ -553,3 +569,8 @@ signing:
 		}
 	}
 }
+ */
+
+const (
+	AAA = 1
+)

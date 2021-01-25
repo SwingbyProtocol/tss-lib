@@ -10,11 +10,7 @@ import (
 	"errors"
 	"math/big"
 
-	errors2 "github.com/pkg/errors"
-
 	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto"
-	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -28,7 +24,7 @@ func (round *round5) Start() *tss.Error {
 	round.resetOK()
 
 	Pi := round.PartyID()
-	i := Pi.Index
+	// TODO i := Pi.Index
 
 	modN := common.ModInt(tss.EC().Params().N)
 
@@ -36,6 +32,7 @@ func (round *round5) Start() *tss.Error {
 	deltaI := *round.temp.deltaI
 	deltaSum := &deltaI
 
+	/* TODO
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue
@@ -66,6 +63,8 @@ func (round *round5) Start() *tss.Error {
 		deltaSum = modN.Add(deltaSum, new(big.Int).SetBytes(deltaJ))
 	}
 
+
+	 */
 	// compute the multiplicative inverse delta mod q
 	deltaInv := modN.Inverse(deltaSum)
 
@@ -100,13 +99,13 @@ func (round *round5) Start() *tss.Error {
 	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
 
 	r5msg := NewSignRound5Message(Pi, bigRBarI, &pdlWSlackPf)
-	round.temp.signRound5Messages[i] = r5msg
+	// TODO round.temp.signRound5Messages[i] = r5msg
 	round.out <- r5msg
 	return nil
 }
 
 func (round *round5) Update() (bool, *tss.Error) {
-	for j, msg := range round.temp.signRound5Messages {
+	/* for j, msg := range round.temp.signRound5Messages {
 		if round.ok[j] {
 			continue
 		}
@@ -115,6 +114,8 @@ func (round *round5) Update() (bool, *tss.Error) {
 		}
 		round.ok[j] = true
 	}
+	TODO
+	 */
 	return true, nil
 }
 

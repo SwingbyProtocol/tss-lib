@@ -7,18 +7,11 @@
 package signing
 
 import (
-	"errors"
-	"fmt"
-	"math/big"
-
-	"github.com/hashicorp/go-multierror"
-
-	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
 func (round *round7) Start() *tss.Error {
+	/*
 	if round.started {
 		return round.WrapError(errors.New("round already started"))
 	}
@@ -190,11 +183,14 @@ func (round *round7) Start() *tss.Error {
 	r7msg := NewSignRound7MessageSuccess(round.PartyID(), sI)
 	round.temp.signRound7Messages[i] = r7msg
 	round.out <- r7msg
+	TODO
+	 */
 	return nil
 }
 
 func (round *round7) Update() (bool, *tss.Error) {
 	// Collect messages for the full online protocol OR identified abort of type 7.
+	/*
 	for j, msg := range round.temp.signRound7Messages {
 		if round.ok[j] {
 			continue
@@ -208,6 +204,8 @@ func (round *round7) Update() (bool, *tss.Error) {
 		}
 		round.ok[j] = true
 	}
+	TODO
+	 */
 	return true, nil
 }
 

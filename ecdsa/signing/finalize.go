@@ -7,19 +7,15 @@
 package signing
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"math/big"
 
 	"github.com/btcsuite/btcd/btcec"
-	"github.com/hashicorp/go-multierror"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
-	"github.com/binance-chain/tss-lib/crypto/paillier"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -169,6 +165,7 @@ func (round *finalization) Start() *tss.Error {
 	if round.started {
 		return round.WrapError(errors.New("round already started"))
 	}
+	/*
 	round.number = 8
 	round.started = true
 	round.resetOK()
@@ -324,6 +321,8 @@ func (round *finalization) Start() *tss.Error {
 	}
 	round.data = data
 	round.end <- round.data
+	TODO
+	 */
 	return nil
 }
 
