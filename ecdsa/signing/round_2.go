@@ -31,7 +31,7 @@ func (round *round2) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *round2) NextRound() tss.Round {
 	round.started = false
-	return nil // finished // TODO return &round3{round}
+	return &round3{round}
 }
 
 func (round *round2) InboundQueuesToConsume() []*queue.Queue {
@@ -45,6 +45,9 @@ func (round *round2) OutboundQueuesWrittenTo() []*queue.Queue {
 }
 
 func (round *round2) Preprocess() (*tss.GenericParameters, *tss.Error) {
+	if round.started {
+		return nil, round.WrapError(errors.New("round already started"))
+	}
 	round.number = 2
 	round.started = true
 	round.resetOK()
@@ -155,7 +158,6 @@ func (round *round2) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 			round.temp.pI2JIs[j])
 		round.out <- r2msg
 	}
-	round.end <- &SignatureData{}
 	round.ended = true
 	return nil
 }

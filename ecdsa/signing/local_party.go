@@ -190,7 +190,6 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
 		return ok, err
 	}
-	// fromPIdx := msg.GetFrom().Index
 
 	// switch/case is necessary to store any messages beyond current round
 	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
@@ -213,11 +212,12 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		if err := p.temp.signRound2Messages.Put(msg); err!=nil {
 			return false, p.WrapError(err)
 		}
-/*	case *SignRound3Message:
-		if err := p.temp.signRound3Messages[fromPIdx].Put(msg); err!=nil {
+	case *SignRound3Message:
+		if err := p.temp.signRound3Messages.Put(msg); err!=nil {
 			return false, p.WrapError(err)
 		}
-	case *SignRound4Message:
+	/*
+		case *SignRound4Message:
 		if err := p.temp.signRound4Messages.Put(msg); err!=nil {
 			return false, p.WrapError(err)
 		}
@@ -233,25 +233,8 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		common.Logger.Warnf("unrecognised message ignored: %v", msg)
 		return false, nil
 	}
-	// p.sendMessageToChannel(msg, fromPIdx)
 	return true, nil
 }
-
-/*
-func (p *LocalParty) sendMessageToChannel(msg tss.ParsedMessage, fromPIdx int) {
-	common.Logger.Debugf("sendMessageToChannel fromPIdx:%v, msg:%v", fromPIdx,
-		 msg)
-	switch msg.Content().(type) {
-		case *SignRound1Message1:
-			p.temp.signRound1Message1sQ[fromPIdx].Put(msg)
-		case *SignRound1Message2:
-			p.temp.signRound1Message2sQ[fromPIdx].Put(msg)
-
-	default: // unrecognised message, just ignore!
-			common.Logger.Warnf("unrecognised message to channel ignored: %v", msg)
-	}
-}
-*/
 
 func (p *LocalParty) PartyID() *tss.PartyID {
 	return p.params.PartyID()
