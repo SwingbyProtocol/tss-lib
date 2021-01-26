@@ -90,20 +90,20 @@ signing:
 		case msg := <-outCh:
 			dest := msg.GetTo()
 			if dest == nil {
-				common.Logger.Debugf("local_party_test broadcast msg %v", msg)
+				// common.Logger.Debugf("local_party_test broadcast msg %v", msg)
 				for _, P := range parties {
 					if P.PartyID().Index == msg.GetFrom().Index {
 						continue
 					}
-					common.Logger.Debugf("local_party_test broadcast msg %v will update for party %v", msg, P)
+					// common.Logger.Debugf("local_party_test broadcast msg %v will update for party %v", msg, P)
 					go updater(P, msg, errCh)
 				}
 			} else {
 				if dest[0].Index == msg.GetFrom().Index {
 					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
 				}
-				common.Logger.Debugf("local_party_test p2p msg %v will update for (to) party %v",
-					msg, parties[dest[0].Index])
+				/* common.Logger.Debugf("local_party_test p2p msg %v will update for (to) party %v",
+					msg, parties[dest[0].Index]) */
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
