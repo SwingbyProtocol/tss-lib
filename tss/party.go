@@ -129,11 +129,10 @@ func BaseStart(p Party, task string) *Error {
 		return err
 	}
 	partyCount := len(p.round().Params().parties.IDs())
-	// p.Lock()
-	// defer p.Unlock()
 	for {
+		p.Lock()
 		if p.round() == nil {
-			break
+			break // The last round finished
 		}
 		pRound := p.round().(PreprocessingRound)
 		parameters, errPP := pRound.Preprocess()
@@ -151,25 +150,22 @@ func BaseStart(p Party, task string) *Error {
 				if errQ != nil {
 					return p.WrapError(errQ)
 				}
-				e, done := processInParallel(p, task, msgs, pRound, parameters, &elementsProcessed)
-				if done {
+				if e := processInParallel(msgs, pRound, parameters, &elementsProcessed); e!=nil {
 					return e
 				}
 			}
 			queue.Dispose()
 		}
-		common.Logger.Infof("party %s: %s round %d postproc starting", p.round().Params().PartyID(),
+		common.Logger.Debugf("party %s: %s round %d postproc starting", p.round().Params().PartyID(),
 			task, p.round().RoundNumber())
 		errO := pRound.Postprocess(parameters)
 		if errO != nil {
 			return p.WrapError(errO)
 		}
-		if round.CanProceed() {
+		if p.round().CanProceed() {
 			p.advance()
-		} else {
-			common.Logger.Warnf("party %s: %s round %d cannot proceed", p.round().Params().PartyID(),
-				task, p.round().RoundNumber())
 		}
+		p.Unlock()
 	}
 	defer func() {
 		common.Logger.Debugf("party %s: %s finished", p, task)
@@ -177,49 +173,40 @@ func BaseStart(p Party, task string) *Error {
 	return nil
 }
 
-func processInParallel(p Party, task string, msgs []interface{}, pRound PreprocessingRound,
-parameters *GenericParameters, elementsProcessed *int) (*Error, bool) {
+func processInParallel(msgs []interface{}, pRound PreprocessingRound,
+parameters *GenericParameters, elementsProcessed *int) *Error {
 	queueClone := new(queue.Queue)
 	if err := queueClone.Put(msgs); err != nil {
-		return p.WrapError(err), true
+		return pRound.WrapError(err)
 	}
 	f := func(msgs_ interface{}) {
 		msgs2_ := msgs_.([]interface{})
 		for _, msg_ := range msgs2_ {
 			msg2 := msg_.(*MessageImpl)
-			common.Logger.Debugf("party %s: %s round %d proc (i) starting w/ msg %v",
-				p.round().Params().PartyID(),
-				task, p.round().RoundNumber(), FormatMessageImpl(*msg2))
 			msgO := NewMessage(msg2.MessageRouting, msg2.content, msg2.wire)
 			msg := &msgO
-			common.Logger.Debugf("party %s: %s round %d proc (ii) starting w/ msg %v",
-				p.round().Params().PartyID(),
-				task, p.round().RoundNumber(), FormatParsedMessage(*msg))
 
 			toP := (*msg).GetTo()
 			var errP *Error
 			if toP == nil {
 				errP = pRound.Process(msg, (*msg).GetFrom(), parameters)
 				if errP != nil {
-					common.Logger.Errorf("party %v error msg from %v, msg: %v, error %v",
-						p, msg2.From, FormatParsedMessage(*msg), errP)
+					common.Logger.Errorf("error msg from %v, msg: %v, error %v",
+						msg2.From, FormatParsedMessage(*msg), errP)
 					return // TODO
 				}
 			} else { // P2P
 				errP = pRound.Process(msg, (*msg).GetTo()[0], parameters)
 			}
 			if errP != nil {
-				common.Logger.Errorf("party %v error %v", p, errP)
+				common.Logger.Errorf("error %v", errP)
 				return // TODO
 			}
 			*elementsProcessed++
 		}
 	}
 	queue.ExecuteInParallel(queueClone, f)
-	common.Logger.Debugf("party %s: %s round %d proc processInParallel ending elementsProcessed: %v",
-		p.round().Params().PartyID(),
-		task, p.round().RoundNumber(), *elementsProcessed)
-	return nil, false
+	return nil
 }
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
@@ -230,10 +217,6 @@ func BaseUpdate(p Party, msg ParsedMessage) (ok bool, err *Error) {
 		return false, err
 	}
 
-	if p.round() != nil {
-		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(),
-			FormatParsedMessage(msg))
-	}
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return false, err
 	}

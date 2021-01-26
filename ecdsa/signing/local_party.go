@@ -198,16 +198,10 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		if err := p.temp.signRound1Message1s.Put(msg); err!=nil {
 			return false, p.WrapError(err)
 		}
-		common.Logger.Debugf("party %v StoreMessage SignRound1Message1 msg %v queue ptr %p, queue len %v",
-			p.PartyID(), tss.FormatParsedMessage(msg), p.temp.signRound1Message1s,
-			p.temp.signRound1Message1s.Len())
 	case *SignRound1Message2:
 		if err := p.temp.signRound1Message2s.Put(msg); err!=nil {
 			return false, p.WrapError(err)
 		}
-		common.Logger.Debugf("party %v StoreMessage SignRound1Message2 msg %v queue ptr %p, queue len %v",
-			p.PartyID(), tss.FormatParsedMessage(msg), p.temp.signRound1Message2s,
-			p.temp.signRound1Message2s.Len())
 	case *SignRound2Message:
 		if err := p.temp.signRound2Messages.Put(msg); err!=nil {
 			return false, p.WrapError(err)
