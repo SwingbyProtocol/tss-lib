@@ -4,9 +4,7 @@ package signing
 
 import (
 	"errors"
-	"math/rand"
 	"sync"
-	"time"
 
 	errorspkg "github.com/pkg/errors"
 
