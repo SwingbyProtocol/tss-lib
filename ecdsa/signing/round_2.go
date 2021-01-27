@@ -4,9 +4,10 @@ package signing
 
 import (
 	"errors"
+	"math/rand"
 	"sync"
+	"time"
 
-	"github.com/Workiva/go-datastructures/queue"
 	errorspkg "github.com/pkg/errors"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -16,10 +17,6 @@ import (
 
 func (round *round2) Start() *tss.Error {
 	return nil
-}
-
-func (round *round2) Update() (bool, *tss.Error) {
-	return true, nil
 }
 
 func (round *round2) CanAccept(msg tss.ParsedMessage) bool {
@@ -34,13 +31,9 @@ func (round *round2) NextRound() tss.Round {
 	return &round3{round}
 }
 
-func (round *round2) InboundQueuesToConsume() []*queue.Queue {
-	return []*queue.Queue{round.temp.signRound1Message1s}
-}
-
-func (round *round2) OutboundQueuesWrittenTo() []*queue.Queue {
-	return []*queue.Queue {
-		round.temp.signRound2Messages,
+func (round *round2) InboundQueuesToConsume() []tss.QueueFunction {
+	return []tss.QueueFunction{
+		{round.temp.signRound1Message1s, ProcessRound2},
 	}
 }
 
@@ -62,10 +55,11 @@ func (round *round2) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func (round *round2) Process(msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) *tss.Error {
+func ProcessRound2(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	errChs := parameters.Dictionary["errChs"].(chan *tss.Error)
+	round := round_.(*round2)
 	i := round.PartyID().Index
 	j := Pj.Index
 	r1msg := (*msg).Content().(*SignRound1Message1)
@@ -129,7 +123,7 @@ func (round *round2) Process(msg *tss.ParsedMessage, Pj *tss.PartyID, parameters
 		round.temp.c2JIs[j] = c2JI
 	}()
 	wg.Wait()
-	return nil
+	return parameters, nil
 }
 
 func (round *round2) Postprocess(parameters *tss.GenericParameters) *tss.Error {
