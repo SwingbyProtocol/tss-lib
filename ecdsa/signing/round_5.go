@@ -9,62 +9,103 @@ package signing
 import (
 	"errors"
 	"math/big"
+	"strconv"
+
+	errors2 "github.com/pkg/errors"
 
 	"github.com/binance-chain/tss-lib/common"
+	"github.com/binance-chain/tss-lib/crypto"
+	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
-func (round *round5) Start() *tss.Error {
+func (round *round5) InboundQueuesToConsume() []tss.QueueFunction {
+	return []tss.QueueFunction{
+		{round.temp.signRound1Message2s, ProcessRound5One},
+		{round.temp.signRound4Messages, ProcessRound5Four},
+		{round.temp.signRound3Messages, ProcessRound5Three},
+	}
+}
+
+func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	if round.started {
-		return round.WrapError(errors.New("round already started"))
+		return nil, round.WrapError(errors.New("round already started"))
 	}
 	round.number = 5
 	round.started = true
 	round.resetOK()
-
-	Pi := round.PartyID()
-	// TODO i := Pi.Index
-
-	modN := common.ModInt(tss.EC().Params().N)
-
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
 	bigR := round.temp.gammaIG
 	deltaI := *round.temp.deltaI
 	deltaSum := &deltaI
+	parameters.Dictionary["bigR"] = bigR
+	parameters.Dictionary["deltaSum"] = deltaSum
+	return parameters, nil
+}
 
-	/* TODO
-	for j, Pj := range round.Parties().IDs() {
-		if j == i {
-			continue
-		}
-		r1msg2 := round.temp.signRound1Message2s[j].Content().(*SignRound1Message2)
-		r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
-		r4msg := round.temp.signRound4Messages[j].Content().(*SignRound4Message)
+func ProcessRound5One(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+	r1msg2 := (*msg).Content().(*SignRound1Message2)
+	parameters.Dictionary["r1msg2"+strconv.Itoa(Pj.Index)] = r1msg2
+	return parameters, nil
+}
 
-		// calculating Big R
-		SCj, SDj := r1msg2.UnmarshalCommitment(), r4msg.UnmarshalDeCommitment()
-		cmtDeCmt := commitments.HashCommitDecommit{C: SCj, D: SDj}
-		ok, bigGammaJ := cmtDeCmt.DeCommit()
-		if !ok || len(bigGammaJ) != 2 {
-			return round.WrapError(errors.New("commitment verify failed"), Pj)
-		}
-		bigGammaJPoint, err := crypto.NewECPoint(tss.EC(), bigGammaJ[0], bigGammaJ[1])
-		if err != nil {
-			return round.WrapError(errors2.Wrapf(err, "NewECPoint(bigGammaJ)"), Pj)
-		}
-		round.temp.bigGammaJs[j] = bigGammaJPoint // used for identifying abort in round 7
-		bigR, err = bigR.Add(bigGammaJPoint)
-		if err != nil {
-			return round.WrapError(errors2.Wrapf(err, "bigR.Add(bigGammaJ)"), Pj)
-		}
-
-		// calculating delta^-1 (below)
-		deltaJ := r3msg.GetDeltaI()
-		deltaSum = modN.Add(deltaSum, new(big.Int).SetBytes(deltaJ))
+func ProcessRound5Four(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+	round := round_.(*round5)
+	i := round.PartyID().Index
+	j := Pj.Index
+	if j == i {
+		return parameters, nil
 	}
+	r1msg2 := parameters.Dictionary["r1msg2"+strconv.Itoa(Pj.Index)].(*SignRound1Message2)
+	bigR := parameters.Dictionary["bigR"].(*crypto.ECPoint)
 
+	r4msg := (*msg).Content().(*SignRound4Message)
 
-	 */
+	// calculating Big R
+	SCj, SDj := r1msg2.UnmarshalCommitment(), r4msg.UnmarshalDeCommitment()
+	cmtDeCmt := commitments.HashCommitDecommit{C: SCj, D: SDj}
+	ok, bigGammaJ := cmtDeCmt.DeCommit()
+	if !ok || len(bigGammaJ) != 2 {
+		return parameters, round.WrapError(errors.New("commitment verify failed"), Pj)
+	}
+	bigGammaJPoint, err := crypto.NewECPoint(tss.EC(), bigGammaJ[0], bigGammaJ[1])
+	if err != nil {
+		return parameters, round.WrapError(errors2.Wrapf(err, "NewECPoint(bigGammaJ)"), Pj)
+	}
+	round.temp.bigGammaJs[j] = bigGammaJPoint // used for identifying abort in round 7
+	bigR, err = bigR.Add(bigGammaJPoint)
+	if err != nil {
+		return parameters, round.WrapError(errors2.Wrapf(err, "bigR.Add(bigGammaJ)"), Pj)
+	}
+	parameters.Dictionary["bigR"] = bigR
+	return parameters, nil
+}
+
+func ProcessRound5Three(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+	round := round_.(*round5)
+	i := round.PartyID().Index
+	j := Pj.Index
+	if j == i { // TODO remove it?
+		return parameters, nil
+	}
+	r3msg := (*msg).Content().(*SignRound3Message)
+	deltaSum := parameters.Dictionary["deltaSum"].(*big.Int)
+	modN := common.ModInt(tss.EC().Params().N)
+
+	// calculating delta^-1 (below)
+	deltaJ := r3msg.GetDeltaI()
+	deltaSum = modN.Add(deltaSum, new(big.Int).SetBytes(deltaJ))
+	parameters.Dictionary["deltaSum"] = deltaSum
+	return parameters, nil
+}
+
+func (round *round5) Postprocess(parameters *tss.GenericParameters) *tss.Error {
+	Pi := round.PartyID()
+	modN := common.ModInt(tss.EC().Params().N)
+	deltaSum := parameters.Dictionary["deltaSum"].(*big.Int)
+	bigR := parameters.Dictionary["bigR"].(*crypto.ECPoint)
+
 	// compute the multiplicative inverse delta mod q
 	deltaInv := modN.Inverse(deltaSum)
 
@@ -99,23 +140,11 @@ func (round *round5) Start() *tss.Error {
 	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
 
 	r5msg := NewSignRound5Message(Pi, bigRBarI, &pdlWSlackPf)
-	// TODO round.temp.signRound5Messages[i] = r5msg
 	round.out <- r5msg
 	return nil
 }
 
 func (round *round5) Update() (bool, *tss.Error) {
-	/* for j, msg := range round.temp.signRound5Messages {
-		if round.ok[j] {
-			continue
-		}
-		if msg == nil || !round.CanAccept(msg) {
-			return false, nil
-		}
-		round.ok[j] = true
-	}
-	TODO
-	 */
 	return true, nil
 }
 
@@ -128,5 +157,5 @@ func (round *round5) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *round5) NextRound() tss.Round {
 	round.started = false
-	return &round6{round, false}
+	return nil // TODO &round6{round, false}
 }

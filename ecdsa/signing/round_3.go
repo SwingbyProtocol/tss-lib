@@ -7,7 +7,6 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/Workiva/go-datastructures/queue"
 	errorspkg "github.com/pkg/errors"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -21,13 +20,15 @@ func (round *round3) Start() *tss.Error {
 	return nil
 }
 
-func (round *round3) InboundQueuesToConsume() []*queue.Queue {
-	return []*queue.Queue{round.temp.signRound2Messages}
+func (round *round3) InboundQueuesToConsume() []tss.QueueFunction {
+	return []tss.QueueFunction{
+		{round.temp.signRound2Messages, ProcessRound3},
+	}
 }
 
-func (round *round3) OutboundQueuesWrittenTo() []*queue.Queue {
-	return []*queue.Queue {
-		round.temp.signRound3Messages,
+func (round *round3) OutboundQueuesWrittenTo() []tss.QueueFunction {
+	return []tss.QueueFunction{
+		{round.temp.signRound3Messages, ProcessRound2},
 	}
 }
 
@@ -54,7 +55,9 @@ func (round *round3) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func (round *round3) Process(msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) *tss.Error {
+func ProcessRound3(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID,
+	parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+	round := round_.(*round3)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	errChs := parameters.Dictionary["errChs"].(chan *tss.Error)
@@ -120,7 +123,7 @@ func (round *round3) Process(msg *tss.ParsedMessage, Pj *tss.PartyID, parameters
 
 	// consume error channels; wait for goroutines
 	wg.Wait()
-	return nil
+	return parameters, nil
 }
 
 func (round *round3) Postprocess(parameters *tss.GenericParameters) *tss.Error {
@@ -194,7 +197,6 @@ func (round *round3) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 
 	r3msg := NewSignRound3Message(Pi, deltaI, TI, tProof)
 	round.out <- r3msg
-	round.end <- &SignatureData{} // TODO
 	round.ended = true
 	return nil
 }
@@ -212,5 +214,5 @@ func (round *round3) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *round3) NextRound() tss.Round {
 	round.started = false
-	return nil // finished // TODO &round4{round}
+	return &round4{round}
 }

@@ -103,7 +103,6 @@ func (p *BaseParty) round() Round {
 }
 
 func (p *BaseParty) advance() {
-	common.Logger.Debugf("party %v at round %v is advancing", p, p.rnd.RoundNumber())
 	p.rnd = p.rnd.NextRound()
 }
 
@@ -132,6 +131,7 @@ func BaseStart(p Party, task string) *Error {
 	for {
 		p.Lock()
 		if p.round() == nil {
+			p.Unlock()
 			break // The last round finished
 		}
 		pRound := p.round().(PreprocessingRound)
@@ -139,22 +139,20 @@ func BaseStart(p Party, task string) *Error {
 		if errPP != nil {
 			return p.WrapError(errPP)
 		}
-		queues := pRound.InboundQueuesToConsume()
-		for _, queue := range queues {
+		queuesAndFunctions := pRound.InboundQueuesToConsume()
+		for _, queueAndFunction := range queuesAndFunctions {
 			elementsProcessed := 0
 			for elementsProcessed < partyCount-1 {
-				common.Logger.Debugf("party %s: %s round %d will read queue %p", p.round().Params().PartyID(),
-					task,
-					p.round().RoundNumber(), queue)
-				msgs, errQ := queue.Get(int64(partyCount))
+				msgs, errQ := queueAndFunction.Queue.Get(int64(partyCount))
 				if errQ != nil {
 					return p.WrapError(errQ)
 				}
-				if e := processInParallel(msgs, pRound, parameters, &elementsProcessed); e!=nil {
+				if e := processInParallel(msgs, pRound, queueAndFunction.MessageProcessingFunction, parameters,
+					&elementsProcessed); e != nil {
 					return e
 				}
 			}
-			queue.Dispose()
+			queueAndFunction.Queue.Dispose()
 		}
 		common.Logger.Debugf("party %s: %s round %d postproc starting", p.round().Params().PartyID(),
 			task, p.round().RoundNumber())
@@ -174,7 +172,8 @@ func BaseStart(p Party, task string) *Error {
 }
 
 func processInParallel(msgs []interface{}, pRound PreprocessingRound,
-parameters *GenericParameters, elementsProcessed *int) *Error {
+	messageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters) (*GenericParameters, *Error),
+	parameters *GenericParameters, elementsProcessed *int) *Error {
 	queueClone := new(queue.Queue)
 	if err := queueClone.Put(msgs); err != nil {
 		return pRound.WrapError(err)
@@ -188,19 +187,19 @@ parameters *GenericParameters, elementsProcessed *int) *Error {
 
 			toP := (*msg).GetTo()
 			var errP *Error
-			if toP == nil {
-				errP = pRound.Process(msg, (*msg).GetFrom(), parameters)
+			if toP == nil { // broadcast
+				parameters, errP = messageProcessingFunction(pRound, msg, (*msg).GetFrom(), parameters)
 				if errP != nil {
 					common.Logger.Errorf("error msg from %v, msg: %v, error %v",
 						msg2.From, FormatParsedMessage(*msg), errP)
-					return // TODO
+					return // TODO error channel
 				}
 			} else { // P2P
-				errP = pRound.Process(msg, (*msg).GetTo()[0], parameters)
+				parameters, errP = messageProcessingFunction(pRound, msg, (*msg).GetTo()[0], parameters)
 			}
 			if errP != nil {
 				common.Logger.Errorf("error %v", errP)
-				return // TODO
+				return // TODO error channel
 			}
 			*elementsProcessed++
 		}

@@ -10,10 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"math/rand"
-	"time"
-
-	"github.com/Workiva/go-datastructures/queue"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
@@ -30,28 +26,15 @@ var (
 // round 1 represents round 1 of the signing part of the GG18 ECDSA TSS spec (Gennaro, Goldfeder; 2018)
 func newRound1(params *tss.Parameters, key *keygen.LocalPartySaveData, data *SignatureData, temp *localTempData, out chan<- tss.Message, end chan<- *SignatureData) tss.Round {
 	return &round1{
-		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, false,1}}
+		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, false, 1}}
 }
 
 func (round *round1) Start() *tss.Error {
-	common.Logger.Debug("round_1 Start") // TODO
+	common.Logger.Warn("round_1 Start") // TODO
 	return nil
 }
 
 func (round *round1) Update() (bool, *tss.Error) {
-	/* for j, msg1 := range round.temp.signRound1Message1s {
-		if round.ok[j] {
-			continue
-		}
-		if msg1 == nil || !round.CanAccept(msg1) {
-			return false, nil
-		}
-		msg2 := round.temp.signRound1Message2s[j]
-		if msg2 == nil || !round.CanAccept(msg2) {
-			return false, nil
-		}
-		round.ok[j] = true
-	} */
 	return true, nil
 }
 
@@ -76,19 +59,14 @@ func (round *round1) NextRound() tss.Round {
 	return &round2{round1: round}
 }
 
-func (round *round1) InboundQueuesToConsume() []*queue.Queue {
+func (round *round1) InboundQueuesToConsume() []tss.QueueFunction {
 	return nil
 }
 
-func (round *round1) OutboundQueuesWrittenTo() []*queue.Queue {
-	q := make([]*queue.Queue, 2)
-	q = append(q, round.temp.signRound1Message1s)
-	q = append(q, round.temp.signRound1Message2s)
-	return q
-}
-
-/* */
 func (round *round1) Preprocess() (*tss.GenericParameters, *tss.Error) {
+	if round.started {
+		return nil, round.WrapError(errors.New("round already started"))
+	}
 	round.number = 1
 	round.started = true
 	round.ended = false
@@ -139,15 +117,10 @@ func (round *round1) Preprocess() (*tss.GenericParameters, *tss.Error) {
 		round.temp.r5AbortData.KI = kIBz
 		round.temp.r7AbortData.KI = kIBz
 		round.temp.cAKI = cA // used for the ZK proof in round 5
-		common.Logger.Debugf("party %v round 1 preproc, cA: %v", Pi, FormatBigInt(cA))
 		round.temp.rAKI = rA
 		round.temp.r7AbortData.KRandI = rA.Bytes()
 	}
 	return parameters, nil
-}
-
-func (round *round1) Process(*tss.ParsedMessage, *tss.PartyID, *tss.GenericParameters) *tss.Error {
-	return nil
 }
 
 func (round *round1) Postprocess(parameters *tss.GenericParameters) *tss.Error {
@@ -159,8 +132,6 @@ func (round *round1) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	cA := round.temp.cAKI
 	rA := round.temp.rAKI
 
-	minD := 0
-	maxD := 1
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue
@@ -170,31 +141,17 @@ func (round *round1) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 			return round.WrapError(fmt.Errorf("failed to init mta: %v", err))
 		}
 		r1msg1 := NewSignRound1Message1(Pj, round.PartyID(), cA, pi)
-		common.Logger.Debugf("party %v round 1 postproc, Pj: %v, cA: %v, msg: %v", i, Pj,
-			FormatBigInt(cA), r1msg1)
-		ran := rand.Intn(maxD-minD) + minD
-		ran = 0 * ran * ran
-		common.Logger.Debugf("party %v round 1 I'll sleep %v seconds and send p2p msg to %v", Pi.Index, ran, j)
-		time.Sleep(time.Duration(ran) * time.Second)
 		round.temp.c1Is[j] = cA
-		common.Logger.Debugf("party %v round 1 woke up sending p2p msg %v to %v", Pi.Index, r1msg1, j)
 		round.out <- r1msg1
 	}
 
 	cmtC := parameters.Dictionary["cmt.C"].(commitments.HashCommitment)
 	r1msg2 := NewSignRound1Message2(round.PartyID(), cmtC)
-	ran := rand.Intn(maxD-minD) + minD
-	ran = 0 * ran * ran
-	common.Logger.Debugf("party %v round 1 I'll sleep %v seconds and send brdcst msg %v",
-		Pi.Index, ran, r1msg2)
-	time.Sleep(time.Duration(ran) * time.Second)
-	common.Logger.Debugf("party %v round 1 woke up sending brdcst msg %v", Pi.Index, r1msg2)
-
 	round.out <- r1msg2
-	common.Logger.Debugf("party %v round 1 Postprocess ENDED", Pi.Index)
 	round.ended = true
 	return nil
 }
+
 // ----- //
 
 // helper to call into PrepareForSigning()

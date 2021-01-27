@@ -174,8 +174,8 @@ func (mm *MessageImpl) String() string {
 func FormatParsedMessage(msg ParsedMessage) string {
 	t := "Type:" + msg.Type()
 	from := "from:" + msg.GetFrom().String()
-    to := "to:nil"
-	if msg.GetTo() != nil && len(msg.GetTo())>0 {
+	to := "to:nil"
+	if msg.GetTo() != nil && len(msg.GetTo()) > 0 {
 		to = "to:" + msg.GetTo()[0].String()
 	}
 	bytes, _, _ := msg.WireBytes()
@@ -187,7 +187,7 @@ func FormatMessageImpl(msg MessageImpl) string {
 	t := "Type:" + msg.Type()
 	from := "from:" + msg.GetFrom().String()
 	to := "to:nil"
-	if msg.GetTo() != nil && len(msg.GetTo())>0 {
+	if msg.GetTo() != nil && len(msg.GetTo()) > 0 {
 		to = "to:" + msg.GetTo()[0].String()
 	}
 	bytes, _, _ := msg.WireBytes()

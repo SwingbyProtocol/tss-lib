@@ -22,13 +22,14 @@ type Round interface {
 	WrapError(err error, culprits ...*PartyID) *Error
 }
 
-type QueueFunctionMap map[*queue.Queue]func(*ParsedMessage,*PartyID,*GenericParameters) *Error
+type QueueFunction struct {
+	Queue                     *queue.Queue
+	MessageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters) (*GenericParameters, *Error)
+}
 
 type PreprocessingRound interface {
 	Round
 	Preprocess() (*GenericParameters, *Error)
-	Process(*ParsedMessage, *PartyID, *GenericParameters) *Error
 	Postprocess(*GenericParameters) *Error
-	InboundQueuesToConsume() []*queue.Queue
-	OutboundQueuesWrittenTo() []*queue.Queue
+	InboundQueuesToConsume() []QueueFunction
 }

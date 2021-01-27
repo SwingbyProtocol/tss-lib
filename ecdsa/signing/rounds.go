@@ -25,7 +25,7 @@ type (
 		end     chan<- *SignatureData
 		ok      []bool // `ok` tracks parties which have been verified by Update()
 		started bool
-		ended bool
+		ended   bool
 		number  int
 	}
 	round1 struct {
@@ -66,9 +66,6 @@ type (
 )
 
 var (
-	_ tss.Round = (*round1)(nil)
-	_ tss.Round = (*round2)(nil)
-	_ tss.Round = (*round3)(nil)
 	_ tss.Round = (*round4)(nil)
 	_ tss.Round = (*round5)(nil)
 	_ tss.Round = (*round6)(nil)
@@ -79,7 +76,11 @@ var (
 
 	_ tss.PreprocessingRound = (*round1)(nil)
 	_ tss.PreprocessingRound = (*round2)(nil)
-
+	_ tss.PreprocessingRound = (*round3)(nil)
+	_ tss.PreprocessingRound = (*round4)(nil)
+	_ tss.PreprocessingRound = (*round5)(nil)
+	_ tss.PreprocessingRound = (*round6)(nil)
+	// TODO other rounds
 )
 
 // ----- //
@@ -95,6 +96,15 @@ func (round *base) RoundNumber() int {
 // CanProceed is inherited by other rounds
 func (round *base) CanProceed() bool {
 	return round.started && round.ended
+}
+
+func (round *base) Process(*tss.ParsedMessage, *tss.PartyID, *tss.GenericParameters) *tss.Error {
+	return nil
+}
+
+func (round *base) Postprocess(parameters *tss.GenericParameters) *tss.Error {
+	round.ended = true
+	return nil
 }
 
 // WaitingFor is called by a Party for reporting back to the caller

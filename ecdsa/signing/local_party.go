@@ -47,8 +47,8 @@ type (
 		signRound4Messages,
 		signRound5Messages,
 		signRound6Messages,
-		signRound7Messages  *queue.Queue
-		}
+		signRound7Messages *queue.Queue
+	}
 
 	localTempData struct {
 		localMessageStore
@@ -117,11 +117,11 @@ func NewLocalParty(
 	p.temp.signRound1Message2s = new(queue.Queue)
 	p.temp.signRound2Messages = new(queue.Queue)
 	p.temp.signRound3Messages = new(queue.Queue)
-/*	p.temp.signRound4Messages = make([]*queue.Queue, partyCount)
-	p.temp.signRound5Messages = make([]*queue.Queue, partyCount)
-	p.temp.signRound6Messages = make([]*queue.Queue, partyCount)
-	p.temp.signRound7Messages = make([]*queue.Queue, partyCount)
-*/
+	p.temp.signRound4Messages = new(queue.Queue)
+	p.temp.signRound5Messages = new(queue.Queue)
+	p.temp.signRound6Messages = new(queue.Queue)
+	p.temp.signRound7Messages = new(queue.Queue)
+
 	// message channels
 
 	// temp data init
@@ -195,34 +195,37 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
 	switch msg.Content().(type) {
 	case *SignRound1Message1:
-		if err := p.temp.signRound1Message1s.Put(msg); err!=nil {
+		if err := p.temp.signRound1Message1s.Put(msg); err != nil {
 			return false, p.WrapError(err)
 		}
 	case *SignRound1Message2:
-		if err := p.temp.signRound1Message2s.Put(msg); err!=nil {
+		if err := p.temp.signRound1Message2s.Put(msg); err != nil {
 			return false, p.WrapError(err)
 		}
 	case *SignRound2Message:
-		if err := p.temp.signRound2Messages.Put(msg); err!=nil {
+		if err := p.temp.signRound2Messages.Put(msg); err != nil {
 			return false, p.WrapError(err)
 		}
 	case *SignRound3Message:
-		if err := p.temp.signRound3Messages.Put(msg); err!=nil {
+		if err := p.temp.signRound3Messages.Put(msg); err != nil {
 			return false, p.WrapError(err)
 		}
-	/*
-		case *SignRound4Message:
-		if err := p.temp.signRound4Messages.Put(msg); err!=nil {
+	case *SignRound4Message:
+		if err := p.temp.signRound4Messages.Put(msg); err != nil {
 			return false, p.WrapError(err)
 		}
 	case *SignRound5Message:
-		p.temp.signRound5Messages.Put(msg)
+		if err := p.temp.signRound5Messages.Put(msg); err != nil {
+			return false, p.WrapError(err)
+		}
 	case *SignRound6Message:
-		p.temp.signRound6Messages.Put(msg)
+		if err := p.temp.signRound6Messages.Put(msg); err != nil {
+			return false, p.WrapError(err)
+		}
 	case *SignRound7Message:
-		p.temp.signRound7Messages.Put(msg)
-
- */
+		if err := p.temp.signRound7Messages.Put(msg); err != nil {
+			return false, p.WrapError(err)
+		}
 	default: // unrecognised message, just ignore!
 		common.Logger.Warnf("unrecognised message ignored: %v", msg)
 		return false, nil
