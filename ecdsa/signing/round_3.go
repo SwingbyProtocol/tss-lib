@@ -22,13 +22,7 @@ func (round *round3) Start() *tss.Error {
 
 func (round *round3) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
-		{round.temp.signRound2Messages, ProcessRound3},
-	}
-}
-
-func (round *round3) OutboundQueuesWrittenTo() []tss.QueueFunction {
-	return []tss.QueueFunction{
-		{round.temp.signRound3Messages, ProcessRound2},
+		{round.temp.signRound2MessagesQ, &round.temp.signRound2Messages, ProcessRound3, false},
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Workiva/go-datastructures/queue"
 
@@ -38,6 +39,10 @@ type Party interface {
 	advance()
 	Lock()
 	Unlock()
+}
+
+type QueuingParty interface {
+	StoreMessageInQueues(msg ParsedMessage) (bool, *Error)
 }
 
 type BaseParty struct {
@@ -116,7 +121,80 @@ func (p *BaseParty) Unlock() {
 
 // ----- //
 
-func BaseStart(p Party, task string) *Error {
+func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
+	p.Lock()
+	defer p.Unlock()
+	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
+		return p.WrapError(fmt.Errorf("could not start. this party has an invalid PartyID: %+v", p.PartyID()))
+	}
+	if p.round() != nil {
+		return p.WrapError(errors.New("could not start. this party is in an unexpected state. use the constructor and Start()"))
+	}
+	round := p.FirstRound()
+	if err := p.setRound(round); err != nil {
+		return err
+	}
+	if 1 < len(prepare) {
+		return p.WrapError(errors.New("too many prepare functions given to Start(); 1 allowed"))
+	}
+	if len(prepare) == 1 {
+		if err := prepare[0](round); err != nil {
+			return err
+		}
+	}
+	common.Logger.Infof("party %s: %s round %d starting", p.round().Params().PartyID(), task, 1)
+	defer func() {
+		common.Logger.Debugf("party %s: %s round %d finished", p.round().Params().PartyID(), task, 1)
+	}()
+	return p.round().Start()
+}
+
+// an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
+func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
+	// fast-fail on an invalid message; do not lock the mutex yet
+	if _, err := p.ValidateMessage(msg); err != nil {
+		return false, err
+	}
+	// lock the mutex. need this mtx unlock hook; L108 is recursive so cannot use defer
+	r := func(ok bool, err *Error) (bool, *Error) {
+		p.Unlock()
+		return ok, err
+	}
+	p.Lock() // data is written to P state below
+	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
+	if p.round() != nil {
+		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(), msg.String())
+	}
+	if ok, err := p.StoreMessage(msg); err != nil || !ok {
+		return r(false, err)
+	}
+	if p.round() != nil {
+		common.Logger.Debugf("party %s: %s round %d update", p.round().Params().PartyID(), task, p.round().RoundNumber())
+		if _, err := p.round().Update(); err != nil {
+			return r(false, err)
+		}
+		if p.round().CanProceed() {
+			if p.advance(); p.round() != nil {
+				if err := p.round().Start(); err != nil {
+					return r(false, err)
+				}
+				rndNum := p.round().RoundNumber()
+				common.Logger.Infof("party %s: %s round %d started", p.round().Params().PartyID(), task, rndNum)
+			} else {
+				// finished! the round implementation will have sent the data through the `end` channel.
+				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
+			}
+			p.Unlock()                      // recursive so can't defer after return
+			return BaseUpdate(p, msg, task) // re-run round update or finish)
+		}
+		return r(true, nil)
+	}
+	return r(true, nil)
+}
+
+// ----- //
+
+func StartAndProcessQueues(p Party, task string) *Error {
 	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
 		return p.WrapError(fmt.Errorf("could not start. this party has an invalid PartyID: %+v", p.PartyID()))
 	}
@@ -129,41 +207,64 @@ func BaseStart(p Party, task string) *Error {
 	}
 	partyCount := len(p.round().Params().parties.IDs())
 	for {
-		p.Lock()
+
 		if p.round() == nil {
-			p.Unlock()
+			// p.Unlock()
 			break // The last round finished
 		}
 		pRound := p.round().(PreprocessingRound)
 		parameters, errPP := pRound.Preprocess()
 		if errPP != nil {
+			common.Logger.Error(errPP)
 			return p.WrapError(errPP)
 		}
 		queuesAndFunctions := pRound.InboundQueuesToConsume()
 		for _, queueAndFunction := range queuesAndFunctions {
 			elementsProcessed := 0
 			for elementsProcessed < partyCount-1 {
-				msgs, errQ := queueAndFunction.Queue.Get(int64(partyCount))
+				var number int64
+				if queueAndFunction.Parallel {
+					number = int64(partyCount - elementsProcessed - 1)
+				} else {
+					number = 1
+				}
+				// common.Logger.Debugf("party %v, will read &q: %p, num: %v, Q: %v", p, queueAndFunction.Queue, number,
+				// 	queueAndFunction.Queue)
+				msgFromIndices, errQ := queueAndFunction.Queue.Poll(number, 10*time.Second)
+				// common.Logger.Debugf("party %v,      read q: %p, read: %v", p, queueAndFunction.Queue, msgFromIndices)
 				if errQ != nil {
+					common.Logger.Errorf("party %v &q: %p q: %v errQ %v", p, queueAndFunction.Queue, queueAndFunction.Queue, errQ)
 					return p.WrapError(errQ)
 				}
-				if e := processInParallel(msgs, pRound, queueAndFunction.MessageProcessingFunction, parameters,
+				parsedMessages := make([]ParsedMessage, len(msgFromIndices))
+				for a, index_ := range msgFromIndices {
+					index := index_.(int)
+					m := (*queueAndFunction.Messages)[index]
+					parsedMessages[a] = m
+				}
+				if e := processInParallel(parsedMessages, pRound, queueAndFunction.MessageProcessingFunction, parameters,
 					&elementsProcessed); e != nil {
 					return e
 				}
 			}
 			queueAndFunction.Queue.Dispose()
 		}
-		common.Logger.Debugf("party %s: %s round %d postproc starting", p.round().Params().PartyID(),
-			task, p.round().RoundNumber())
-		errO := pRound.Postprocess(parameters)
-		if errO != nil {
-			return p.WrapError(errO)
+		common.Logger.Debugf("party %s: %s round %d params %p postproc starting", p.round().Params().PartyID(),
+			task, p.round().RoundNumber(), parameters)
+		if errO := pRound.Postprocess(parameters); errO != nil {
+			return errO
 		}
-		if p.round().CanProceed() {
-			p.advance()
+		for {
+			p.Lock()
+			if p.round().CanProceed() {
+				p.advance()
+				p.Unlock()
+				break
+			} else {
+				time.Sleep(2000 * time.Millisecond)
+			}
+			p.Unlock()
 		}
-		p.Unlock()
 	}
 	defer func() {
 		common.Logger.Debugf("party %s: %s finished", p, task)
@@ -171,7 +272,7 @@ func BaseStart(p Party, task string) *Error {
 	return nil
 }
 
-func processInParallel(msgs []interface{}, pRound PreprocessingRound,
+func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
 	messageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters) (*GenericParameters, *Error),
 	parameters *GenericParameters, elementsProcessed *int) *Error {
 	queueClone := new(queue.Queue)
@@ -179,27 +280,24 @@ func processInParallel(msgs []interface{}, pRound PreprocessingRound,
 		return pRound.WrapError(err)
 	}
 	f := func(msgs_ interface{}) {
-		msgs2_ := msgs_.([]interface{})
-		for _, msg_ := range msgs2_ {
-			msg2 := msg_.(*MessageImpl)
-			msgO := NewMessage(msg2.MessageRouting, msg2.content, msg2.wire)
-			msg := &msgO
+		msgs2_ := msgs_.([]ParsedMessage)
+		for _, msg := range msgs2_ {
 
-			toP := (*msg).GetTo()
+			toP := msg.GetTo()
 			var errP *Error
 			if toP == nil { // broadcast
-				parameters, errP = messageProcessingFunction(pRound, msg, (*msg).GetFrom(), parameters)
+				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters)
 				if errP != nil {
 					common.Logger.Errorf("error msg from %v, msg: %v, error %v",
-						msg2.From, FormatParsedMessage(*msg), errP)
-					return // TODO error channel
+						msg.GetFrom(), FormatParsedMessage(msg), errP)
+					return // TODO error handling
 				}
 			} else { // P2P
-				parameters, errP = messageProcessingFunction(pRound, msg, (*msg).GetTo()[0], parameters)
+				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetTo()[0], parameters)
 			}
 			if errP != nil {
 				common.Logger.Errorf("error %v", errP)
-				return // TODO error channel
+				return // TODO error handling
 			}
 			*elementsProcessed++
 		}
@@ -208,15 +306,16 @@ func processInParallel(msgs []interface{}, pRound PreprocessingRound,
 	return nil
 }
 
-// an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
-func BaseUpdate(p Party, msg ParsedMessage) (ok bool, err *Error) {
-
+func BaseValidateAndStore(p Party, msg ParsedMessage) (ok bool, err *Error) {
 	// fast-fail on an invalid message; do not lock the mutex yet
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
 	}
-
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
+		return false, err
+	}
+	qp := p.(QueuingParty)
+	if ok, err := qp.StoreMessageInQueues(msg); err != nil || !ok {
 		return false, err
 	}
 	return true, nil

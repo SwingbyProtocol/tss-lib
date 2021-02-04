@@ -22,9 +22,9 @@ import (
 
 func (round *round5) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
-		{round.temp.signRound1Message2s, ProcessRound5One},
-		{round.temp.signRound4Messages, ProcessRound5Four},
-		{round.temp.signRound3Messages, ProcessRound5Three},
+		{round.temp.signRound1Message2sQ, &round.temp.signRound1Message2s, ProcessRound5PartI, true},
+		{round.temp.signRound4MessagesQ, &round.temp.signRound4Messages, ProcessRound5PartII, true},
+		{round.temp.signRound3MessagesQ, &round.temp.signRound3Messages, ProcessRound5PartIII, false},
 	}
 }
 
@@ -44,20 +44,16 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessRound5One(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartI(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
 	r1msg2 := (*msg).Content().(*SignRound1Message2)
 	parameters.Dictionary["r1msg2"+strconv.Itoa(Pj.Index)] = r1msg2
 	return parameters, nil
 }
 
-func ProcessRound5Four(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round5)
-	i := round.PartyID().Index
 	j := Pj.Index
-	if j == i {
-		return parameters, nil
-	}
-	r1msg2 := parameters.Dictionary["r1msg2"+strconv.Itoa(Pj.Index)].(*SignRound1Message2)
+	r1msg2 := parameters.Dictionary["r1msg2"+strconv.Itoa(j)].(*SignRound1Message2)
 	bigR := parameters.Dictionary["bigR"].(*crypto.ECPoint)
 
 	r4msg := (*msg).Content().(*SignRound4Message)
@@ -82,13 +78,7 @@ func ProcessRound5Four(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj
 	return parameters, nil
 }
 
-func ProcessRound5Three(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
-	round := round_.(*round5)
-	i := round.PartyID().Index
-	j := Pj.Index
-	if j == i { // TODO remove it?
-		return parameters, nil
-	}
+func ProcessRound5PartIII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
 	r3msg := (*msg).Content().(*SignRound3Message)
 	deltaSum := parameters.Dictionary["deltaSum"].(*big.Int)
 	modN := common.ModInt(tss.EC().Params().N)
@@ -139,8 +129,12 @@ func (round *round5) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	}
 	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
 
+	common.Logger.Debugf("party %v pdlWSlackStatement: %v, kI: %v", Pi,
+		FormatPDLwSlackStatement(&pdlWSlackStatement),
+		FormatBigInt(kI))
 	r5msg := NewSignRound5Message(Pi, bigRBarI, &pdlWSlackPf)
 	round.out <- r5msg
+	round.ended = true
 	return nil
 }
 
@@ -157,5 +151,5 @@ func (round *round5) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *round5) NextRound() tss.Round {
 	round.started = false
-	return nil // TODO &round6{round, false}
+	return &round6{round, false}
 }

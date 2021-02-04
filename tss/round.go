@@ -24,7 +24,9 @@ type Round interface {
 
 type QueueFunction struct {
 	Queue                     *queue.Queue
+	Messages                  *[]ParsedMessage
 	MessageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters) (*GenericParameters, *Error)
+	Parallel                  bool
 }
 
 type PreprocessingRound interface {
