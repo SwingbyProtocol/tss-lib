@@ -31,7 +31,7 @@ func (round *round2) NextRound() tss.Round {
 
 func (round *round2) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
-		{round.temp.signRound1Message1s, ProcessRound2},
+		{round.temp.signRound1Message1sQ, &round.temp.signRound1Message1s, ProcessRound2, true},
 	}
 }
 

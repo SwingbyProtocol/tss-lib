@@ -66,21 +66,16 @@ type (
 )
 
 var (
-	_ tss.Round = (*round4)(nil)
-	_ tss.Round = (*round5)(nil)
-	_ tss.Round = (*round6)(nil)
-	_ tss.Round = (*round7AbortPrep)(nil)
-	_ tss.Round = (*round7)(nil)
-	_ tss.Round = (*finalizationAbortPrep)(nil)
-	_ tss.Round = (*finalization)(nil)
-
 	_ tss.PreprocessingRound = (*round1)(nil)
 	_ tss.PreprocessingRound = (*round2)(nil)
 	_ tss.PreprocessingRound = (*round3)(nil)
 	_ tss.PreprocessingRound = (*round4)(nil)
 	_ tss.PreprocessingRound = (*round5)(nil)
 	_ tss.PreprocessingRound = (*round6)(nil)
-	// TODO other rounds
+	_ tss.PreprocessingRound = (*round7)(nil)
+	_ tss.PreprocessingRound = (*round7AbortPrep)(nil)
+	_ tss.PreprocessingRound = (*finalizationAbortPrep)(nil)
+	_ tss.PreprocessingRound = (*finalization)(nil)
 )
 
 // ----- //

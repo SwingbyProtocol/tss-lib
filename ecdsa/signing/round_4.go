@@ -9,14 +9,8 @@ package signing
 import (
 	"errors"
 
-	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
 )
-
-func (round *round4) Start() *tss.Error {
-	common.Logger.Warn("round_4 Start") // TODO
-	return nil
-}
 
 func (round *round4) InboundQueuesToConsume() []tss.QueueFunction {
 	return nil

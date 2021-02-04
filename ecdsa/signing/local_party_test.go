@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/binance-chain/tss-lib/common"
+	"github.com/binance-chain/tss-lib/crypto"
+	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
@@ -46,7 +49,9 @@ func initTheParties(signPIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, thresh
 		parties = append(parties, P)
 		go func(P *LocalParty) {
 			if err := P.Start(); err != nil {
-				errCh <- err
+				if P.PartyID().Index != type7failureFromParty { // TODO
+					errCh <- err
+				}
 			}
 		}(P)
 	}
@@ -103,7 +108,7 @@ signing:
 					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
 				}
 				/* common.Logger.Debugf("local_party_test p2p msg %v will update for (to) party %v",
-					msg, parties[dest[0].Index]) */
+				msg, parties[dest[0].Index]) */
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
@@ -113,48 +118,48 @@ signing:
 			common.Logger.Infof("Data: %v", data)
 			break signing
 			/*
-			atomic.AddInt32(&ended, 1)
-			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
-				t.Logf("Done. Received signature data from %d participants %+v", ended, data)
+				atomic.AddInt32(&ended, 1)
+				if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
+					t.Logf("Done. Received signature data from %d participants %+v", ended, data)
 
-				// bigR is stored as bytes for the OneRoundData protobuf struct
-				bigRX, bigRY := new(big.Int).SetBytes(parties[0].temp.BigR.GetX()), new(big.Int).SetBytes(parties[0].temp.BigR.GetY())
-				bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
+					// bigR is stored as bytes for the OneRoundData protobuf struct
+					bigRX, bigRY := new(big.Int).SetBytes(parties[0].temp.BigR.GetX()), new(big.Int).SetBytes(parties[0].temp.BigR.GetY())
+					bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
 
-				r := parties[0].temp.rI.X()
-				fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
+					r := parties[0].temp.rI.X()
+					fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
 
-				modN := common.ModInt(tss.EC().Params().N)
+					modN := common.ModInt(tss.EC().Params().N)
 
-				// BEGIN check s correctness
-				sumS := big.NewInt(0)
-				for _, p := range parties {
-					sumS = modN.Add(sumS, p.temp.sI)
+					// BEGIN check s correctness
+					sumS := big.NewInt(0)
+					for _, p := range parties {
+						sumS = modN.Add(sumS, p.temp.sI)
+					}
+					fmt.Printf("S: %s\n", sumS.String())
+					// END check s correctness
+
+					// BEGIN ECDSA verify
+					pkX, pkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
+					pk := ecdsa.PublicKey{
+						Curve: tss.EC(),
+						X:     pkX,
+						Y:     pkY,
+					}
+					ok := ecdsa.Verify(&pk, msg.Bytes(), bigR.X(), sumS)
+					assert.True(t, ok, "ecdsa verify must pass")
+
+					btcecSig := &btcec.Signature{R: r, S: sumS}
+					btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(&pk))
+					assert.True(t, ok, "ecdsa verify 2 must pass")
+
+					t.Log("ECDSA signing test done.")
+					// END ECDSA verify
+
+					break signing
 				}
-				fmt.Printf("S: %s\n", sumS.String())
-				// END check s correctness
 
-				// BEGIN ECDSA verify
-				pkX, pkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
-				pk := ecdsa.PublicKey{
-					Curve: tss.EC(),
-					X:     pkX,
-					Y:     pkY,
-				}
-				ok := ecdsa.Verify(&pk, msg.Bytes(), bigR.X(), sumS)
-				assert.True(t, ok, "ecdsa verify must pass")
-
-				btcecSig := &btcec.Signature{R: r, S: sumS}
-				btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(&pk))
-				assert.True(t, ok, "ecdsa verify 2 must pass")
-
-				t.Log("ECDSA signing test done.")
-				// END ECDSA verify
-
-				break signing
-			}
-
-			 */
+			*/
 		}
 	}
 }
@@ -162,7 +167,7 @@ signing:
 const (
 	type7failureFromParty = 0
 )
-/*
+
 // Test a type 7 abort. Change the zk-proof in SignRound6Message to force a consistency check failure
 // in round 7 with y != bigSJ products.
 func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
@@ -184,7 +189,7 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 	// Intercepting a round 6 broadcast message to inject a bad zk-proof and trigger a type 7 abort
 	if msg.Type() == "SignRound6Message" && msg.IsBroadcast() && msg.GetFrom().Index == type7failureFromParty {
 		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
-		r6msg, meta, ok := sabotageRound6Message(party, msg, errCh, pMsg)
+		r6msg, meta, ok := sabotageRound6Message(party, &msg, errCh)
 		if !ok {
 			return
 		}
@@ -198,12 +203,9 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 		}
 	}
 }
-*/
 
-/*
 // Create a fake zk-proof and change the round 6 message
-func sabotageRound6Message(toParty tss.Party, msg tss.Message, errCh chan<- *tss.Error, pMsg tss.ParsedMessage) (*SignRound6Message, tss.MessageRouting, bool) {
-	r6msg := pMsg.Content().(*SignRound6Message)
+func sabotageRound6Message(toParty tss.Party, msg *tss.Message, errCh chan<- *tss.Error) (*SignRound6Message, tss.MessageRouting, bool) {
 	fakeh, _ := crypto.ECBasePoint2(tss.EC())
 	fakesigmaI := new(big.Int).SetInt64(1)
 	fakelI := new(big.Int).SetInt64(1)
@@ -214,7 +216,8 @@ func sabotageRound6Message(toParty tss.Party, msg tss.Message, errCh chan<- *tss
 		return nil, tss.MessageRouting{}, false
 	}
 	round5 := (toParty.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
-	r3msg := round5.temp.signRound3Messages[msg.GetFrom().Index].Content().(*SignRound3Message)
+	toParty.Lock()
+	r3msg := round5.temp.signRound3Messages[(*msg).GetFrom().Index].Content().(*SignRound3Message)
 	r3msg.TI = fakeTI.ToProtobufPoint()
 	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
 	fakebigSI := bigR.ScalarMult(fakesigmaI)
@@ -225,21 +228,18 @@ func sabotageRound6Message(toParty tss.Party, msg tss.Message, errCh chan<- *tss
 		return nil, tss.MessageRouting{}, false
 	}
 
-	parsedR6msg := NewSignRound6MessageSuccess(msg.GetFrom(), fakebigSI, stPf)
-	toParty.Lock()
-	round5.temp.signRound6Messages[msg.GetFrom().Index] = parsedR6msg
+	parsedR6msg := NewSignRound6MessageSuccess((*msg).GetFrom(), fakebigSI, stPf)
+	round5.temp.signRound6Messages[(*msg).GetFrom().Index] = parsedR6msg
 	toParty.Unlock()
-	r6msg = parsedR6msg.Content().(*SignRound6Message)
+	r6msg := parsedR6msg.Content().(*SignRound6Message)
 	meta := tss.MessageRouting{
-		From:        msg.GetFrom(),
-		To:          msg.GetTo(),
+		From:        (*msg).GetFrom(),
+		To:          (*msg).GetTo(),
 		IsBroadcast: true,
 	}
 	return r6msg, meta, true
 }
-*/
 
-/*
 // Test a type 7 abort. Use a custom updater to change one round 6 message.
 func TestType7Abort(t *testing.T) {
 	setUp("debug")
@@ -269,7 +269,6 @@ signing:
 		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
 		select {
 		case err := <-errCh:
-			common.Logger.Debugf("TODO err %v", err)
 			assert.NotNil(t, err, "an error should have been produced")
 			assert.NotNil(t, err.Culprits(), "culprits should have been identified")
 			assert.Equalf(t, len(err.Culprits()), 1, "there should have been one culprit")
@@ -300,8 +299,6 @@ signing:
 		}
 	}
 }
-
- */
 
 /*
 const (
@@ -569,7 +566,7 @@ signing:
 		}
 	}
 }
- */
+*/
 
 const (
 	AAA = 1
