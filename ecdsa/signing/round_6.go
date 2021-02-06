@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strconv"
+	"sync"
 
 	"github.com/hashicorp/go-multierror"
 
@@ -29,13 +29,18 @@ func (round *round6) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	}
 	round.number = 6
 	round.started = true
+	round.ended = false
 	round.resetOK()
-	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[*tss.PartyID]interface{})}
 
-	errs := make(map[*tss.PartyID]error)
+	errs := make(map[*tss.PartyID]interface{})
+	pdlWSlackPfs := make(map[*tss.PartyID]interface{})
+	bigRBarJs := make(map[*tss.PartyID]interface{})
 	bigRBarJProducts := (*crypto.ECPoint)(nil)
 	BigRBarJ := make(map[string]*common.ECPoint, round.Params().PartyCount())
-	parameters.Dictionary["errs"] = errs
+	parameters.DoubleDictionary["errs"] = errs
+	parameters.DoubleDictionary["pdlWSlackPfs"] = pdlWSlackPfs
+	parameters.DoubleDictionary["bigRBarJs"] = bigRBarJs
 
 	kI := new(big.Int).SetBytes(round.temp.KI)
 	bigR, _ := crypto.NewECPointFromProtobuf(round.temp.BigR)
@@ -47,28 +52,27 @@ func (round *round6) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round6)
 	i := round.PartyID().Index
 	j := Pj.Index
 
-	errs := parameters.Dictionary["errs"].(map[*tss.PartyID]error)
 	BigRBarJ := parameters.Dictionary["BigRBarJ"].(map[string]*common.ECPoint)
 	bigRBarJProducts := parameters.Dictionary["bigRBarJProducts"].(*crypto.ECPoint)
 
 	r5msg := (*msg).Content().(*SignRound5Message)
 	bigRBarJ, err := r5msg.UnmarshalRI()
 	if err != nil {
-		errs[Pj] = err
+		parameters.DoubleDictionary["errs"][Pj] = err
 		return parameters, round.WrapError(err)
 	}
-	parameters.Dictionary["bigRBarJ"+strconv.Itoa(j)] = bigRBarJ
+	parameters.DoubleDictionary["bigRBarJs"][Pj] = bigRBarJ
 	BigRBarJ[Pj.Id] = bigRBarJ.ToProtobufPoint()
 	parameters.Dictionary["BigRBarJ"] = BigRBarJ
 
 	// find products of all Rdash_i to ensure it equals the G point of the curve
 	if bigRBarJProducts, err = bigRBarJProducts.Add(bigRBarJ); err != nil {
-		errs[Pj] = err
+		parameters.DoubleDictionary["errs"][Pj] = err
 		return parameters, round.WrapError(err)
 	}
 	parameters.Dictionary["bigRBarJProducts"] = bigRBarJProducts
@@ -79,23 +83,20 @@ func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, P
 	// verify ZK proof of consistency between R_i and E_i(k_i)
 	// ported from: https://git.io/Jf69a
 	pdlWSlackPf, err := r5msg.UnmarshalPDLwSlackProof()
-	common.Logger.Debugf("Party %v ProcessRound6PartI Pj: %v proof: %v, bigRBarJProducts: %v", round.PartyID(), Pj,
-		FormatPDLwSlackProof(pdlWSlackPf), FormatECPoint(bigRBarJProducts))
 	if err != nil {
-		errs[Pj] = err
+		parameters.DoubleDictionary["errs"][Pj] = err
 		return parameters, round.WrapError(err)
 	}
-	parameters.Dictionary["pdlWSlackPf"+strconv.Itoa(j)] = pdlWSlackPf
+	parameters.DoubleDictionary["pdlWSlackPfs"][Pj] = pdlWSlackPf
 	return parameters, nil
 }
 
-func ProcessRound6PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound6PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round6)
 	j := Pj.Index
 	r1msg1 := (*msg).Content().(*SignRound1Message1)
-	errs := parameters.Dictionary["errs"].(map[*tss.PartyID]error)
-	pdlWSlackPf := parameters.Dictionary["pdlWSlackPf"+strconv.Itoa(j)].(*zkp.PDLwSlackProof)
-	bigRBarJ := parameters.Dictionary["bigRBarJ"+strconv.Itoa(j)].(*crypto.ECPoint)
+	pdlWSlackPf := parameters.DoubleDictionary["pdlWSlackPfs"][Pj].(*zkp.PDLwSlackProof)
+	bigRBarJ := parameters.DoubleDictionary["bigRBarJs"][Pj].(*crypto.ECPoint)
 
 	bigR, _ := crypto.NewECPointFromProtobuf(round.temp.BigR)
 	pdlWSlackStatement := zkp.PDLwSlackStatement{
@@ -107,22 +108,20 @@ func ProcessRound6PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 		H2:         round.key.H2j[Pj.Index],
 		NTilde:     round.key.NTildej[Pj.Index], // maybe i
 	}
-	common.Logger.Debugf("Party %v ProcessRound6PartII Pj: %v c: %v bigRBarJ: %v bigR: %v, sttmnt: %v",
-		round.PartyID(), Pj,
-		FormatBigInt(new(big.Int).SetBytes(r1msg1.GetC())),
-		FormatECPoint(bigRBarJ), FormatECPoint(bigR), FormatPDLwSlackStatement(&pdlWSlackStatement))
 
 	if !pdlWSlackPf.Verify(pdlWSlackStatement) {
 		e := fmt.Errorf("failed to verify ZK proof of consistency between R_i and E_i(k_i) for P %d", j)
-		errs[Pj] = e
-		return parameters, round.WrapError(e)
+		mutex.Lock()
+		parameters.DoubleDictionary["errs"][Pj] = e
+		mutex.Unlock()
+		return parameters, nil
 	}
 	return parameters, nil
 }
 
 func (round *round6) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	Pi := round.PartyID()
-	errs := parameters.Dictionary["errs"].(map[*tss.PartyID]error)
+	errs := parameters.DoubleDictionary["errs"]
 	bigRBarJProducts := parameters.Dictionary["bigRBarJProducts"].(*crypto.ECPoint)
 	BigRBarJ := parameters.Dictionary["BigRBarJ"].(map[string]*common.ECPoint)
 	bigR, _ := crypto.NewECPointFromProtobuf(round.temp.BigR)
@@ -135,7 +134,8 @@ func (round *round6) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	if 0 < len(errs) {
 		var multiErr error
 		culprits := make([]*tss.PartyID, 0, len(errs))
-		for Pj, err := range errs {
+		for Pj, err_ := range errs {
+			err := err_.(error)
 			multiErr = multierror.Append(multiErr, err)
 			culprits = append(culprits, Pj)
 		}
@@ -144,15 +144,13 @@ func (round *round6) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	{
 		ec := tss.EC()
 		gX, gY := ec.Params().Gx, ec.Params().Gy
-		common.Logger.Debugf("party %v  gX: %v, gY: %v bigRBarJProducts: %v", Pi, FormatBigInt(ec.Params().Gx),
-			FormatBigInt(ec.Params().Gy),
-			FormatECPoint(bigRBarJProducts))
 		if bigRBarJProducts.X().Cmp(gX) != 0 || bigRBarJProducts.Y().Cmp(gY) != 0 {
 			round.abortingT5 = true
 			common.Logger.Warnf("party %v round 6: consistency check failed: g != R products, entering Type 5 identified abort", Pi)
 
 			r6msg := NewSignRound6MessageAbort(Pi, &round.temp.r5AbortData)
 			round.out <- r6msg
+			round.ended = true
 			return nil
 		}
 	}
@@ -171,7 +169,6 @@ func (round *round6) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 		round.temp.r7AbortData.EcddhProofZ = sigmaPf.Z.Bytes()
 	}
 	round.temp.bigSI = bigSI
-	common.Logger.Debugf("party %v r6, bigSI %v, bigR %v", Pi, FormatECPoint(bigSI), FormatECPoint(bigR))
 	h, err := crypto.ECBasePoint2(tss.EC())
 	if err != nil {
 		return round.WrapError(err, Pi)
@@ -198,8 +195,9 @@ func (round *round6) CanAccept(msg tss.ParsedMessage) bool {
 	return false
 }
 
-func (round *round6) Update() (bool, *tss.Error) {
-	return true, nil
+func (round *round6) CanProceed() bool {
+	c := round.started && round.ended && round.temp.signRound6MessagesQ.Len() >= int64(round.PartyCount()-1)
+	return c
 }
 
 func (round *round6) NextRound() tss.Round {

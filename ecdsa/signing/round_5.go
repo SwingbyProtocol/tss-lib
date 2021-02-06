@@ -10,6 +10,7 @@ import (
 	"errors"
 	"math/big"
 	"strconv"
+	"sync"
 
 	errors2 "github.com/pkg/errors"
 
@@ -34,6 +35,7 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	}
 	round.number = 5
 	round.started = true
+	round.ended = false
 	round.resetOK()
 	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
 	bigR := round.temp.gammaIG
@@ -44,13 +46,13 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessRound5PartI(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartI(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r1msg2 := (*msg).Content().(*SignRound1Message2)
 	parameters.Dictionary["r1msg2"+strconv.Itoa(Pj.Index)] = r1msg2
 	return parameters, nil
 }
 
-func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round5)
 	j := Pj.Index
 	r1msg2 := parameters.Dictionary["r1msg2"+strconv.Itoa(j)].(*SignRound1Message2)
@@ -78,7 +80,7 @@ func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 	return parameters, nil
 }
 
-func ProcessRound5PartIII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartIII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r3msg := (*msg).Content().(*SignRound3Message)
 	deltaSum := parameters.Dictionary["deltaSum"].(*big.Int)
 	modN := common.ModInt(tss.EC().Params().N)
@@ -129,17 +131,10 @@ func (round *round5) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	}
 	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
 
-	common.Logger.Debugf("party %v pdlWSlackStatement: %v, kI: %v", Pi,
-		FormatPDLwSlackStatement(&pdlWSlackStatement),
-		FormatBigInt(kI))
 	r5msg := NewSignRound5Message(Pi, bigRBarI, &pdlWSlackPf)
 	round.out <- r5msg
 	round.ended = true
 	return nil
-}
-
-func (round *round5) Update() (bool, *tss.Error) {
-	return true, nil
 }
 
 func (round *round5) CanAccept(msg tss.ParsedMessage) bool {

@@ -13,10 +13,6 @@ import (
 	"github.com/binance-chain/tss-lib/tss"
 )
 
-func (round *round2) Start() *tss.Error {
-	return nil
-}
-
 func (round *round2) CanAccept(msg tss.ParsedMessage) bool {
 	if _, ok := msg.Content().(*SignRound2Message); ok {
 		return !msg.IsBroadcast()
@@ -40,7 +36,9 @@ func (round *round2) Preprocess() (*tss.GenericParameters, *tss.Error) {
 		return nil, round.WrapError(errors.New("round already started"))
 	}
 	round.number = 2
+	common.Logger.Debugf("party %v r1 Preprocess", round.PartyID())
 	round.started = true
+	round.ended = false
 	round.resetOK()
 
 	i := round.PartyID().Index
@@ -53,7 +51,7 @@ func (round *round2) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessRound2(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound2(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
 	errChs := parameters.Dictionary["errChs"].(chan *tss.Error)

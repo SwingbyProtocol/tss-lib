@@ -15,8 +15,6 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/mta"
-	"github.com/binance-chain/tss-lib/crypto/paillier"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -41,7 +39,6 @@ func (round *round1) Update() (bool, *tss.Error) {
 
 //
 func (round *round1) CanProceed() bool {
-	// TODO common.Logger.Debugf("party %v round %v proceed? %v", round.PartyID(), round.number, round.ended)
 	return round.ended
 }
 
@@ -69,6 +66,7 @@ func (round *round1) Preprocess() (*tss.GenericParameters, *tss.Error) {
 		return nil, round.WrapError(errors.New("round already started"))
 	}
 	round.number = 1
+	common.Logger.Debugf("party %v r1 Preprocess", round.PartyID())
 	round.started = true
 	round.ended = false
 	round.resetOK()
@@ -110,8 +108,6 @@ func (round *round1) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	if err != nil {
 		return nil, round.WrapError(err, Pi)
 	}
-
-	common.Logger.Debugf("party %v r1 Preprocess cA %v", round.PartyID(), FormatBigInt(cA))
 
 	// set "k"-related temporary variables, also used for identified aborts later in the protocol
 	{
@@ -177,30 +173,4 @@ func (round *round1) prepare() error {
 		round.temp.bigWs = bigWs
 	}
 	return nil
-}
-
-func FormatBigInt(a *big.Int) string { // TODO
-	return fmt.Sprintf("0x%x", new(big.Int).Mod(a, new(big.Int).SetInt64(10000000000)))
-}
-
-func FormatECPoint(p *crypto.ECPoint) string {
-	x := FormatBigInt(p.X())
-	y := FormatBigInt(p.Y())
-	return "(" + x + "," + y + ")"
-}
-
-func FormatPDLwSlackProof(p *zkp.PDLwSlackProof) string {
-	return "(S1:" + FormatBigInt(p.S1) + ", S2:" + FormatBigInt(p.S2) + ", S3:" + FormatBigInt(p.S3) +
-		", U1:" + FormatECPoint(p.U1) + ", U2:" + FormatBigInt(p.U2) + ", U3:" + FormatBigInt(p.U3) +
-		", Z:" + FormatBigInt(p.Z) + ")"
-}
-
-func FormatPaillierPublicKey(pk *paillier.PublicKey) string {
-	return "N:" + FormatBigInt(pk.N)
-}
-
-func FormatPDLwSlackStatement(s *zkp.PDLwSlackStatement) string {
-	return "(CT:" + FormatBigInt(s.CipherText) + ", G:" + FormatECPoint(s.G) + ", H1:" + FormatBigInt(s.H1) +
-		", H2:" + FormatBigInt(s.H2) +
-		", NT:" + FormatBigInt(s.NTilde) + ", PK:" + FormatPaillierPublicKey(s.PK) + ", Q:" + FormatECPoint(s.Q) + ")"
 }

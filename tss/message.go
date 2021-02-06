@@ -8,7 +8,6 @@ package tss
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
@@ -166,35 +165,5 @@ func (mm *MessageImpl) String() string {
 	if mm.IsToOldCommittee() {
 		extraStr = " (To Old Committee)"
 	}
-	val := new(big.Int).SetBytes(mm.wire.Message.Value)
-	extraStr = extraStr + " val:" + FormatBigInt2(val)
 	return fmt.Sprintf("Type: %s, From: %s%s%s", mm.Type(), mm.From.String(), toStr, extraStr)
-}
-
-func FormatParsedMessage(msg ParsedMessage) string {
-	t := "Type:" + msg.Type()
-	from := "from:" + msg.GetFrom().String()
-	to := "to:nil"
-	if msg.GetTo() != nil && len(msg.GetTo()) > 0 {
-		to = "to:" + msg.GetTo()[0].String()
-	}
-	bytes, _, _ := msg.WireBytes()
-	val := "val:" + FormatBigInt2(new(big.Int).SetBytes(bytes))
-	return t + " " + from + " " + to + " " + val
-}
-
-func FormatMessageImpl(msg MessageImpl) string {
-	t := "Type:" + msg.Type()
-	from := "from:" + msg.GetFrom().String()
-	to := "to:nil"
-	if msg.GetTo() != nil && len(msg.GetTo()) > 0 {
-		to = "to:" + msg.GetTo()[0].String()
-	}
-	bytes, _, _ := msg.WireBytes()
-	val := "val:" + FormatBigInt2(new(big.Int).SetBytes(bytes))
-	return t + " " + from + " " + to + " " + val
-}
-
-func FormatBigInt2(a *big.Int) string { // TODO
-	return fmt.Sprintf("0x%x", new(big.Int).Mod(a, new(big.Int).SetInt64(10000000000)))
 }

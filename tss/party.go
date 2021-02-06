@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Workiva/go-datastructures/queue"
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/binance-chain/tss-lib/common"
 )
@@ -50,6 +51,8 @@ type BaseParty struct {
 	rnd        Round
 	FirstRound Round
 }
+
+const QueuePollTimeoutSeconds = 90
 
 func (p *BaseParty) Running() bool {
 	return p.rnd != nil
@@ -207,13 +210,14 @@ func StartAndProcessQueues(p Party, task string) *Error {
 	}
 	partyCount := len(p.round().Params().parties.IDs())
 	for {
-
 		if p.round() == nil {
 			// p.Unlock()
 			break // The last round finished
 		}
 		pRound := p.round().(PreprocessingRound)
 		parameters, errPP := pRound.Preprocess()
+		rndNum := p.round().RoundNumber()
+		common.Logger.Infof("party %s: %s round %d started", p.round().Params().PartyID(), task, rndNum)
 		if errPP != nil {
 			common.Logger.Error(errPP)
 			return p.WrapError(errPP)
@@ -228,10 +232,8 @@ func StartAndProcessQueues(p Party, task string) *Error {
 				} else {
 					number = 1
 				}
-				// common.Logger.Debugf("party %v, will read &q: %p, num: %v, Q: %v", p, queueAndFunction.Queue, number,
-				// 	queueAndFunction.Queue)
-				msgFromIndices, errQ := queueAndFunction.Queue.Poll(number, 10*time.Second)
-				// common.Logger.Debugf("party %v,      read q: %p, read: %v", p, queueAndFunction.Queue, msgFromIndices)
+				msgFromIndices, errQ := queueAndFunction.Queue.Poll(number, QueuePollTimeoutSeconds*time.Second)
+				elementsProcessed = elementsProcessed + len(msgFromIndices)
 				if errQ != nil {
 					common.Logger.Errorf("party %v &q: %p q: %v errQ %v", p, queueAndFunction.Queue, queueAndFunction.Queue, errQ)
 					return p.WrapError(errQ)
@@ -239,11 +241,12 @@ func StartAndProcessQueues(p Party, task string) *Error {
 				parsedMessages := make([]ParsedMessage, len(msgFromIndices))
 				for a, index_ := range msgFromIndices {
 					index := index_.(int)
+					p.Lock()
 					m := (*queueAndFunction.Messages)[index]
+					p.Unlock()
 					parsedMessages[a] = m
 				}
-				if e := processInParallel(parsedMessages, pRound, queueAndFunction.MessageProcessingFunction, parameters,
-					&elementsProcessed); e != nil {
+				if e := processInParallel(parsedMessages, pRound, queueAndFunction.MessageProcessingFunction, parameters); e != nil {
 					return e
 				}
 			}
@@ -273,36 +276,49 @@ func StartAndProcessQueues(p Party, task string) *Error {
 }
 
 func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
-	messageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters) (*GenericParameters, *Error),
-	parameters *GenericParameters, elementsProcessed *int) *Error {
+	messageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters, sync.RWMutex) (*GenericParameters, *Error),
+	parameters *GenericParameters) *Error {
 	queueClone := new(queue.Queue)
 	if err := queueClone.Put(msgs); err != nil {
 		return pRound.WrapError(err)
 	}
+	var multiErr error
+	errCh := make(chan *Error, queueClone.Len())
+	wg := sync.WaitGroup{}
+	wg.Add(int(queueClone.Len()))
+	mutex := sync.RWMutex{}
 	f := func(msgs_ interface{}) {
+		defer wg.Done()
 		msgs2_ := msgs_.([]ParsedMessage)
 		for _, msg := range msgs2_ {
-
 			toP := msg.GetTo()
 			var errP *Error
 			if toP == nil { // broadcast
-				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters)
+				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, mutex)
 				if errP != nil {
-					common.Logger.Errorf("error msg from %v, msg: %v, error %v",
-						msg.GetFrom(), FormatParsedMessage(msg), errP)
-					return // TODO error handling
+					errCh <- errP
+					break
 				}
 			} else { // P2P
-				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetTo()[0], parameters)
+				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetTo()[0], parameters, mutex)
 			}
 			if errP != nil {
-				common.Logger.Errorf("error %v", errP)
-				return // TODO error handling
+				errCh <- errP
+				break
 			}
-			*elementsProcessed++
 		}
 	}
-	queue.ExecuteInParallel(queueClone, f)
+	go queue.ExecuteInParallel(queueClone, f)
+	wg.Wait()
+	close(errCh)
+	culprits := make([]*PartyID, 0, queueClone.Len())
+	if len(errCh) > 0 {
+		for err := range errCh {
+			culprits = append(culprits, err.Culprits()...)
+			multiErr = multierror.Append(multiErr, err.Cause())
+		}
+		return pRound.WrapError(multiErr, culprits...)
+	}
 	return nil
 }
 
@@ -311,6 +327,8 @@ func BaseValidateAndStore(p Party, msg ParsedMessage) (ok bool, err *Error) {
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
 	}
+	p.Lock()
+	defer p.Unlock()
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return false, err
 	}
