@@ -138,6 +138,12 @@ func (round *round1) NextRound() tss.Round {
 func (round *round1) prepare() error {
 	i := round.PartyID().Index
 	xi, ks, bigXs := round.key.Xi, round.key.Ks, round.key.BigXj
+
+	// adding the key derivation delta to the xi's
+	mod := common.ModInt(tss.EC().Params().N)
+	xi = mod.Add(round.temp.keyDerivationDelta, xi)
+	round.key.Xi = xi
+
 	if round.Threshold()+1 > len(ks) {
 		return fmt.Errorf("t+1=%d is not satisfied by the key count of %d", round.Threshold()+1, len(ks))
 	}

@@ -38,13 +38,16 @@ func setUp(level string) {
 	}
 }
 
-func initTheParties(signPIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, threshold int, keys []keygen.LocalPartySaveData, outCh chan tss.Message, endCh chan *SignatureData, parties []*LocalParty, errCh chan *tss.Error) (*big.Int, []*LocalParty, chan *tss.Error) {
+func initTheParties(signPIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, threshold int,
+	keys []keygen.LocalPartySaveData, keyDerivationDelta *big.Int, outCh chan tss.Message,
+	endCh chan *SignatureData, parties []*LocalParty,
+	errCh chan *tss.Error) (*big.Int, []*LocalParty, chan *tss.Error) {
 	// init the parties
 	msg := common.GetRandomPrimeInt(256)
 	for i := 0; i < len(signPIDs); i++ {
 		params := tss.NewParameters(p2pCtx, signPIDs[i], len(signPIDs), threshold)
 
-		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
+		P := NewLocalParty(msg, params, keys[i], keyDerivationDelta, outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
 			if err := P.Start(); err != nil {
@@ -76,7 +79,7 @@ func TestE2EConcurrent(t *testing.T) {
 
 	updater := test.SharedPartyUpdater
 
-	msg, parties, errCh := initTheParties(signPIDs, p2pCtx, threshold, keys, outCh, endCh, parties, errCh)
+	msg, parties, errCh := initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
 
 	var ended int32
 signing:
@@ -248,7 +251,7 @@ func TestType7Abort(t *testing.T) {
 
 	updater := type7IdentifiedAbortUpdater
 
-	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, outCh, endCh, parties, errCh)
+	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
 
 signing:
 	for {
@@ -368,7 +371,7 @@ func TestType4IdentifiedAbort(t *testing.T) {
 
 	updater := type4IdentifiedAbortUpdater
 
-	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, outCh, endCh, parties, errCh)
+	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
 
 signing:
 	for {
@@ -516,7 +519,7 @@ func TestType5IdentifiedAbort(t *testing.T) {
 
 	updater := type5IdentifiedAbortUpdater
 
-	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, outCh, endCh, parties, errCh)
+	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
 
 signing:
 	for {
