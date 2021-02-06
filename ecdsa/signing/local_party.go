@@ -151,16 +151,6 @@ func NewLocalParty(
 	p.temp.signRound7MessagesQ = new(queue.Queue)
 	p.temp.signRound7MessagesQII = new(queue.Queue)
 
-	/* TODO
-	common.Logger.Debugf("signRound1Message1sQ %p,\tsignRound1Message1sQII %p,\tsignRound1Message1sQIII %p,\tsignRound1Message2sQ %p,\tsignRound2MessagesQ %p",
-		p.temp.signRound1Message1sQ, p.temp.signRound1Message1sQII, p.temp.signRound1Message1sQIII,
-		p.temp.signRound1Message2sQ, p.temp.signRound2MessagesQ)
-	common.Logger.Debugf("signRound3MessagesQ %p,\tsignRound3MessagesQII %p, signRound4MessagesQ %p,\tp.temp.signRound5MessagesQ %p,\tp.temp.signRound6MessagesQ %p",
-		p.temp.signRound3MessagesQ, p.temp.signRound3MessagesQII,
-		p.temp.signRound4MessagesQ, p.temp.signRound5MessagesQ, p.temp.signRound6MessagesQ)
-	common.Logger.Debugf("signRound7MessagesQ %p,\tsignRound7MessagesQII %p",
-		p.temp.signRound7MessagesQ, p.temp.signRound7MessagesQII)
-	*/
 	// message channels
 
 	// temp data init
@@ -284,8 +274,6 @@ func (p *LocalParty) StoreMessageInQueues(msg tss.ParsedMessage) (bool, *tss.Err
 			return false, p.WrapError(err)
 		}
 	case *SignRound3Message:
-		common.Logger.Debugf("putting SignRound3Message %v in queues %p & %p", msg, p.temp.signRound3MessagesQ,
-			p.temp.signRound3MessagesQII)
 		if err := p.temp.signRound3MessagesQ.Put(fromPIdx); err != nil {
 			return false, p.WrapError(err)
 		}
@@ -301,13 +289,10 @@ func (p *LocalParty) StoreMessageInQueues(msg tss.ParsedMessage) (bool, *tss.Err
 			return false, p.WrapError(err)
 		}
 	case *SignRound6Message:
-		common.Logger.Debugf("putting SignRound6Message %v in queue %p", msg, p.temp.signRound6MessagesQ)
 		if err := p.temp.signRound6MessagesQ.Put(fromPIdx); err != nil {
 			return false, p.WrapError(err)
 		}
 	case *SignRound7Message:
-		common.Logger.Debugf("putting SignRound7Message %v in queues %p & %p", msg, p.temp.signRound7MessagesQ,
-			p.temp.signRound7MessagesQII)
 		if err := p.temp.signRound7MessagesQ.Put(fromPIdx); err != nil {
 			return false, p.WrapError(err)
 		}

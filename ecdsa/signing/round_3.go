@@ -16,10 +16,6 @@ import (
 	"github.com/binance-chain/tss-lib/tss"
 )
 
-func (round *round3) Start() *tss.Error {
-	return nil
-}
-
 func (round *round3) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
 		{round.temp.signRound2MessagesQ, &round.temp.signRound2Messages, ProcessRound3, false},
@@ -32,6 +28,7 @@ func (round *round3) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	}
 	round.number = 3
 	round.started = true
+	round.ended = false
 	round.resetOK()
 
 	alphaIJs := make([]*big.Int, len(round.Parties().IDs()))
@@ -50,7 +47,7 @@ func (round *round3) Preprocess() (*tss.GenericParameters, *tss.Error) {
 }
 
 func ProcessRound3(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID,
-	parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+	parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round3)
 	wg := sync.WaitGroup{}
 	wg.Add(2)
@@ -193,10 +190,6 @@ func (round *round3) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	round.out <- r3msg
 	round.ended = true
 	return nil
-}
-
-func (round *round3) Update() (bool, *tss.Error) {
-	return true, nil
 }
 
 func (round *round3) CanAccept(msg tss.ParsedMessage) bool {

@@ -10,8 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strconv"
-	"time"
+	"sync"
 
 	"github.com/hashicorp/go-multierror"
 
@@ -36,22 +35,25 @@ func (round *round7) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.started = true
 	round.ended = false
 	round.resetOK()
-	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[*tss.PartyID]interface{})}
 	culprits := make([]*tss.PartyID, 0, round.PartyCount())
 	var multiErr error
 	parameters.Dictionary["culprits"] = culprits
 	parameters.Dictionary["multiErr"] = multiErr
+	parameters.DoubleDictionary["calcDeltaJs"] = make(map[*tss.PartyID]interface{})
+	parameters.DoubleDictionary["bigSIs"] = make(map[*tss.PartyID]interface{})
+	parameters.DoubleDictionary["stProofs"] = make(map[*tss.PartyID]interface{})
+
 	var bigSJ = make(map[string]*common.ECPoint)
 	parameters.Dictionary["bigSJ"] = bigSJ
 	if !round.abortingT5 {
 		bigSJProducts := round.temp.bigSI
-		// common.Logger.Debugf("party %v, bigSJProducts: %v (init)", round.PartyID(), FormatECPoint(bigSJProducts))
 		parameters.Dictionary["bigSJProducts"] = bigSJProducts
 	}
 	return parameters, nil
 }
 
-func ProcessRound7(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound7(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round7)
 	if round.abortingT5 {
 		return processRound7Aborting(round_, msg, Pj, parameters)
@@ -69,7 +71,8 @@ func processRound7Aborting(round_ tss.PreprocessingRound, msg *tss.ParsedMessage
 	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
 	r6msgInner, ok := (*msg).Content().(*SignRound6Message).GetContent().(*SignRound6Message_Abort)
 	if !ok {
-		common.Logger.Warnf("round 7: unexpected success message while in aborting mode: %+v", r6msgInner)
+		common.Logger.Warnf("party %v round 7: unexpected success message while in aborting mode: %v %+v",
+			round.PartyID(), *msg, r6msgInner)
 		culprits = append(culprits, Pj)
 		parameters.Dictionary["culprits"] = culprits
 		return parameters, nil
@@ -109,7 +112,8 @@ func processRound7Aborting(round_ tss.PreprocessingRound, msg *tss.ParsedMessage
 		}
 		calcDeltaJ = modN.Add(calcDeltaJ, new(big.Int).SetBytes(b))
 	}
-	parameters.Dictionary["calcDeltaJ"+strconv.Itoa(Pj.Index)] = calcDeltaJ
+	parameters.DoubleDictionary["calcDeltaJs"][Pj] = calcDeltaJ
+
 	return parameters, nil
 }
 
@@ -120,14 +124,15 @@ func processRound7Normal(round tss.PreprocessingRound, msg *tss.ParsedMessage, P
 	if parameters.Dictionary["multiErr"] != nil {
 		multiErr = parameters.Dictionary["multiErr"].(error)
 	}
-	bigSJ := parameters.Dictionary["bigSJ"].(map[string]*common.ECPoint)
 	if !ok {
 		culprits = append(culprits, Pj)
-		multiErr = multierror.Append(multiErr, fmt.Errorf("unexpected abort message while in success mode: %+v", r6msgInner))
+		multiErr = multierror.Append(multiErr, fmt.Errorf("unexpected abort message while in success mode: %v %+v",
+			*msg, r6msgInner))
 		parameters.Dictionary["culprits"] = culprits
 		parameters.Dictionary["multiErr"] = multiErr
 		return parameters, round.WrapError(multiErr, culprits...)
 	}
+	bigSJ := parameters.Dictionary["bigSJ"].(map[string]*common.ECPoint)
 	r6msg := r6msgInner.Success
 	bigSI, err := r6msg.UnmarshalSI()
 	if err != nil {
@@ -137,7 +142,7 @@ func processRound7Normal(round tss.PreprocessingRound, msg *tss.ParsedMessage, P
 		parameters.Dictionary["multiErr"] = multiErr
 		return parameters, round.WrapError(multiErr, culprits...)
 	}
-	parameters.Dictionary["bigSI"+strconv.Itoa(Pj.Index)] = bigSI
+	parameters.DoubleDictionary["bigSIs"][Pj] = bigSI
 	bigSJ[Pj.Id] = bigSI.ToProtobufPoint()
 	parameters.Dictionary["bigSJ"] = bigSJ
 
@@ -149,44 +154,48 @@ func processRound7Normal(round tss.PreprocessingRound, msg *tss.ParsedMessage, P
 		parameters.Dictionary["multiErr"] = multiErr
 		return parameters, round.WrapError(multiErr, culprits...)
 	}
-	parameters.Dictionary["stProof"+strconv.Itoa(Pj.Index)] = stProof
+	parameters.DoubleDictionary["stProofs"][Pj] = stProof
 	return parameters, nil
 }
 
-func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round7)
 	r3msg := (*msg).Content().(*SignRound3Message)
 	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
 
 	if round.abortingT5 {
-		calcDeltaJ := parameters.Dictionary["calcDeltaJ"+strconv.Itoa(Pj.Index)].(*big.Int)
+		calcDeltaJ_, ok := parameters.DoubleDictionary["calcDeltaJs"][Pj]
+		if !ok {
+			return parameters, nil
+		}
+		calcDeltaJ := calcDeltaJ_.(*big.Int)
 		if expDeltaJ := new(big.Int).SetBytes(r3msg.GetDeltaI()); expDeltaJ.Cmp(calcDeltaJ) != 0 {
 			culprits = append(culprits, Pj)
 			parameters.Dictionary["culprits"] = culprits
 		}
-		return parameters, round.WrapError(errors.New("round 6 consistency check failed: g != R products, Type 5 identified abort, culprits known"), culprits...)
+		return parameters, round.WrapError(errors.New("round 7 consistency check failed: g != R products, Type 5 identified abort, culprits known"), culprits...)
 	} else {
 		var multiErr error
 		if parameters.Dictionary["multiErr"] != nil {
 			multiErr = parameters.Dictionary["multiErr"].(error)
 		}
+		r := func(culpritsIn []*tss.PartyID, errIn *error, multiErrIn *error, PjIn *tss.PartyID,
+			parametersIn *tss.GenericParameters, roundIn *round7) (*tss.GenericParameters, *tss.Error) {
+			culpritsIn = append(culpritsIn, PjIn)
+			*multiErrIn = multierror.Append(*multiErrIn, *errIn)
+			parametersIn.Dictionary["culprits"] = culpritsIn
+			parametersIn.Dictionary["multiErr"] = multiErrIn
+			return parametersIn, roundIn.WrapError(*multiErrIn, culpritsIn...)
+		}
 		TI, err := r3msg.UnmarshalTI()
 		if err != nil {
-			culprits = append(culprits, Pj)
-			multiErr = multierror.Append(multiErr, err)
-			parameters.Dictionary["culprits"] = culprits
-			parameters.Dictionary["multiErr"] = multiErr
-			return parameters, round.WrapError(multiErr, culprits...)
+			return r(culprits, &err, &multiErr, Pj, parameters, round)
 		}
-		stProof := parameters.Dictionary["stProof"+strconv.Itoa(Pj.Index)].(*zkp.STProof)
+		stProof := parameters.DoubleDictionary["stProofs"][Pj].(*zkp.STProof)
 		if err != nil {
-			culprits = append(culprits, Pj)
-			multiErr = multierror.Append(multiErr, err)
-			parameters.Dictionary["culprits"] = culprits
-			parameters.Dictionary["multiErr"] = multiErr
-			return parameters, round.WrapError(multiErr, culprits...)
+			return r(culprits, &err, &multiErr, Pj, parameters, round)
 		}
-		bigSI := parameters.Dictionary["bigSI"+strconv.Itoa(Pj.Index)].(*crypto.ECPoint)
+		bigSI := parameters.DoubleDictionary["bigSIs"][Pj].(*crypto.ECPoint)
 
 		// bigR is stored as bytes for the OneRoundData protobuf struct
 		bigRX, bigRY := new(big.Int).SetBytes(round.temp.BigR.GetX()), new(big.Int).SetBytes(round.temp.BigR.GetY())
@@ -197,32 +206,16 @@ func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 			return parameters, round.WrapError(errH, round.PartyID())
 		}
 
-		common.Logger.Debugf("party %v r7 Pj %v, bigSI %v, TI %v, bigR %v, h %v", round.PartyID(), Pj,
-			FormatECPoint(bigSI),
-			FormatECPoint(TI), FormatECPoint(bigR), FormatECPoint(h))
 		if ok := stProof.Verify(bigSI, TI, bigR, h); !ok {
-			culprits = append(culprits, Pj)
-			multiErr = multierror.Append(multiErr, errors.New("STProof verify failure"))
-			common.Logger.Errorf("party %v error STProof verify failure", round.PartyID()) // TODO
-			parameters.Dictionary["culprits"] = culprits
-			parameters.Dictionary["multiErr"] = multiErr
-			return parameters, round.WrapError(multiErr, culprits...)
+			e := errors.New("STProof verify failure")
+			return r(culprits, &e, &multiErr, Pj, parameters, round)
 		}
 		bigSJProducts := parameters.Dictionary["bigSJProducts"].(*crypto.ECPoint)
-		// common.Logger.Debugf("party %v, Pj: %v, r7 bigSJProducts: %v (before)", round.PartyID(), Pj,
-		//	FormatECPoint(bigSJProducts)) TODO
 		// bigSI consistency check
 		if bigSJProducts, err = bigSJProducts.Add(bigSI); err != nil {
-			culprits = append(culprits, Pj)
-			multiErr = multierror.Append(multiErr, err)
-			// common.Logger.Errorf("party %v error bigSJProducts.Add", round.PartyID()) // TODO
-			parameters.Dictionary["culprits"] = culprits
-			parameters.Dictionary["multiErr"] = multiErr
-			return parameters, round.WrapError(multiErr, culprits...)
+			return r(culprits, &err, &multiErr, Pj, parameters, round)
 		}
 		parameters.Dictionary["bigSJProducts"] = bigSJProducts
-		// common.Logger.Debugf("party %v, Pj: %v, r7 bigSJProducts: %v (after)", round.PartyID(), Pj,
-		// 	FormatECPoint(bigSJProducts))
 
 		if 0 < len(culprits) {
 			return parameters, round.WrapError(multiErr, culprits...)
@@ -234,23 +227,12 @@ func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 func (round *round7) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	Pi := round.PartyID()
 	var culprits []*tss.PartyID
-	common.Logger.Debugf("party %v r7 Postprocess step 1", Pi)
-	if parameters == nil {
-		common.Logger.Errorf("party %v error", Pi) // TODO
-		return round.WrapError(errors.New("parameters is null"))
-	}
 	if parameters.Dictionary["culprits"] != nil {
 		culprits = parameters.Dictionary["culprits"].([]*tss.PartyID)
 	}
 	var multiErr error
 	if parameters.Dictionary["multiErr"] != nil {
 		multiErr = parameters.Dictionary["multiErr"].(error)
-	}
-	if _, ok := parameters.Dictionary["bigR"]; !ok { // TODO
-		for {
-			common.Logger.Warnf("party %v warning bigR", Pi) // TODO
-			time.Sleep(20 * time.Second)
-		}
 	}
 	bigR := parameters.Dictionary["bigR"].(*crypto.ECPoint)
 	bigSJ := parameters.Dictionary["bigSJ"].(map[string]*common.ECPoint)
@@ -259,12 +241,9 @@ func (round *round7) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	if 0 < len(culprits) {
 		return round.WrapError(multiErr, culprits...)
 	}
-	common.Logger.Debugf("party %v r7 Postprocess step 2", Pi)
 
 	round.temp.rI = bigR
 	round.temp.BigSJ = bigSJ
-	common.Logger.Debugf("party %v, y: %v, bigSJProducts: %v", Pi, FormatECPoint(round.key.ECDSAPub),
-		FormatECPoint(bigSJProducts))
 	if y := round.key.ECDSAPub; !bigSJProducts.Equals(y) {
 		round.abortingT7 = true
 		common.Logger.Warnf("party %v round 7: consistency check failed: y != bigSJ products, entering Type 7 identified abort",
@@ -288,7 +267,6 @@ func (round *round7) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 		}
 		return nil
 	}
-	common.Logger.Debugf("party %v r7 Postprocess step 3", Pi)
 
 	// Continuing the full online protocol.
 	sI := FinalizeGetOurSigShare(round.data, round.temp.m)
@@ -311,7 +289,6 @@ func (round *round7) CanAccept(msg tss.ParsedMessage) bool {
 //
 func (round *round7) CanProceed() bool {
 	c := round.started && round.ended && round.temp.signRound7MessagesQ.Len() >= int64(round.PartyCount()-1)
-	common.Logger.Debugf("party %v, round7 CanProceed? %v", round.PartyID(), c)
 	return c
 }
 

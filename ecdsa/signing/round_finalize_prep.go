@@ -4,6 +4,7 @@ package signing
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
@@ -27,13 +28,11 @@ func (round *finalizationAbortPrep) Preprocess() (*tss.GenericParameters, *tss.E
 	return parameters, nil
 }
 
-func ProcessFinalRoundPrep(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessFinalRoundPrep(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, _ *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*finalizationAbortPrep)
 	r7msg := (*msg).Content().(*SignRound7Message)
-	common.Logger.Debugf("party %v Pj %v finalizationAbortPrep ProcessFinalRoundPrep", round.PartyID(), Pj)
 	if r7msg.GetAbort() != nil {
 		round.abortingT7 = true
-		common.Logger.Debugf("party %v Pj %v finalizationAbortPrep ProcessFinalRoundPrep aborting!", round.PartyID(), Pj)
 		otherR7msg := NewSignRound7MessageAbort(round.PartyID(), &round.temp.r7AbortData)
 		round.out <- otherR7msg
 		round.ended = true
@@ -54,9 +53,7 @@ func (round *finalizationAbortPrep) CanAccept(msg tss.ParsedMessage) bool {
 
 //
 func (round *finalizationAbortPrep) CanProceed() bool {
-	c := round.started && round.ended
-	common.Logger.Debugf("party %v, finalizationAbortPrep CanProceed? %v", round.PartyID(), c)
-	return c
+	return round.started && round.ended
 }
 
 func (round *finalizationAbortPrep) NextRound() tss.Round {

@@ -49,9 +49,7 @@ func initTheParties(signPIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, thresh
 		parties = append(parties, P)
 		go func(P *LocalParty) {
 			if err := P.Start(); err != nil {
-				if P.PartyID().Index != type7failureFromParty { // TODO
-					errCh <- err
-				}
+				errCh <- err
 			}
 		}(P)
 	}
@@ -164,10 +162,6 @@ signing:
 	}
 }
 
-const (
-	type7failureFromParty = 0
-)
-
 // Test a type 7 abort. Change the zk-proof in SignRound6Message to force a consistency check failure
 // in round 7 with y != bigSJ products.
 func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
@@ -187,8 +181,7 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 	}
 
 	// Intercepting a round 6 broadcast message to inject a bad zk-proof and trigger a type 7 abort
-	if msg.Type() == "SignRound6Message" && msg.IsBroadcast() && msg.GetFrom().Index == type7failureFromParty {
-		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
+	if msg.Type() == "SignRound6Message" && msg.IsBroadcast() {
 		r6msg, meta, ok := sabotageRound6Message(party, &msg, errCh)
 		if !ok {
 			return
@@ -196,7 +189,6 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 		// repackaging the round 6 message
 		pMsg = tss.NewMessage(meta, r6msg, tss.NewMessageWrapper(meta, r6msg))
 	}
-
 	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
 		if errUpdate.Culprits() != nil && len(errUpdate.Culprits()) > 0 {
 			errCh <- errUpdate
@@ -271,9 +263,7 @@ signing:
 		case err := <-errCh:
 			assert.NotNil(t, err, "an error should have been produced")
 			assert.NotNil(t, err.Culprits(), "culprits should have been identified")
-			assert.Equalf(t, len(err.Culprits()), 1, "there should have been one culprit")
-			assert.True(t, err.Culprits()[0].Index == type7failureFromParty,
-				"the culprit should have been party "+strconv.Itoa(type7failureFromParty))
+			assert.Greater(t, len(err.Culprits()), 0, "there should have been at least one culprit")
 			assert.Regexp(t, ".*round 7 consistency check failed: y != bigSJ products, Type 7 identified abort.*", err.Error(),
 				"the error should have had a Type 7 identified abort message")
 			break signing
@@ -300,7 +290,6 @@ signing:
 	}
 }
 
-/*
 const (
 	type4failureFromParty = 0
 )
@@ -420,9 +409,7 @@ signing:
 		}
 	}
 }
-*/
 
-/*
 //
 
 const (
@@ -456,7 +443,6 @@ func type5IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 		// repackaging the round 5 message
 		pMsg = tss.NewMessage(meta, r5msg, tss.NewMessageWrapper(meta, r5msg))
 	}
-
 	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
 		errCh <- errUpdate
 	}
@@ -512,7 +498,7 @@ func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.Parsed
 
 // Test a type 5 abort. Use a custom updater to change one round 5 message.
 func TestType5IdentifiedAbort(t *testing.T) {
-	setUp("info")
+	setUp("debug")
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
@@ -539,8 +525,12 @@ signing:
 		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
 		select {
 		case err := <-errCh:
+			if err.Victim() != nil && err.Victim().Index == type4failureFromParty {
+				// let us not credit our own malicious party
+				continue
+			}
 			assert.NotNil(t, err, "an error should have been triggered")
-			assert.Regexp(t, ".*round 6 consistency check failed: g != R products, Type 5 identified abort.*", err.Error(),
+			assert.Regexp(t, ".*round 7 consistency check failed: g != R products, Type 5 identified abort.*", err.Error(),
 				"the error should have had a type 5 identified abort failure message")
 
 			break signing
@@ -566,8 +556,3 @@ signing:
 		}
 	}
 }
-*/
-
-const (
-	AAA = 1
-)

@@ -22,6 +22,7 @@ func (round *round4) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	}
 	round.number = 4
 	round.started = true
+	round.ended = false
 	round.resetOK()
 
 	Pi := round.PartyID()
@@ -35,10 +36,6 @@ func (round *round4) Preprocess() (*tss.GenericParameters, *tss.Error) {
 
 func (round *round4) Postprocess(*tss.GenericParameters) *tss.Error {
 	return nil
-}
-
-func (round *round4) Update() (bool, *tss.Error) {
-	return true, nil
 }
 
 func (round *round4) CanAccept(msg tss.ParsedMessage) bool {

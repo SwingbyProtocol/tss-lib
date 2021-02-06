@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/hashicorp/go-multierror"
@@ -177,12 +178,14 @@ func (round *finalization) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	}
 	round.number = 9
 	round.started = true
+	round.ended = false
 	round.resetOK()
 	Ps := round.Parties().IDs()
 	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
 	culprits := make([]*tss.PartyID, 0, round.PartyCount())
 	parameters.Dictionary["culprits"] = culprits
 	// Identifiable Abort Type 7 triggered during Phase 6 (GG20)
+	common.Logger.Debugf("party %v finalization Preprocess round.abortingT7 %v", round.PartyID(), round.abortingT7)
 	if round.abortingT7 {
 		common.Logger.Infof("round 8: Abort Type 7 code path triggered")
 
@@ -202,7 +205,7 @@ func (round *finalization) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessFinalization1Round(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessFinalization1Round(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*finalization)
 	if round.abortingT7 {
 		return processFinalization1Abort(round_, msg, Pj, parameters)
@@ -263,8 +266,6 @@ func processFinalization1Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMes
 		}
 		parameters.Dictionary["cA"] = cA
 
-		common.Logger.Debugf("party %v Pj %v processFinalization1Abort step 2 cA %v", round.PartyID(), Pj, FormatBigInt(cA))
-
 		mus := common.ByteSlicesToBigInts(r7msg.GetMuIJ())
 		muRands := common.ByteSlicesToBigInts(r7msg.GetMuRandIJ())
 
@@ -288,14 +289,12 @@ func processFinalization1Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMes
 	return parameters, nil
 }
 
-func ProcessFinalization2Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+func ProcessFinalization2Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*finalization)
 	if round.abortingT7 {
 		cA := parameters.Dictionary["cA"].(*big.Int)
 		culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
 		r1msg1 := (*msg).Content().(*SignRound1Message1)
-		common.Logger.Debugf("party %v Pj %v ProcessFinalization2Abort cA %v, c: %v", round.PartyID(), Pj, FormatBigInt(cA),
-			FormatBigInt(new(big.Int).SetBytes(r1msg1.GetC())))
 		if !bytes.Equal(cA.Bytes(), r1msg1.GetC()) {
 			culprits = append(culprits, Pj)
 			parameters.Dictionary["culprits"] = culprits
@@ -314,14 +313,15 @@ func processFinalizationNormal(round tss.PreprocessingRound, msg *tss.ParsedMess
 	r7msgInner, ok := (*msg).Content().(*SignRound7Message).GetContent().(*SignRound7Message_SI)
 	if !ok {
 		culprits = append(culprits, Pj)
-		multiErr = multierror.Append(multiErr, fmt.Errorf("round 8: unexpected abort message while in success mode: %+v", r7msgInner))
+		multiErr = multierror.Append(multiErr, fmt.Errorf("round 8: unexpected abort message while in success mode: %v %+v",
+			*msg, r7msgInner))
 		parameters.Dictionary["culprits"] = culprits
 		parameters.Dictionary["multiErr"] = multiErr
 		return parameters, round.WrapError(multiErr, culprits...)
 	}
 	sI := r7msgInner.SI
 	otherSIs[Pj] = new(big.Int).SetBytes(sI)
-	parameters.Dictionary["otherSIs"] = otherSIs // TODO serial ?
+	parameters.Dictionary["otherSIs"] = otherSIs
 	return parameters, nil
 }
 
@@ -398,14 +398,13 @@ func (round *finalization) Postprocess(parameters *tss.GenericParameters) *tss.E
 	}
 }
 
+func (round *finalization) CanProceed() bool {
+	return round.started && round.ended
+}
+
 func (round *finalization) CanAccept(msg tss.ParsedMessage) bool {
 	// not expecting any incoming messages in this round
 	return false
-}
-
-func (round *finalization) Update() (bool, *tss.Error) {
-	// not expecting any incoming messages in this round
-	return false, nil
 }
 
 func (round *finalization) NextRound() tss.Round {

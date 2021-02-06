@@ -7,6 +7,8 @@
 package tss
 
 import (
+	"sync"
+
 	"github.com/Workiva/go-datastructures/queue"
 )
 
@@ -25,7 +27,7 @@ type Round interface {
 type QueueFunction struct {
 	Queue                     *queue.Queue
 	Messages                  *[]ParsedMessage
-	MessageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters) (*GenericParameters, *Error)
+	MessageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters, sync.RWMutex) (*GenericParameters, *Error)
 	Parallel                  bool
 }
 
