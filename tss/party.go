@@ -44,6 +44,7 @@ type Party interface {
 
 type QueuingParty interface {
 	StoreMessageInQueues(msg ParsedMessage) (bool, *Error)
+	ValidateAndStoreInQueues(msg ParsedMessage) (ok bool, err *Error)
 }
 
 type BaseParty struct {
@@ -205,22 +206,26 @@ func StartAndProcessQueues(p Party, task string) *Error {
 		return p.WrapError(errors.New("could not start. this party is in an unexpected state. use the constructor and Start()"))
 	}
 	round := p.FirstRound()
+	Pi := p.PartyID()
 	if err := p.setRound(round); err != nil {
 		return err
 	}
 	partyCount := len(p.round().Params().parties.IDs())
 	for {
+		p.Lock()
 		if p.round() == nil {
-			// p.Unlock()
+			p.Unlock()
 			break // The last round finished
 		}
+		errorFunc := func(p Party, e *Error) *Error { p.Unlock(); return e}
 		pRound := p.round().(PreprocessingRound)
 		parameters, errPP := pRound.Preprocess()
 		rndNum := p.round().RoundNumber()
-		common.Logger.Infof("party %s: %s round %d started", p.round().Params().PartyID(), task, rndNum)
+		p.Unlock()
+		common.Logger.Infof("party %s: %s round %d started", Pi, task, rndNum)
 		if errPP != nil {
 			common.Logger.Error(errPP)
-			return p.WrapError(errPP)
+			return errorFunc(p, p.WrapError(errPP))
 		}
 		queuesAndFunctions := pRound.InboundQueuesToConsume()
 		for _, queueAndFunction := range queuesAndFunctions {
@@ -232,45 +237,47 @@ func StartAndProcessQueues(p Party, task string) *Error {
 				} else {
 					number = 1
 				}
+				// common.Logger.Debugf("party %v will read &q %p", Pi, queueAndFunction.Queue)
 				msgFromIndices, errQ := queueAndFunction.Queue.Poll(number, QueuePollTimeoutSeconds*time.Second)
 				elementsProcessed = elementsProcessed + len(msgFromIndices)
 				if errQ != nil {
-					common.Logger.Errorf("party %v &q: %p q: %v errQ %v", p, queueAndFunction.Queue, queueAndFunction.Queue, errQ)
-					return p.WrapError(errQ)
+					// common.Logger.Errorf("party %v &q: %p errQ %v", Pi, queueAndFunction.Queue, errQ)
+					return errorFunc(p, p.WrapError(errQ))
 				}
 				parsedMessages := make([]ParsedMessage, len(msgFromIndices))
 				for a, index_ := range msgFromIndices {
 					index := index_.(int)
-					p.Lock()
 					m := (*queueAndFunction.Messages)[index]
-					p.Unlock()
 					parsedMessages[a] = m
 				}
 				if e := processInParallel(parsedMessages, pRound, queueAndFunction.MessageProcessingFunction, parameters); e != nil {
-					return e
+					return errorFunc(p, e)
 				}
 			}
-			queueAndFunction.Queue.Dispose()
+			// queueAndFunction.Queue.Dispose()
 		}
-		common.Logger.Debugf("party %s: %s round %d params %p postproc starting", p.round().Params().PartyID(),
+		p.Lock()
+		common.Logger.Debugf("party %s: %s round %d params %p postproc starting", Pi,
 			task, p.round().RoundNumber(), parameters)
 		if errO := pRound.Postprocess(parameters); errO != nil {
 			return errO
 		}
 		for {
-			p.Lock()
 			if p.round().CanProceed() {
+				// common.Logger.Debugf("party %v is advancing", Pi)
 				p.advance()
-				p.Unlock()
 				break
 			} else {
-				time.Sleep(2000 * time.Millisecond)
+				p.Unlock()
+				// common.Logger.Debugf("party %v cannot proceed yet and will sleep", Pi)
+				time.Sleep(100 * time.Millisecond)
+				p.Lock()
 			}
-			p.Unlock()
 		}
+		p.Unlock()
 	}
 	defer func() {
-		common.Logger.Debugf("party %s: %s finished", p, task)
+		common.Logger.Debugf("party %s: %s finished", Pi, task)
 	}()
 	return nil
 }
@@ -329,6 +336,8 @@ func BaseValidateAndStore(p Party, msg ParsedMessage) (ok bool, err *Error) {
 	}
 	p.Lock()
 	defer p.Unlock()
+	common.Logger.Debugf("party %v msg %v BaseValidateAndStore will lock", p, msg)
+	// defer common.Logger.Debugf("party %v msg %v BaseValidateAndStore will unlock", p, msg)
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return false, err
 	}

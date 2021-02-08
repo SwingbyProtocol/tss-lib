@@ -39,7 +39,7 @@ func (round *round1) Update() (bool, *tss.Error) {
 
 //
 func (round *round1) CanProceed() bool {
-	return round.ended
+	return round.started
 }
 
 func (round *round1) CanAccept(msg tss.ParsedMessage) bool {

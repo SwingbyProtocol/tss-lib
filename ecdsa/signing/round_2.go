@@ -36,7 +36,7 @@ func (round *round2) Preprocess() (*tss.GenericParameters, *tss.Error) {
 		return nil, round.WrapError(errors.New("round already started"))
 	}
 	round.number = 2
-	common.Logger.Debugf("party %v r1 Preprocess", round.PartyID())
+	common.Logger.Debugf("party %v r2 Preprocess", round.PartyID())
 	round.started = true
 	round.ended = false
 	round.resetOK()
@@ -150,4 +150,8 @@ func (round *round2) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	}
 	round.ended = true
 	return nil
+}
+
+func (round *round2) CanProceed() bool {
+	return round.started
 }

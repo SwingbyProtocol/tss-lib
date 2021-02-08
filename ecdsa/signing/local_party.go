@@ -189,8 +189,12 @@ func (p *LocalParty) Start() *tss.Error {
 	return tss.StartAndProcessQueues(p, TaskName)
 }
 
-func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
+func (p *LocalParty) ValidateAndStoreInQueues(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
 	return tss.BaseValidateAndStore(p, msg)
+}
+
+func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
+	return tss.BaseUpdate(p, msg, TaskName)
 }
 
 func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroadcast bool) (bool, *tss.Error) {
@@ -198,7 +202,7 @@ func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroa
 	if err != nil {
 		return false, p.WrapError(err)
 	}
-	return p.Update(msg)
+	return p.ValidateAndStoreInQueues(msg)
 }
 
 func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
