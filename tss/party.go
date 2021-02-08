@@ -245,13 +245,15 @@ func StartAndProcessQueues(p Party, task string) *Error {
 					return errorFunc(p, p.WrapError(errQ))
 				}
 				parsedMessages := make([]ParsedMessage, len(msgFromIndices))
+				p.Lock()
 				for a, index_ := range msgFromIndices {
 					index := index_.(int)
 					m := (*queueAndFunction.Messages)[index]
 					parsedMessages[a] = m
 				}
+				p.Unlock()
 				if e := processInParallel(parsedMessages, pRound, queueAndFunction.MessageProcessingFunction, parameters); e != nil {
-					return errorFunc(p, e)
+					return e
 				}
 			}
 			// queueAndFunction.Queue.Dispose()

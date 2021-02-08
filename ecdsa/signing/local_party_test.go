@@ -438,13 +438,13 @@ func type5IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 	if msg.Type() == "SignRound5Message" && msg.IsBroadcast() && msg.GetFrom().Index == type4failureFromParty {
 		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
 		party.Lock()
-		defer party.Unlock()
 		r5msg, meta, ok := taintRound5MessageWithZKP(party, msg, pMsg)
 		if !ok {
 			return
 		}
 		// repackaging the round 5 message
 		pMsg = tss.NewMessage(meta, r5msg, tss.NewMessageWrapper(meta, r5msg))
+		party.Unlock()
 	}
 	qParty := party.(tss.QueuingParty)
 	if _, errUpdate := qParty.ValidateAndStoreInQueues(pMsg); errUpdate != nil {
