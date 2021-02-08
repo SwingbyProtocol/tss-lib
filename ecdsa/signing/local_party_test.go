@@ -76,7 +76,7 @@ func TestE2EConcurrent(t *testing.T) {
 	outCh := make(chan tss.Message, len(signPIDs))
 	endCh := make(chan *SignatureData, len(signPIDs))
 
-	updater := test.SharedPartyUpdater
+	updater := test.SharedPartyUpdaterWithQueues
 
 	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
 
@@ -189,7 +189,8 @@ func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 		// repackaging the round 6 message
 		pMsg = tss.NewMessage(meta, r6msg, tss.NewMessageWrapper(meta, r6msg))
 	}
-	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
+	qParty := party.(tss.QueuingParty)
+	if _, errUpdate := qParty.ValidateAndStoreInQueues(pMsg); errUpdate != nil {
 		if errUpdate.Culprits() != nil && len(errUpdate.Culprits()) > 0 {
 			errCh <- errUpdate
 		}
@@ -321,8 +322,8 @@ func type4IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 		// repackaging the round 5 message
 		pMsg = tss.NewMessage(meta, r5msg, tss.NewMessageWrapper(meta, r5msg))
 	}
-
-	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
+	qParty := party.(tss.QueuingParty)
+	if _, errUpdate := qParty.ValidateAndStoreInQueues(pMsg); errUpdate != nil {
 		errCh <- errUpdate
 	}
 }
@@ -436,6 +437,8 @@ func type5IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 	// Intercepting a round 5 broadcast message to inject a bad k_i and trigger a type 5 abort
 	if msg.Type() == "SignRound5Message" && msg.IsBroadcast() && msg.GetFrom().Index == type4failureFromParty {
 		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
+		party.Lock()
+		defer party.Unlock()
 		r5msg, meta, ok := taintRound5MessageWithZKP(party, msg, pMsg)
 		if !ok {
 			return
@@ -443,7 +446,8 @@ func type5IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 		// repackaging the round 5 message
 		pMsg = tss.NewMessage(meta, r5msg, tss.NewMessageWrapper(meta, r5msg))
 	}
-	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
+	qParty := party.(tss.QueuingParty)
+	if _, errUpdate := qParty.ValidateAndStoreInQueues(pMsg); errUpdate != nil {
 		errCh <- errUpdate
 	}
 }

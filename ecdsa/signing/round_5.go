@@ -144,6 +144,10 @@ func (round *round5) CanAccept(msg tss.ParsedMessage) bool {
 	return false
 }
 
+func (round *round5) CanProceed() bool {
+	return round.started
+}
+
 func (round *round5) NextRound() tss.Round {
 	round.started = false
 	return &round6{round, false}
