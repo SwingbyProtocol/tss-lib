@@ -217,7 +217,7 @@ func StartAndProcessQueues(p Party, task string) *Error {
 			p.Unlock()
 			break // The last round finished
 		}
-		errorFunc := func(p Party, e *Error) *Error { p.Unlock(); return e}
+		errorFunc := func(p Party, e *Error) *Error { p.Unlock(); return e }
 		pRound := p.round().(PreprocessingRound)
 		parameters, errPP := pRound.Preprocess()
 		rndNum := p.round().RoundNumber()
