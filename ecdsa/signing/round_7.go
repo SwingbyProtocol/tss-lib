@@ -23,7 +23,7 @@ import (
 func (round *round7) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
 		{round.temp.signRound6MessagesQ, &round.temp.signRound6Messages, ProcessRound7, true},
-		{round.temp.signRound3MessagesQII, &round.temp.signRound3Messages, ProcessRound7PartII, false},
+		{round.temp.signRound3MessagesQII, &round.temp.signRound3Messages, ProcessRound7PartII, true},
 	}
 }
 
@@ -157,7 +157,7 @@ func processRound7Normal(round tss.PreprocessingRound, msg *tss.ParsedMessage, P
 	return parameters, nil
 }
 
-func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round7)
 	r3msg := (*msg).Content().(*SignRound3Message)
 	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
@@ -209,12 +209,15 @@ func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 			e := errors.New("STProof verify failure")
 			return r(culprits, &e, &multiErr, Pj, parameters, round)
 		}
+		mutex.Lock()
 		bigSJProducts := parameters.Dictionary["bigSJProducts"].(*crypto.ECPoint)
 		// bigSI consistency check
 		if bigSJProducts, err = bigSJProducts.Add(bigSI); err != nil {
+			mutex.Unlock()
 			return r(culprits, &err, &multiErr, Pj, parameters, round)
 		}
 		parameters.Dictionary["bigSJProducts"] = bigSJProducts
+		mutex.Unlock()
 
 		if 0 < len(culprits) {
 			return parameters, round.WrapError(multiErr, culprits...)

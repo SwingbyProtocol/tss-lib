@@ -18,7 +18,7 @@ import (
 
 func (round *round6) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
-		{round.temp.signRound5MessagesQ, &round.temp.signRound5Messages, ProcessRound6PartI, false},
+		{round.temp.signRound5MessagesQ, &round.temp.signRound5Messages, ProcessRound6PartI, true},
 		{round.temp.signRound1Message1sQII, &round.temp.signRound1Message1s, ProcessRound6PartII, true},
 	}
 }
@@ -51,7 +51,7 @@ func (round *round6) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round6)
 	i := round.PartyID().Index
 	j := Pj.Index
@@ -69,11 +69,14 @@ func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, P
 	BigRBarJ[Pj.Id] = bigRBarJ.ToProtobufPoint()
 	parameters.Dictionary["BigRBarJ"] = BigRBarJ
 
+	mutex.Lock()
 	// find products of all Rdash_i to ensure it equals the G point of the curve
 	if bigRBarJProducts, err = bigRBarJProducts.Add(bigRBarJ); err != nil {
 		parameters.DoubleDictionary["errs"][Pj] = err
+		mutex.Unlock()
 		return parameters, round.WrapError(err)
 	}
+	mutex.Unlock()
 	parameters.Dictionary["bigRBarJProducts"] = bigRBarJProducts
 
 	if j == i {
