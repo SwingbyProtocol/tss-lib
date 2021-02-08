@@ -13,18 +13,6 @@ import (
 	"github.com/binance-chain/tss-lib/tss"
 )
 
-func (round *round2) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound2Message); ok {
-		return !msg.IsBroadcast()
-	}
-	return false
-}
-
-func (round *round2) NextRound() tss.Round {
-	round.started = false
-	return &round3{round}
-}
-
 func (round *round2) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
 		{round.temp.signRound1Message1sQ, &round.temp.signRound1Message1s, ProcessRound2, true},
@@ -39,7 +27,6 @@ func (round *round2) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	common.Logger.Debugf("party %v r2 Preprocess", round.PartyID())
 	round.started = true
 	round.ended = false
-	round.resetOK()
 
 	i := round.PartyID().Index
 	round.ok[i] = true
@@ -154,4 +141,16 @@ func (round *round2) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 
 func (round *round2) CanProceed() bool {
 	return round.started
+}
+
+func (round *round2) CanProcess(msg tss.ParsedMessage) bool {
+	if _, ok := msg.Content().(*SignRound1Message1); ok {
+		return !msg.IsBroadcast()
+	}
+	return false
+}
+
+func (round *round2) NextRound() tss.Round {
+	round.started = false
+	return &round3{round}
 }

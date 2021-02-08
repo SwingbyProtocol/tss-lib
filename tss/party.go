@@ -54,6 +54,7 @@ type BaseParty struct {
 }
 
 const QueuePollTimeoutSeconds = 90
+const QueueWaitTimeInMilliseconds = 100
 
 func (p *BaseParty) Running() bool {
 	return p.rnd != nil
@@ -272,7 +273,7 @@ func StartAndProcessQueues(p Party, task string) *Error {
 			} else {
 				p.Unlock()
 				// common.Logger.Debugf("party %v cannot proceed yet and will sleep", Pi)
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(QueueWaitTimeInMilliseconds * time.Millisecond)
 				p.Lock()
 			}
 		}
@@ -300,6 +301,13 @@ func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
 		defer wg.Done()
 		msgs2_ := msgs_.([]ParsedMessage)
 		for _, msg := range msgs2_ {
+			if !pRound.CanProcess(msg) {
+				errorMessage := fmt.Sprintf("invalid message %v from party %v", msg, msg.GetFrom())
+				e := errors.New(errorMessage)
+				common.Logger.Warnf(errorMessage)
+				errCh <- pRound.WrapError(e, []*PartyID{msg.GetFrom()}...)
+				break
+			}
 			toP := msg.GetTo()
 			var errP *Error
 			if toP == nil { // broadcast

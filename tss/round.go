@@ -36,4 +36,5 @@ type PreprocessingRound interface {
 	Preprocess() (*GenericParameters, *Error)
 	Postprocess(*GenericParameters) *Error
 	InboundQueuesToConsume() []QueueFunction
+	CanProcess(msg ParsedMessage) bool
 }

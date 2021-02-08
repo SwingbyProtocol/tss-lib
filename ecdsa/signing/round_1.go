@@ -42,21 +42,6 @@ func (round *round1) CanProceed() bool {
 	return round.started
 }
 
-func (round *round1) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound1Message1); ok {
-		return !msg.IsBroadcast()
-	}
-	if _, ok := msg.Content().(*SignRound1Message2); ok {
-		return msg.IsBroadcast()
-	}
-	return false
-}
-
-func (round *round1) NextRound() tss.Round {
-	round.started = false
-	return &round2{round1: round}
-}
-
 func (round *round1) InboundQueuesToConsume() []tss.QueueFunction {
 	return nil
 }
@@ -69,7 +54,6 @@ func (round *round1) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	common.Logger.Debugf("party %v r1 Preprocess", round.PartyID())
 	round.started = true
 	round.ended = false
-	round.resetOK()
 
 	err2 := round.prepare()
 	if err2 != nil {
@@ -173,4 +157,18 @@ func (round *round1) prepare() error {
 		round.temp.bigWs = bigWs
 	}
 	return nil
+}
+
+func (round *round1) CanAccept(msg tss.ParsedMessage) bool {
+	return false
+}
+
+func (round *round1) CanProcess(msg tss.ParsedMessage) bool {
+	// No message expected
+	return false
+}
+
+func (round *round1) NextRound() tss.Round {
+	round.started = false
+	return &round2{round1: round}
 }
