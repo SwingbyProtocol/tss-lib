@@ -23,10 +23,8 @@ func (round *round4) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.number = 4
 	round.started = true
 	round.ended = false
-	round.resetOK()
 
 	Pi := round.PartyID()
-	// i := Pi.Index
 
 	r4msg := NewSignRound4Message(Pi, round.temp.deCommit)
 	round.out <- r4msg
@@ -38,10 +36,8 @@ func (round *round4) Postprocess(*tss.GenericParameters) *tss.Error {
 	return nil
 }
 
-func (round *round4) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound4Message); ok {
-		return msg.IsBroadcast()
-	}
+func (round *round4) CanProcess(msg tss.ParsedMessage) bool {
+	// No message expected
 	return false
 }
 

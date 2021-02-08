@@ -7,13 +7,15 @@
 package signing
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"testing"
-	"time"
 
+	"github.com/btcsuite/btcd/btcec"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -58,7 +60,6 @@ func initTheParties(signPIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, thresh
 
 func TestE2EConcurrent(t *testing.T) {
 	setUp("debug")
-	startTime := time.Now()
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
@@ -78,9 +79,9 @@ func TestE2EConcurrent(t *testing.T) {
 
 	updater := test.SharedPartyUpdaterWithQueues
 
-	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
+	msg, parties, errCh := initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
 
-	// var ended int32
+	var ended int32
 signing:
 	for {
 		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
@@ -93,71 +94,61 @@ signing:
 		case msg := <-outCh:
 			dest := msg.GetTo()
 			if dest == nil {
-				// common.Logger.Debugf("local_party_test broadcast msg %v", msg)
 				for _, P := range parties {
 					if P.PartyID().Index == msg.GetFrom().Index {
 						continue
 					}
-					// common.Logger.Debugf("local_party_test broadcast msg %v will update for party %v", msg, P)
 					go updater(P, msg, errCh)
 				}
 			} else {
 				if dest[0].Index == msg.GetFrom().Index {
 					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
 				}
-				/* common.Logger.Debugf("local_party_test p2p msg %v will update for (to) party %v",
-				msg, parties[dest[0].Index]) */
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
 		case data := <-endCh:
-			elapsed := time.Since(startTime)
-			common.Logger.Infof("Test elapsed time: %v", elapsed)
-			common.Logger.Infof("Data: %v", data)
-			break signing
-			/*
-				atomic.AddInt32(&ended, 1)
-				if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
-					t.Logf("Done. Received signature data from %d participants %+v", ended, data)
+			atomic.AddInt32(&ended, 1)
+			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
+				t.Logf("Done. Received signature data from %d participants %+v", ended, data)
 
-					// bigR is stored as bytes for the OneRoundData protobuf struct
-					bigRX, bigRY := new(big.Int).SetBytes(parties[0].temp.BigR.GetX()), new(big.Int).SetBytes(parties[0].temp.BigR.GetY())
-					bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
+				// bigR is stored as bytes for the OneRoundData protobuf struct
+				bigRX, bigRY := new(big.Int).SetBytes(parties[0].temp.BigR.GetX()), new(big.Int).SetBytes(parties[0].temp.BigR.GetY())
+				bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
 
-					r := parties[0].temp.rI.X()
-					fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
+				r := parties[0].temp.rI.X()
+				fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
 
-					modN := common.ModInt(tss.EC().Params().N)
+				modN := common.ModInt(tss.EC().Params().N)
 
-					// BEGIN check s correctness
-					sumS := big.NewInt(0)
-					for _, p := range parties {
-						sumS = modN.Add(sumS, p.temp.sI)
-					}
-					fmt.Printf("S: %s\n", sumS.String())
-					// END check s correctness
-
-					// BEGIN ECDSA verify
-					pkX, pkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
-					pk := ecdsa.PublicKey{
-						Curve: tss.EC(),
-						X:     pkX,
-						Y:     pkY,
-					}
-					ok := ecdsa.Verify(&pk, msg.Bytes(), bigR.X(), sumS)
-					assert.True(t, ok, "ecdsa verify must pass")
-
-					btcecSig := &btcec.Signature{R: r, S: sumS}
-					btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(&pk))
-					assert.True(t, ok, "ecdsa verify 2 must pass")
-
-					t.Log("ECDSA signing test done.")
-					// END ECDSA verify
-
-					break signing
+				// BEGIN check s correctness
+				sumS := big.NewInt(0)
+				for _, p := range parties {
+					sumS = modN.Add(sumS, p.temp.sI)
 				}
+				fmt.Printf("S: %s\n", sumS.String())
+				// END check s correctness
 
-			*/
+				// BEGIN ECDSA verify
+				pkX, pkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
+				pk := ecdsa.PublicKey{
+					Curve: tss.EC(),
+					X:     pkX,
+					Y:     pkY,
+				}
+				ok := ecdsa.Verify(&pk, msg.Bytes(), bigR.X(), sumS)
+				assert.True(t, ok, "ecdsa verify must pass")
+
+				btcecSig := &btcec.Signature{R: r, S: sumS}
+				btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(&pk))
+				assert.True(t, ok, "ecdsa verify 2 must pass")
+
+				t.Log("ECDSA signing test done.")
+				// END ECDSA verify
+
+				break signing
+			}
+
 		}
 	}
 }
@@ -333,6 +324,7 @@ func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage
 	r5msg := pMsg.Content().(*SignRound5Message)
 	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
 
+	party.Lock()
 	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
 	fakekI := new(big.Int).SetInt64(1)
 	fakeBigRBarI := bigR.ScalarMult(fakekI)
@@ -340,7 +332,7 @@ func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage
 	proof, _ := r5msg.UnmarshalPDLwSlackProof()
 	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, proof)
 	round5.temp.signRound6Messages[msg.GetFrom().Index] = round5Message
-
+	party.Unlock()
 	r5msg = round5Message.Content().(*SignRound5Message)
 	meta := tss.MessageRouting{
 		From:        msg.GetFrom(),

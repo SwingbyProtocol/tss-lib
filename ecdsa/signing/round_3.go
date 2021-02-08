@@ -29,7 +29,6 @@ func (round *round3) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.number = 3
 	round.started = true
 	round.ended = false
-	round.resetOK()
 
 	alphaIJs := make([]*big.Int, len(round.Parties().IDs()))
 	muIJs := make([]*big.Int, len(round.Parties().IDs()))    // mod q'd
@@ -192,9 +191,9 @@ func (round *round3) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	return nil
 }
 
-func (round *round3) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound3Message); ok {
-		return msg.IsBroadcast()
+func (round *round3) CanProcess(msg tss.ParsedMessage) bool {
+	if _, ok := msg.Content().(*SignRound2Message); ok {
+		return !msg.IsBroadcast()
 	}
 	return false
 }

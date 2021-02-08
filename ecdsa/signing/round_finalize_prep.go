@@ -44,8 +44,9 @@ func (round *finalizationAbortPrep) Postprocess(parameters *tss.GenericParameter
 	return nil
 }
 
-func (round *finalizationAbortPrep) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort); ok {
+func (round *finalizationAbortPrep) CanProcess(msg tss.ParsedMessage) bool {
+	// Collect messages for the full online protocol OR identified abort of type 7.
+	if _, ok := msg.Content().(*SignRound7Message); ok {
 		return msg.IsBroadcast()
 	}
 	return false

@@ -21,7 +21,6 @@ func (round *round7AbortPrep) Preprocess() (*tss.GenericParameters, *tss.Error) 
 	round.number = 6
 	round.started = true
 	round.ended = false
-	round.resetOK()
 	Pi := round.PartyID()
 	round.abortingT5 = true
 
@@ -35,10 +34,8 @@ func (round *round7AbortPrep) Postprocess(parameters *tss.GenericParameters) *ts
 	return nil
 }
 
-func (round *round7AbortPrep) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound6Message).GetContent().(*SignRound6Message_Abort); ok {
-		return msg.IsBroadcast()
-	}
+func (round *round7AbortPrep) CanProcess(msg tss.ParsedMessage) bool {
+	// No message expected
 	return false
 }
 

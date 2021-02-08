@@ -36,7 +36,6 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.number = 5
 	round.started = true
 	round.ended = false
-	round.resetOK()
 	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
 	bigR := round.temp.gammaIG
 	deltaI := *round.temp.deltaI
@@ -137,8 +136,14 @@ func (round *round5) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	return nil
 }
 
-func (round *round5) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound5Message); ok {
+func (round *round5) CanProcess(msg tss.ParsedMessage) bool {
+	if _, ok := msg.Content().(*SignRound1Message2); ok {
+		return msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound4Message); ok {
+		return msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound3Message); ok {
 		return msg.IsBroadcast()
 	}
 	return false

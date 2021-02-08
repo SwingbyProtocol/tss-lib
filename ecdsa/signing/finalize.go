@@ -32,6 +32,13 @@ const (
 // One Round Finalization (async/offline)
 // -----
 
+func (round *finalization) InboundQueuesToConsume() []tss.QueueFunction {
+	return []tss.QueueFunction{
+		{round.temp.signRound7MessagesQ, &round.temp.signRound7Messages, ProcessFinalization1Round, false},
+		{round.temp.signRound1Message1sQIII, &round.temp.signRound1Message1s, ProcessFinalization2Abort, false},
+	}
+}
+
 // FinalizeGetOurSigShare is called in one-round signing mode after the online rounds have finished to compute s_i.
 func FinalizeGetOurSigShare(state *SignatureData, msg *big.Int) (sI *big.Int) {
 	data := state.GetOneRoundData()
@@ -161,13 +168,6 @@ func FinalizeWrapError(err error, victim *tss.PartyID, culprits ...*tss.PartyID)
 	return tss.NewError(err, TaskNameFinalize, 8, victim, culprits...)
 }
 
-func (round *finalization) InboundQueuesToConsume() []tss.QueueFunction {
-	return []tss.QueueFunction{
-		{round.temp.signRound7MessagesQ, &round.temp.signRound7Messages, ProcessFinalization1Round, false},
-		{round.temp.signRound1Message1sQIII, &round.temp.signRound1Message1s, ProcessFinalization2Abort, false},
-	}
-}
-
 // -----
 // Full Online Finalization &
 // Identify Aborts of "Type 7"
@@ -179,13 +179,12 @@ func (round *finalization) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.number = 9
 	round.started = true
 	round.ended = false
-	round.resetOK()
 	Ps := round.Parties().IDs()
 	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
 	culprits := make([]*tss.PartyID, 0, round.PartyCount())
 	parameters.Dictionary["culprits"] = culprits
 	// Identifiable Abort Type 7 triggered during Phase 6 (GG20)
-	common.Logger.Debugf("party %v finalization Preprocess round.abortingT7 %v", round.PartyID(), round.abortingT7)
+	common.Logger.Debugf("party %v finalization Preprocess abortingT7? %v", round.PartyID(), round.abortingT7)
 	if round.abortingT7 {
 		common.Logger.Infof("round 8: Abort Type 7 code path triggered")
 
@@ -402,8 +401,16 @@ func (round *finalization) CanProceed() bool {
 	return round.started && round.ended
 }
 
-func (round *finalization) CanAccept(msg tss.ParsedMessage) bool {
-	// not expecting any incoming messages in this round
+func (round *finalization) CanProcess(msg tss.ParsedMessage) bool {
+	if _, ok := msg.Content().(*SignRound1Message1); ok {
+		return !msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort); ok {
+		return msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_SI); ok {
+		return msg.IsBroadcast()
+	}
 	return false
 }
 

@@ -34,7 +34,6 @@ func (round *round7) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.number = 7
 	round.started = true
 	round.ended = false
-	round.resetOK()
 	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[*tss.PartyID]interface{})}
 	culprits := make([]*tss.PartyID, 0, round.PartyCount())
 	var multiErr error
@@ -278,9 +277,14 @@ func (round *round7) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	return nil
 }
 
-func (round *round7) CanAccept(msg tss.ParsedMessage) bool {
-	// Collect messages for the full online protocol OR identified abort of type 7.
-	if _, ok := msg.Content().(*SignRound7Message); ok {
+func (round *round7) CanProcess(msg tss.ParsedMessage) bool {
+	if _, ok := msg.Content().(*SignRound3Message); ok {
+		return msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound6Message).GetContent().(*SignRound6Message_Abort); ok {
+		return msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound6Message).GetContent().(*SignRound6Message_Success); ok {
 		return msg.IsBroadcast()
 	}
 	return false
