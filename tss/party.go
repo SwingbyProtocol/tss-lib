@@ -218,7 +218,6 @@ func StartAndProcessQueues(p Party, task string) *Error {
 			p.Unlock()
 			break // The last round finished
 		}
-		errorFunc := func(p Party, e *Error) *Error { p.Unlock(); return e }
 		pRound := p.round().(PreprocessingRound)
 		parameters, errPP := pRound.Preprocess()
 		rndNum := p.round().RoundNumber()
@@ -226,7 +225,7 @@ func StartAndProcessQueues(p Party, task string) *Error {
 		common.Logger.Infof("party %s: %s round %d started", Pi, task, rndNum)
 		if errPP != nil {
 			common.Logger.Error(errPP)
-			return errorFunc(p, p.WrapError(errPP))
+			return p.WrapError(errPP)
 		}
 		queuesAndFunctions := pRound.InboundQueuesToConsume()
 		for _, queueAndFunction := range queuesAndFunctions {
@@ -242,8 +241,8 @@ func StartAndProcessQueues(p Party, task string) *Error {
 				msgFromIndices, errQ := queueAndFunction.Queue.Poll(number, QueuePollTimeoutInSeconds*time.Second)
 				elementsProcessed = elementsProcessed + len(msgFromIndices)
 				if errQ != nil {
-					// common.Logger.Errorf("party %v &q: %p errQ %v", Pi, queueAndFunction.Queue, errQ)
-					return errorFunc(p, p.WrapError(errQ))
+					common.Logger.Errorf("error: %v", errQ)
+					return p.WrapError(errQ)
 				}
 				parsedMessages := make([]ParsedMessage, len(msgFromIndices))
 				p.Lock()
