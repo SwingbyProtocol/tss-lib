@@ -69,6 +69,7 @@ func TestE2EConcurrent(t *testing.T) {
 	endCh := make(chan keygen.LocalPartySaveData, bothCommitteesPax)
 
 	updater := test.SharedPartyUpdater
+	updaterWithQueues := test.SharedPartyUpdaterWithQueues
 
 	// init the old parties first
 	for j, pID := range oldPIDs {
@@ -197,13 +198,13 @@ signing:
 					if P.PartyID().Index == msg.GetFrom().Index {
 						continue
 					}
-					go updater(P, msg, signErrCh)
+					go updaterWithQueues(P, msg, signErrCh)
 				}
 			} else {
 				if dest[0].Index == msg.GetFrom().Index {
 					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
 				}
-				go updater(signParties[dest[0].Index], msg, signErrCh)
+				go updaterWithQueues(signParties[dest[0].Index], msg, signErrCh)
 			}
 
 		case signData := <-signEndCh:
