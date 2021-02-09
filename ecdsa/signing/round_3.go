@@ -18,7 +18,7 @@ import (
 
 func (round *round3) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
-		{round.temp.signRound2MessagesQ, &round.temp.signRound2Messages, ProcessRound3, false},
+		{round.temp.signRound2MessagesQ, &round.temp.signRound2Messages, ProcessRound3, true},
 	}
 }
 
@@ -30,31 +30,31 @@ func (round *round3) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.started = true
 	round.ended = false
 
-	alphaIJs := make([]*big.Int, len(round.Parties().IDs()))
-	muIJs := make([]*big.Int, len(round.Parties().IDs()))    // mod q'd
-	muIJRecs := make([]*big.Int, len(round.Parties().IDs())) // raw recovered
-	muRandIJ := make([]*big.Int, len(round.Parties().IDs()))
-
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
-	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
+	wg := sync.WaitGroup{}
+	wg.Add((len(round.Parties().IDs()) - 1) * 2)
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[*tss.PartyID]interface{})}
 	parameters.Dictionary["errChs"] = errChs
-	parameters.Dictionary["alphaIJs"] = alphaIJs
-	parameters.Dictionary["muIJs"] = muIJs
-	parameters.Dictionary["muIJRecs"] = muIJRecs
-	parameters.Dictionary["muRandIJ"] = muRandIJ
+	parameters.DoubleDictionary["alphaIJs"] = make(map[*tss.PartyID]interface{})
+
+	// mod q'd
+	parameters.DoubleDictionary["muIJs"] = make(map[*tss.PartyID]interface{})
+
+	// raw recovered
+	parameters.DoubleDictionary["muIJRecs"] = make(map[*tss.PartyID]interface{})
+
+	parameters.DoubleDictionary["muRandIJ"] = make(map[*tss.PartyID]interface{})
+	parameters.Dictionary["wgp"] = &wg
+	parameters.Dictionary["roundMutex"] = &sync.RWMutex{}
 	return parameters, nil
 }
 
 func ProcessRound3(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID,
 	parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round3)
-	wg := sync.WaitGroup{}
-	wg.Add(2)
+	wg := parameters.Dictionary["wgp"].(*sync.WaitGroup)
 	errChs := parameters.Dictionary["errChs"].(chan *tss.Error)
-	alphaIJs := parameters.Dictionary["alphaIJs"].([]*big.Int)
-	muIJs := parameters.Dictionary["muIJs"].([]*big.Int)
-	muIJRecs := parameters.Dictionary["muIJRecs"].([]*big.Int)
-	muRandIJ := parameters.Dictionary["muRandIJ"].([]*big.Int)
+	roundMutex := parameters.Dictionary["roundMutex"].(*sync.RWMutex)
 
 	i := round.PartyID().Index
 	j := Pj.Index
@@ -81,8 +81,10 @@ func ProcessRound3(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *ts
 			errChs <- round.WrapError(err, Pj)
 			return
 		}
-		alphaIJs[j] = alphaIJ
+		roundMutex.Lock()
+		parameters.DoubleDictionary["alphaIJs"][Pj] = alphaIJ
 		round.temp.r5AbortData.AlphaIJ[j] = alphaIJ.Bytes()
+		roundMutex.Unlock()
 	}(j, Pj)
 	// Alice_end_wc
 	go func(j int, Pj *tss.PartyID) {
@@ -106,24 +108,29 @@ func ProcessRound3(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *ts
 			errChs <- round.WrapError(err, Pj)
 			return
 		}
-		muIJs[j] = muIJ       // mod q'd
-		muIJRecs[j] = muIJRec // raw recovered
-		muRandIJ[j] = muIJRand
+		roundMutex.Lock()
+		parameters.DoubleDictionary["muIJs"][Pj] = muIJ       // mod q'd
+		parameters.DoubleDictionary["muIJRecs"][Pj] = muIJRec // raw recovered
+		parameters.DoubleDictionary["muRandIJ"][Pj] = muIJRand
+		roundMutex.Unlock()
 	}(j, Pj)
 
-	// consume error channels; wait for goroutines
-	wg.Wait()
 	return parameters, nil
 }
 
 func (round *round3) Postprocess(parameters *tss.GenericParameters) *tss.Error {
+	wg := parameters.Dictionary["wgp"].(*sync.WaitGroup)
+	// consume error channels; wait for goroutines
+	wg.Wait()
 	Pi := round.PartyID()
 	i := Pi.Index
 	errChs := parameters.Dictionary["errChs"].(chan *tss.Error)
-	muIJRecs := parameters.Dictionary["muIJRecs"].([]*big.Int)
-	muRandIJ := parameters.Dictionary["muRandIJ"].([]*big.Int)
-	alphaIJs := parameters.Dictionary["alphaIJs"].([]*big.Int)
-	muIJs := parameters.Dictionary["muIJs"].([]*big.Int)
+	muIJRecsA := make([]*big.Int, len(round.Parties().IDs())) // raw recovered
+	muRandIJA := make([]*big.Int, len(round.Parties().IDs()))
+	muIJRecs := parameters.DoubleDictionary["muIJRecs"]
+	muRandIJ := parameters.DoubleDictionary["muRandIJ"]
+	alphaIJs := parameters.DoubleDictionary["alphaIJs"]
+	muIJs := parameters.DoubleDictionary["muIJs"]
 
 	// consume error channels; wait for goroutines
 	close(errChs)
@@ -134,9 +141,6 @@ func (round *round3) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	if len(culprits) > 0 {
 		return round.WrapError(errors.New("failed to calculate Alice_end or Alice_end_wc"), culprits...)
 	}
-	// for identifying aborts in round 7: muIJs, revealed during Type 7 identified abort
-	round.temp.r7AbortData.MuIJ = common.BigIntsToBytes(muIJRecs)
-	round.temp.r7AbortData.MuRandIJ = common.BigIntsToBytes(muRandIJ)
 
 	q := tss.EC().Params().N
 	modN := common.ModInt(q)
@@ -149,16 +153,25 @@ func (round *round3) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	round.temp.wI.Set(zero)
 	round.temp.wI = zero
 
-	for j := range round.Parties().IDs() {
+	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue
 		}
+		alphaIJj := alphaIJs[Pj].(*big.Int)
+		muIJsj := muIJs[Pj].(*big.Int)
+		muIJRecsA[j] = muIJRecs[Pj].(*big.Int)
+		muRandIJA[j] = muRandIJ[Pj].(*big.Int)
 		beta := modN.Sub(zero, round.temp.vJIs[j])
-		deltaI.Add(deltaI, alphaIJs[j].Add(alphaIJs[j], round.temp.betas[j]))
-		sigmaI.Add(sigmaI, muIJs[j].Add(muIJs[j], beta))
+		deltaI.Add(deltaI, alphaIJj.Add(alphaIJj, round.temp.betas[j]))
+		sigmaI.Add(sigmaI, muIJsj.Add(muIJsj, beta))
 		deltaI.Mod(deltaI, q)
 		sigmaI.Mod(sigmaI, q)
 	}
+
+	// for identifying aborts in round 7: muIJs, revealed during Type 7 identified abort
+	round.temp.r7AbortData.MuIJ = common.BigIntsToBytes(muIJRecsA)
+	round.temp.r7AbortData.MuRandIJ = common.BigIntsToBytes(muRandIJA)
+
 	// nil sensitive data for gc
 	round.temp.betas, round.temp.vJIs = nil, nil
 
