@@ -34,7 +34,7 @@ func (round *round2) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
 	wg := sync.WaitGroup{}
-	wg.Add((len(round.Parties().IDs())-1)*2)
+	wg.Add((len(round.Parties().IDs()) - 1) * 2)
 	parameters.Dictionary["wgp"] = &wg
 
 	parameters.Dictionary["errChs"] = errChs
