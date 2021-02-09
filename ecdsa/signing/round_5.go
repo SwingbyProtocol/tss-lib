@@ -9,7 +9,6 @@ package signing
 import (
 	"errors"
 	"math/big"
-	"strconv"
 	"sync"
 
 	errors2 "github.com/pkg/errors"
@@ -36,25 +35,26 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.number = 5
 	round.started = true
 	round.ended = false
-	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[*tss.PartyID]interface{})}
 	bigR := round.temp.gammaIG
 	deltaI := *round.temp.deltaI
 	deltaSum := &deltaI
 	parameters.Dictionary["bigR"] = bigR
 	parameters.Dictionary["deltaSum"] = deltaSum
+	parameters.DoubleDictionary["r1msg2s"] = make(map[*tss.PartyID]interface{})
 	return parameters, nil
 }
 
 func ProcessRound5PartI(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r1msg2 := (*msg).Content().(*SignRound1Message2)
-	parameters.Dictionary["r1msg2"+strconv.Itoa(Pj.Index)] = r1msg2
+	parameters.DoubleDictionary["r1msg2s"][Pj] = r1msg2
 	return parameters, nil
 }
 
 func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round5)
 	j := Pj.Index
-	r1msg2 := parameters.Dictionary["r1msg2"+strconv.Itoa(j)].(*SignRound1Message2)
+	r1msg2 := parameters.DoubleDictionary["r1msg2s"][Pj].(*SignRound1Message2)
 	bigR := parameters.Dictionary["bigR"].(*crypto.ECPoint)
 
 	r4msg := (*msg).Content().(*SignRound4Message)
