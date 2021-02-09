@@ -53,7 +53,7 @@ type BaseParty struct {
 	FirstRound Round
 }
 
-const QueuePollTimeoutSeconds = 90
+const QueuePollTimeoutInSeconds = 90
 const QueueWaitTimeInMilliseconds = 100
 
 func (p *BaseParty) Running() bool {
@@ -239,7 +239,7 @@ func StartAndProcessQueues(p Party, task string) *Error {
 					number = 1
 				}
 				// common.Logger.Debugf("party %v will read &q %p", Pi, queueAndFunction.Queue)
-				msgFromIndices, errQ := queueAndFunction.Queue.Poll(number, QueuePollTimeoutSeconds*time.Second)
+				msgFromIndices, errQ := queueAndFunction.Queue.Poll(number, QueuePollTimeoutInSeconds*time.Second)
 				elementsProcessed = elementsProcessed + len(msgFromIndices)
 				if errQ != nil {
 					// common.Logger.Errorf("party %v &q: %p errQ %v", Pi, queueAndFunction.Queue, errQ)

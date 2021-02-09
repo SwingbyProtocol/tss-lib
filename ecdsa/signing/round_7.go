@@ -116,30 +116,32 @@ func processRound7Aborting(round_ tss.PreprocessingRound, msg *tss.ParsedMessage
 	return parameters, nil
 }
 
-func processRound7Normal(round tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
-	r6msgInner, ok := (*msg).Content().(*SignRound6Message).GetContent().(*SignRound6Message_Success)
+func processRound7Normal(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+	r := func(culpritsIn []*tss.PartyID, errIn *error, multiErrIn *error, PjIn *tss.PartyID,
+		parametersIn *tss.GenericParameters, roundIn *round7) (*tss.GenericParameters, *tss.Error) {
+		culpritsIn = append(culpritsIn, PjIn)
+		*multiErrIn = multierror.Append(*multiErrIn, *errIn)
+		parametersIn.Dictionary["culprits"] = culpritsIn
+		parametersIn.Dictionary["multiErr"] = multiErrIn
+		return parametersIn, roundIn.WrapError(*multiErrIn, culpritsIn...)
+	}
+	round := round_.(*round7)
 	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
 	var multiErr error
 	if parameters.Dictionary["multiErr"] != nil {
 		multiErr = parameters.Dictionary["multiErr"].(error)
 	}
+	r6msgInner, ok := (*msg).Content().(*SignRound6Message).GetContent().(*SignRound6Message_Success)
 	if !ok {
-		culprits = append(culprits, Pj)
-		multiErr = multierror.Append(multiErr, fmt.Errorf("unexpected abort message while in success mode: %v %+v",
-			*msg, r6msgInner))
-		parameters.Dictionary["culprits"] = culprits
-		parameters.Dictionary["multiErr"] = multiErr
-		return parameters, round.WrapError(multiErr, culprits...)
+		e := fmt.Errorf("unexpected abort message while in success mode: %v %+v",
+			*msg, r6msgInner)
+		return r(culprits, &e, &multiErr, Pj, parameters, round)
 	}
 	bigSJ := parameters.Dictionary["bigSJ"].(map[string]*common.ECPoint)
 	r6msg := r6msgInner.Success
 	bigSI, err := r6msg.UnmarshalSI()
 	if err != nil {
-		culprits = append(culprits, Pj)
-		multiErr = multierror.Append(multiErr, err)
-		parameters.Dictionary["culprits"] = culprits
-		parameters.Dictionary["multiErr"] = multiErr
-		return parameters, round.WrapError(multiErr, culprits...)
+		return r(culprits, &err, &multiErr, Pj, parameters, round)
 	}
 	parameters.DoubleDictionary["bigSIs"][Pj] = bigSI
 	bigSJ[Pj.Id] = bigSI.ToProtobufPoint()
@@ -147,11 +149,7 @@ func processRound7Normal(round tss.PreprocessingRound, msg *tss.ParsedMessage, P
 
 	stProof, err := r6msg.UnmarshalSTProof()
 	if err != nil {
-		culprits = append(culprits, Pj)
-		multiErr = multierror.Append(multiErr, err)
-		parameters.Dictionary["culprits"] = culprits
-		parameters.Dictionary["multiErr"] = multiErr
-		return parameters, round.WrapError(multiErr, culprits...)
+		return r(culprits, &err, &multiErr, Pj, parameters, round)
 	}
 	parameters.DoubleDictionary["stProofs"][Pj] = stProof
 	return parameters, nil
