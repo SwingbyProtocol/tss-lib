@@ -56,7 +56,7 @@ func TestE2EConcurrent(t *testing.T) {
 	outCh := make(chan tss.Message, len(signPIDs))
 	endCh := make(chan *SignatureData, len(signPIDs))
 
-	updater := test.SharedPartyUpdaterWithQueues
+	updater := test.SharedPartyUpdater
 
 	msg := big.NewInt(200)
 	// init the parties
