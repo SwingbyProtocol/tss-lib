@@ -33,14 +33,16 @@ func (round *round2) Preprocess() (*tss.GenericParameters, *tss.Error) {
 
 	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
+	wg := sync.WaitGroup{}
+	wg.Add((len(round.Parties().IDs())-1)*2)
+	parameters.Dictionary["wgp"] = &wg
 
 	parameters.Dictionary["errChs"] = errChs
 	return parameters, nil
 }
 
 func ProcessRound2(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
-	wg := sync.WaitGroup{}
-	wg.Add(2)
+	wg := parameters.Dictionary["wgp"].(*sync.WaitGroup)
 	errChs := parameters.Dictionary["errChs"].(chan *tss.Error)
 	round := round_.(*round2)
 	i := round.PartyID().Index
@@ -105,12 +107,14 @@ func ProcessRound2(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *ts
 		round.temp.pI2JIs[j] = pi2JI
 		round.temp.c2JIs[j] = c2JI
 	}()
-	wg.Wait()
+
 	return parameters, nil
 }
 
 func (round *round2) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	i := round.PartyID().Index
+	wg := parameters.Dictionary["wgp"].(*sync.WaitGroup)
+	wg.Wait()
 	errChs := parameters.Dictionary["errChs"].(chan *tss.Error)
 
 	// consume error channels; wait for goroutines
