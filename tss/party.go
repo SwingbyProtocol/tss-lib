@@ -53,7 +53,7 @@ type BaseParty struct {
 	FirstRound Round
 }
 
-const QueuePollTimeoutInSeconds = 90
+const QueuePollTimeoutInSeconds = 180
 const QueueWaitTimeInMilliseconds = 100
 
 func (p *BaseParty) Running() bool {
@@ -345,7 +345,7 @@ func BaseValidateAndStore(p Party, msg ParsedMessage) (ok bool, err *Error) {
 	}
 	p.Lock()
 	defer p.Unlock()
-	common.Logger.Debugf("party %v msg %v BaseValidateAndStore will lock", p, msg)
+	common.Logger.Debugf("party %v msg %v BaseValidateAndStore", p, msg)
 	// defer common.Logger.Debugf("party %v msg %v BaseValidateAndStore will unlock", p, msg)
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return false, err
