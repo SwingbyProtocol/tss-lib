@@ -42,18 +42,34 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	parameters.Dictionary["bigR"] = bigR
 	parameters.Dictionary["deltaSum"] = deltaSum
 	parameters.DoubleDictionary["r1msg2s"] = make(map[*tss.PartyID]interface{})
+	wgs := make(map[*tss.PartyID]interface{})
+	// One wait group for the other players to synchronize the order of
+	// message reads for the different types of messages
+	for j, Pj := range round.Parties().IDs() {
+		if j == round.PartyID().Index {
+			continue
+		}
+		wgj := &sync.WaitGroup{}
+		wgj.Add(1)
+		wgs[Pj] = wgj
+	}
+	parameters.DoubleDictionary["waitGroups"] = wgs
 	return parameters, nil
 }
 
 func ProcessRound5PartI(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r1msg2 := (*msg).Content().(*SignRound1Message2)
 	parameters.DoubleDictionary["r1msg2s"][Pj] = r1msg2
+	wgj := parameters.DoubleDictionary["waitGroups"][Pj].(*sync.WaitGroup)
+	wgj.Done()
 	return parameters, nil
 }
 
 func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round5)
 	j := Pj.Index
+	wgj := parameters.DoubleDictionary["waitGroups"][Pj].(*sync.WaitGroup)
+	wgj.Wait()
 	r1msg2 := parameters.DoubleDictionary["r1msg2s"][Pj].(*SignRound1Message2)
 	bigR := parameters.Dictionary["bigR"].(*crypto.ECPoint)
 
