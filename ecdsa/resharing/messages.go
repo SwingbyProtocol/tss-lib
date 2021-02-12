@@ -98,13 +98,13 @@ func NewDGRound2Message1(
 		return nil, err
 	}
 	content := &DGRound2Message1{
-		PaillierN:     paillierPK.N.Bytes(),
-		PaillierProof: paiPfBzs,
-		NTilde:        NTildei.Bytes(),
-		H1:            H1i.Bytes(),
-		H2:            H2i.Bytes(),
-		Dlnproof_1:    dlnProof1Bz,
-		Dlnproof_2:    dlnProof2Bz,
+		PaillierN:                     paillierPK.N.Bytes(),
+		PaillierProof:                 paiPfBzs,
+		NTilde:                        NTildei.Bytes(),
+		H1:                            H1i.Bytes(),
+		H2:                            H2i.Bytes(),
+		Dlnproof_1:                    dlnProof1Bz,
+		Dlnproof_2:                    dlnProof2Bz,
 		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
 		AuthenticationEcdsaPublicKeyY: authEcdsaPK.Y.Bytes(),
 		AuthenticationPaillierSigR:    authPaillierSignature.R.Bytes(),
@@ -207,10 +207,9 @@ func NewDGRound3Message1(
 		IsToOldCommittee: false,
 	}
 	content := &DGRound3Message1{
-		Share: share.Share.Bytes(),
+		Share:                   share.Share.Bytes(),
 		AuthenticationEcdsaSigR: authenticationEcdsaSig.R.Bytes(),
 		AuthenticationEcdsaSigS: authenticationEcdsaSig.S.Bytes(),
-
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)

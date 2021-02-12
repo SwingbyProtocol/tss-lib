@@ -17,8 +17,8 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
 	zkp "github.com/binance-chain/tss-lib/crypto/zkp"
-	"github.com/binance-chain/tss-lib/tss"
 	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
+	"github.com/binance-chain/tss-lib/tss"
 )
 
 // These messages were generated from Protocol Buffers definitions into ecdsa-keygen.pb.go
