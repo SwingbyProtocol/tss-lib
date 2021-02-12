@@ -19,6 +19,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
 	"github.com/binance-chain/tss-lib/crypto/zkp"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -29,7 +30,7 @@ type FeldmanCheckFailureEvidence struct {
 	authSignaturePkj   ecdsa.PublicKey
 	accusedPartyj      uint32
 	KGDj               []*big.Int
-	authEcdsaSignature *ECDSASignature
+	authEcdsaSignature *ecdsautils.ECDSASignature
 }
 
 func (round *round3) Start() *tss.Error {
@@ -93,8 +94,8 @@ func (round *round3) Start() *tss.Error {
 			authEcdsaSignature := r2msg1.UnmarshalAuthEcdsaSignature()
 
 			authEcdsaSignatureOk := ecdsa.Verify((*ecdsa.PublicKey)(round.save.AuthenticationPKs[j]),
-				HashShare(&PjShare),
-				authEcdsaSignature.r, authEcdsaSignature.s)
+				ecdsautils.HashShare(&PjShare),
+				authEcdsaSignature.R, authEcdsaSignature.S)
 			if !authEcdsaSignatureOk {
 				ch <- vssOut{errors.New("ecdsa signature of VSS share for authentication failed"),
 					nil, nil}
@@ -262,8 +263,8 @@ func prepareShareWithAuthSigMessages(feldmanCheckFailures []*FeldmanCheckFailure
 			AccusedParty:        evidence.accusedPartyj,
 			AuthSigPk:           &ecPoint,
 			KGDj:                KGDjmsg,
-			AuthEcdsaSignatureR: evidence.authEcdsaSignature.r.Bytes(),
-			AuthEcdsaSignatureS: evidence.authEcdsaSignature.s.Bytes()}
+			AuthEcdsaSignatureR: evidence.authEcdsaSignature.R.Bytes(),
+			AuthEcdsaSignatureS: evidence.authEcdsaSignature.S.Bytes()}
 		vssShareWithAuthSigMessages[a] = &msg
 		common.Logger.Warnf("party %v is the plaintiff triggering an abort identification"+
 			" accusing party %v",

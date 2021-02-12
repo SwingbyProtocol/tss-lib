@@ -7,9 +7,12 @@
 package resharing
 
 import (
+	"crypto/ecdsa"
+	"crypto/rand"
 	"errors"
 
 	"github.com/binance-chain/tss-lib/crypto/dlnp"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -58,6 +61,14 @@ func (round *round2) Start() *tss.Error {
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
 
+	// Sign the Paillier PK
+	r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(preParams.AuthEcdsaPrivateKey),
+		ecdsautils.HashPaillierKey(&preParams.PaillierSK.PublicKey))
+	if err != nil {
+		return round.WrapError(errors.New("ecdsa signature for authentication failed"), Pi)
+	}
+	authPaillierSignaturei := ecdsautils.NewECDSASignature(r, s)
+
 	// generate the dlnproofs for resharing
 	h1i, h2i, alpha, beta, p, q, NTildei :=
 		preParams.H1i,
@@ -73,7 +84,10 @@ func (round *round2) Start() *tss.Error {
 	paillierPf := preParams.PaillierSK.Proof(Pi.KeyInt(), round.save.ECDSAPub)
 	r2msg2, err := NewDGRound2Message1(
 		round.NewParties().IDs().Exclude(round.PartyID()), round.PartyID(),
-		&preParams.PaillierSK.PublicKey, paillierPf, preParams.NTildei, preParams.H1i, preParams.H2i, dlnProof1, dlnProof2)
+		&preParams.PaillierSK.PublicKey,
+		&preParams.AuthEcdsaPrivateKey.PublicKey,
+		authPaillierSignaturei,
+		paillierPf, preParams.NTildei, preParams.H1i, preParams.H2i, dlnProof1, dlnProof2)
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
@@ -82,6 +96,7 @@ func (round *round2) Start() *tss.Error {
 
 	// for this P: SAVE de-commitments, paillier keys for round 2
 	round.save.PaillierSK = preParams.PaillierSK
+	round.save.AuthEcdsaPrivateKey = preParams.AuthEcdsaPrivateKey
 	round.save.PaillierPKs[i] = &preParams.PaillierSK.PublicKey
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i

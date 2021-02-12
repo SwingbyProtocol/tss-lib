@@ -7,6 +7,7 @@
 package resharing
 
 import (
+	"crypto/ecdsa"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -15,6 +16,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/dlnp"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -74,6 +76,8 @@ func NewDGRound2Message1(
 	to []*tss.PartyID,
 	from *tss.PartyID,
 	paillierPK *paillier.PublicKey,
+	authEcdsaPK *ecdsa.PublicKey,
+	authPaillierSignature *ecdsautils.ECDSASignature,
 	paillierPf paillier.Proof,
 	NTildei, H1i, H2i *big.Int,
 	dlnProof1, dlnProof2 *dlnp.Proof,
@@ -101,6 +105,10 @@ func NewDGRound2Message1(
 		H2:            H2i.Bytes(),
 		Dlnproof_1:    dlnProof1Bz,
 		Dlnproof_2:    dlnProof2Bz,
+		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
+		AuthenticationEcdsaPublicKeyY: authEcdsaPK.Y.Bytes(),
+		AuthenticationPaillierSigR:    authPaillierSignature.R.Bytes(),
+		AuthenticationPaillierSigS:    authPaillierSignature.S.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg), nil
@@ -151,6 +159,18 @@ func (m *DGRound2Message1) UnmarshalDLNProof2() (*dlnp.Proof, error) {
 	return dlnp.UnmarshalProof(m.GetDlnproof_2())
 }
 
+func (m *DGRound2Message1) UnmarshalAuthEcdsaPK() *ecdsa.PublicKey {
+	return &ecdsa.PublicKey{X: new(big.Int).SetBytes(m.GetAuthenticationEcdsaPublicKeyX()),
+		Y:     new(big.Int).SetBytes(m.GetAuthenticationEcdsaPublicKeyY()),
+		Curve: tss.EC(),
+	}
+}
+
+func (m *DGRound2Message1) UnmarshalAuthPaillierSignature() *ecdsautils.ECDSASignature {
+	return ecdsautils.NewECDSASignature(new(big.Int).SetBytes(m.GetAuthenticationPaillierSigR()),
+		new(big.Int).SetBytes(m.GetAuthenticationPaillierSigS()))
+}
+
 // ----- //
 
 func NewDGRound2Message2(
@@ -178,6 +198,7 @@ func NewDGRound3Message1(
 	to *tss.PartyID,
 	from *tss.PartyID,
 	share *vss.Share,
+	authenticationEcdsaSig *ecdsautils.ECDSASignature,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:             from,
@@ -187,6 +208,9 @@ func NewDGRound3Message1(
 	}
 	content := &DGRound3Message1{
 		Share: share.Share.Bytes(),
+		AuthenticationEcdsaSigR: authenticationEcdsaSig.R.Bytes(),
+		AuthenticationEcdsaSigS: authenticationEcdsaSig.S.Bytes(),
+
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)

@@ -1,7 +1,6 @@
-// Copyright © 2020 Swingby
-//
+// Copyright © 2021 Swingby
 
-package keygen
+package ecdsautils
 
 import (
 	"math/big"
@@ -12,11 +11,7 @@ import (
 )
 
 type ECDSASignature struct {
-	r, s *big.Int
-}
-
-func NewECDSASignature(r, s *big.Int) *ECDSASignature {
-	return &ECDSASignature{r: r, s: s}
+	R, S *big.Int
 }
 
 func HashShare(share *vss.Share) (hash []byte) {
@@ -24,6 +19,10 @@ func HashShare(share *vss.Share) (hash []byte) {
 	hash = append(hash, big.NewInt(int64(share.Threshold)).Bytes()...)
 	hash = common.SHA512_256(hash)
 	return
+}
+
+func NewECDSASignature(r, s *big.Int) *ECDSASignature {
+	return &ECDSASignature{R: r, S: s}
 }
 
 func HashPaillierKey(pk *paillier.PublicKey) (hash []byte) {

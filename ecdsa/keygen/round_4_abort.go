@@ -11,6 +11,7 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/commitments"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -83,8 +84,8 @@ func (round *round4) startInAbortMode(i int, Ps tss.SortedPartyIDs, abortr3msgs 
 				round.save.AuthenticationPKs[int(evidence.accusedPartyj)] != nil &&
 				evidence.authSignaturePkj.Equal((*ecdsa.PublicKey)(round.save.AuthenticationPKs[int(evidence.accusedPartyj)]))
 
-			authEcdsaSignatureOk := ecdsa.Verify(&evidence.authSignaturePkj, HashShare(evidence.sigmaji),
-				evidence.authEcdsaSignature.r, evidence.authEcdsaSignature.s)
+			authEcdsaSignatureOk := ecdsa.Verify(&evidence.authSignaturePkj, ecdsautils.HashShare(evidence.sigmaji),
+				evidence.authEcdsaSignature.R, evidence.authEcdsaSignature.S)
 			var partyToBlame *tss.PartyID
 			if !authEcdsaSignatureOk || !authSignaturesAreEqual {
 				partyToBlame = round.Parties().IDs()[plaintiffParty]

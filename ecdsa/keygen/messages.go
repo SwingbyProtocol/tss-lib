@@ -18,6 +18,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/vss"
 	zkp "github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/tss"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 )
 
 // These messages were generated from Protocol Buffers definitions into ecdsa-keygen.pb.go
@@ -40,7 +41,7 @@ func NewKGRound1Message(
 	ct cmt.HashCommitment,
 	paillierPK *paillier.PublicKey,
 	authEcdsaPK *ecdsa.PublicKey,
-	authPaillierSignature *ECDSASignature,
+	authPaillierSignature *ecdsautils.ECDSASignature,
 	nTildeI, h1I, h2I, proofNSquareFree, randIntProofNSquareFree *big.Int,
 	dlnProof1, dlnProof2 *dlnp.Proof,
 ) (tss.ParsedMessage, error) {
@@ -68,8 +69,8 @@ func NewKGRound1Message(
 		RandIntProofNSquareFree:       randIntProofNSquareFree.Bytes(),
 		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
 		AuthenticationEcdsaPublicKeyY: authEcdsaPK.Y.Bytes(),
-		AuthenticationPaillierSigR:    authPaillierSignature.r.Bytes(),
-		AuthenticationPaillierSigS:    authPaillierSignature.s.Bytes(),
+		AuthenticationPaillierSigR:    authPaillierSignature.R.Bytes(),
+		AuthenticationPaillierSigS:    authPaillierSignature.S.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg), nil
@@ -104,8 +105,8 @@ func (m *KGRound1Message) UnmarshalAuthEcdsaPK() *ecdsa.PublicKey {
 	}
 }
 
-func (m *KGRound1Message) UnmarshalAuthPaillierSignature() *ECDSASignature {
-	return NewECDSASignature(new(big.Int).SetBytes(m.GetAuthenticationPaillierSigR()),
+func (m *KGRound1Message) UnmarshalAuthPaillierSignature() *ecdsautils.ECDSASignature {
+	return ecdsautils.NewECDSASignature(new(big.Int).SetBytes(m.GetAuthenticationPaillierSigR()),
 		new(big.Int).SetBytes(m.GetAuthenticationPaillierSigS()))
 }
 
@@ -142,7 +143,7 @@ func (m *KGRound1Message) UnmarshalDLNProof2() (*dlnp.Proof, error) {
 func NewKGRound2Message1(
 	to, from *tss.PartyID,
 	share *vss.Share,
-	authenticationEcdsaSig *ECDSASignature,
+	authenticationEcdsaSig *ecdsautils.ECDSASignature,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
@@ -151,8 +152,8 @@ func NewKGRound2Message1(
 	}
 	content := &KGRound2Message1{
 		Share:                   share.Share.Bytes(),
-		AuthenticationEcdsaSigR: authenticationEcdsaSig.r.Bytes(),
-		AuthenticationEcdsaSigS: authenticationEcdsaSig.s.Bytes(),
+		AuthenticationEcdsaSigR: authenticationEcdsaSig.R.Bytes(),
+		AuthenticationEcdsaSigS: authenticationEcdsaSig.S.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -167,8 +168,8 @@ func (m *KGRound2Message1) UnmarshalShare() *big.Int {
 	return new(big.Int).SetBytes(m.Share)
 }
 
-func (m *KGRound2Message1) UnmarshalAuthEcdsaSignature() *ECDSASignature {
-	return NewECDSASignature(new(big.Int).SetBytes(m.AuthenticationEcdsaSigR),
+func (m *KGRound2Message1) UnmarshalAuthEcdsaSignature() *ecdsautils.ECDSASignature {
+	return ecdsautils.NewECDSASignature(new(big.Int).SetBytes(m.AuthenticationEcdsaSigR),
 		new(big.Int).SetBytes(m.AuthenticationEcdsaSigS))
 }
 
@@ -300,8 +301,8 @@ func (m *KGRound3MessageAbortMode) UnmarshalFeldmanCheckFailureEvidence() ([]*Fe
 		pk := ecdsa.PublicKey{X: new(big.Int).SetBytes(vsss.GetAuthSigPk().GetX()),
 			Y:     new(big.Int).SetBytes(vsss.GetAuthSigPk().GetY()),
 			Curve: tss.EC()}
-		authEcdsaSignature := ECDSASignature{r: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureR()),
-			s: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureS())}
+		authEcdsaSignature := ecdsautils.ECDSASignature{R: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureR()),
+			S: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureS())}
 		var KGDj = make([]*big.Int, len(vsss.GetKGDj()))
 		for a, k := range vsss.GetKGDj() {
 			KGDj[a] = new(big.Int).SetBytes(k)

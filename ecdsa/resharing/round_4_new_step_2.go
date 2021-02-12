@@ -7,6 +7,8 @@
 package resharing
 
 import (
+	"crypto/ecdsa"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"math/big"
@@ -18,6 +20,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -44,14 +47,18 @@ func (round *round4) Start() *tss.Error {
 	paiProofCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s)) // who caused the error(s)
 	dlnProof1FailCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s))
 	dlnProof2FailCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s))
+	authSignaturesFailCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s))
 	wg := new(sync.WaitGroup)
 	for j, msg := range round.temp.dgRound2Message1s {
 		r2msg1 := msg.Content().(*DGRound2Message1)
-		paiPK, NTildej, H1j, H2j :=
+		paillierPKj, NTildej, H1j, H2j, authEcdsaPKj, authPaillierSigj :=
 			r2msg1.UnmarshalPaillierPK(),
 			r2msg1.UnmarshalNTilde(),
 			r2msg1.UnmarshalH1(),
-			r2msg1.UnmarshalH2()
+			r2msg1.UnmarshalH2(),
+			r2msg1.UnmarshalAuthEcdsaPK(),
+			r2msg1.UnmarshalAuthPaillierSignature()
+
 		if H1j.Cmp(H2j) == 0 {
 			return round.WrapError(errors.New("h1j and h2j were equal for this party"), msg.GetFrom())
 		}
@@ -63,9 +70,9 @@ func (round *round4) Start() *tss.Error {
 			return round.WrapError(errors.New("this h2j was already used by another party"), msg.GetFrom())
 		}
 		h1H2Map[h1JHex], h1H2Map[h2JHex] = struct{}{}, struct{}{}
-		wg.Add(3)
+		wg.Add(4)
 		go func(j int, msg tss.ParsedMessage, r2msg1 *DGRound2Message1) {
-			if ok, err := r2msg1.UnmarshalPaillierProof().Verify(paiPK.N, msg.GetFrom().KeyInt(), round.save.ECDSAPub); err != nil || !ok {
+			if ok, err := r2msg1.UnmarshalPaillierProof().Verify(paillierPKj.N, msg.GetFrom().KeyInt(), round.save.ECDSAPub); err != nil || !ok {
 				paiProofCulprits[j] = msg.GetFrom()
 				common.Logger.Warnf("paillier verify failed for party %s", msg.GetFrom(), err)
 			}
@@ -85,6 +92,14 @@ func (round *round4) Start() *tss.Error {
 			}
 			wg.Done()
 		}(j, msg, r2msg1, H1j, H2j, NTildej)
+		go func(j int, msg tss.ParsedMessage, r2msg1 *DGRound2Message1) {
+			verifies := ecdsa.Verify(authEcdsaPKj, ecdsautils.HashPaillierKey(paillierPKj), authPaillierSigj.R, authPaillierSigj.S)
+			if !verifies {
+				authSignaturesFailCulprits[j] = msg.GetFrom()
+				common.Logger.Warnf("ECDSA Paillier PK verification failed for party %s", msg.GetFrom())
+			}
+			wg.Done()
+		}(j, msg, r2msg1)
 	}
 	wg.Wait()
 	for _, culprit := range append(append(paiProofCulprits, dlnProof1FailCulprits...), dlnProof2FailCulprits...) {
@@ -135,6 +150,19 @@ func (round *round4) Start() *tss.Error {
 			Threshold: round.NewThreshold(),
 			ID:        round.PartyID().KeyInt(),
 			Share:     new(big.Int).SetBytes(r3msg1.Share),
+		}
+		r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(round.save.AuthEcdsaPrivateKey),
+			ecdsautils.HashShare(sharej))
+		authEcdsaSignature := ecdsautils.NewECDSASignature(r, s)
+		if err != nil {
+			authSignaturesFailCulprits[j] = round.Parties().IDs()[j]
+		}
+		authEcdsaSignatureOk := ecdsa.Verify((*ecdsa.PublicKey)(round.save.AuthenticationPKs[j]),
+			ecdsautils.HashShare(sharej),
+			authEcdsaSignature.R, authEcdsaSignature.S)
+		if !authEcdsaSignatureOk {
+			// TODO collect culprits and return a list of them as per convention
+			return round.WrapError(errors.New("ecdsa signature of VSS share for authentication failed"), round.Parties().IDs()[j])
 		}
 		if ok := sharej.Verify(round.NewThreshold(), vj); !ok {
 			// TODO collect culprits and return a list of them as per convention

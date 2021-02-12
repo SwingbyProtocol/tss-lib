@@ -17,6 +17,7 @@ import (
 	cmts "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/dlnp"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -84,11 +85,11 @@ func (round *round1) Start() *tss.Error {
 
 	// Sign the Paillier PK
 	r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(preParams.AuthEcdsaPrivateKey),
-		HashPaillierKey(&preParams.PaillierSK.PublicKey))
+		ecdsautils.HashPaillierKey(&preParams.PaillierSK.PublicKey))
 	if err != nil {
 		return round.WrapError(errors.New("ecdsa signature for authentication failed"), Pi)
 	}
-	authPaillierSignaturei := NewECDSASignature(r, s)
+	authPaillierSignaturei := ecdsautils.NewECDSASignature(r, s)
 	round.save.LocalPreParams = *preParams
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
