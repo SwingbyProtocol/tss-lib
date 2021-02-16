@@ -310,6 +310,33 @@ func (p *LocalParty) StoreMessageInQueues(msg tss.ParsedMessage) (bool, *tss.Err
 	return true, nil
 }
 
+func (p *LocalParty) IsMessageAlreadyStored(msg tss.ParsedMessage) bool {
+	fromPIdx := msg.GetFrom().Index
+	// switch/case is necessary to store any messages beyond current round
+	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
+	switch msg.Content().(type) {
+	case *SignRound1Message1:
+		return p.temp.signRound1Message1s[fromPIdx]!= nil
+	case *SignRound1Message2:
+		return p.temp.signRound1Message2s[fromPIdx]!= nil
+	case *SignRound2Message:
+		return p.temp.signRound2Messages[fromPIdx]!= nil
+	case *SignRound3Message:
+		return p.temp.signRound3Messages[fromPIdx]!= nil
+	case *SignRound4Message:
+		return p.temp.signRound4Messages[fromPIdx]!= nil
+	case *SignRound5Message:
+		return p.temp.signRound5Messages[fromPIdx]!= nil
+	case *SignRound6Message:
+		return p.temp.signRound6Messages[fromPIdx]!= nil
+	case *SignRound7Message:
+		return p.temp.signRound7Messages[fromPIdx]!= nil
+	default: // unrecognised message, just ignore!
+		return false
+	}
+	return false
+}
+
 func (p *LocalParty) PartyID() *tss.PartyID {
 	return p.params.PartyID()
 }
