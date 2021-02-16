@@ -45,6 +45,7 @@ type Party interface {
 type QueuingParty interface {
 	StoreMessageInQueues(msg ParsedMessage) (bool, *Error)
 	ValidateAndStoreInQueues(msg ParsedMessage) (ok bool, err *Error)
+	IsMessageAlreadyStored(msg ParsedMessage) bool
 }
 
 type BaseParty struct {
@@ -346,12 +347,15 @@ func BaseValidateAndStore(p Party, msg ParsedMessage) (ok bool, err *Error) {
 	p.Lock()
 	defer p.Unlock()
 	common.Logger.Debugf("party %v msg %v BaseValidateAndStore", p, msg)
+	qp := p.(QueuingParty)
+	isRepeated := qp.IsMessageAlreadyStored(msg)
 	// defer common.Logger.Debugf("party %v msg %v BaseValidateAndStore will unlock", p, msg)
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return false, err
 	}
-	qp := p.(QueuingParty)
-	if ok, err := qp.StoreMessageInQueues(msg); err != nil || !ok {
+	if isRepeated {
+		common.Logger.Warnf("ignoring repeated message %v from party %v", msg, p)
+	} else if ok, err := qp.StoreMessageInQueues(msg); err != nil || !ok {
 		return false, err
 	}
 	return true, nil
