@@ -322,8 +322,9 @@ func type4IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage) (*SignRound5Message, tss.MessageRouting, bool) {
 	r5msg := pMsg.Content().(*SignRound5Message)
 	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
-
+	party.Lock()
 	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
+	party.Unlock()
 	fakekI := new(big.Int).SetInt64(1)
 	fakeBigRBarI := bigR.ScalarMult(fakekI)
 
