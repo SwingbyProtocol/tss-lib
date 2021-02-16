@@ -213,7 +213,6 @@ func sabotageRound6Message(toParty tss.Party, msg *tss.Message, errCh chan<- *ts
 	}
 
 	parsedR6msg := NewSignRound6MessageSuccess((*msg).GetFrom(), fakebigSI, stPf)
-	round5.temp.signRound6Messages[(*msg).GetFrom().Index] = parsedR6msg
 	toParty.Unlock()
 	r6msg := parsedR6msg.Content().(*SignRound6Message)
 	meta := tss.MessageRouting{
@@ -324,15 +323,12 @@ func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage
 	r5msg := pMsg.Content().(*SignRound5Message)
 	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
 
-	party.Lock()
 	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
 	fakekI := new(big.Int).SetInt64(1)
 	fakeBigRBarI := bigR.ScalarMult(fakekI)
 
 	proof, _ := r5msg.UnmarshalPDLwSlackProof()
 	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, proof)
-	round5.temp.signRound6Messages[msg.GetFrom().Index] = round5Message
-	party.Unlock()
 	r5msg = round5Message.Content().(*SignRound5Message)
 	meta := tss.MessageRouting{
 		From:        msg.GetFrom(),
@@ -481,7 +477,6 @@ func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.Parsed
 	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
 
 	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, &pdlWSlackPf)
-	round5.temp.signRound6Messages[msg.GetFrom().Index] = round5Message
 
 	r5msg = round5Message.Content().(*SignRound5Message)
 	meta := tss.MessageRouting{
