@@ -166,7 +166,7 @@ func (round *round5) CanProcess(msg tss.ParsedMessage) bool {
 }
 
 func (round *round5) CanProceed() bool {
-	return round.started
+	return round.started && round.ended
 }
 
 func (round *round5) NextRound() tss.Round {
