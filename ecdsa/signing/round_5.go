@@ -8,6 +8,7 @@ package signing
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 
@@ -42,7 +43,7 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	parameters.Dictionary["bigR"] = bigR
 	parameters.Dictionary["deltaSum"] = deltaSum
 	parameters.DoubleDictionary["r1msg2s"] = make(map[*tss.PartyID]interface{})
-	wgs := make(map[*tss.PartyID]interface{})
+	parameters.DoubleDictionary["waitGroups"] = make(map[*tss.PartyID]interface{})
 	// One wait group for the other players to synchronize the order of
 	// message reads for the different types of messages
 	for j, Pj := range round.Parties().IDs() {
@@ -51,16 +52,20 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 		}
 		wgj := &sync.WaitGroup{}
 		wgj.Add(1)
-		wgs[Pj] = wgj
+		parameters.DoubleDictionary["waitGroups"][Pj] = wgj
 	}
-	parameters.DoubleDictionary["waitGroups"] = wgs
+	common.Logger.Debugf("party %v round 5 Preprocess", round.PartyID())
 	return parameters, nil
 }
 
-func ProcessRound5PartI(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartI(round tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r1msg2 := (*msg).Content().(*SignRound1Message2)
 	parameters.DoubleDictionary["r1msg2s"][Pj] = r1msg2
-	wgj := parameters.DoubleDictionary["waitGroups"][Pj].(*sync.WaitGroup)
+	wgj_, ok := SafeDoubleDictionaryGet(parameters.DoubleDictionary, "waitGroups", Pj)
+	if !ok {
+		return parameters, round.WrapError(fmt.Errorf("waitGroups error for party %v", Pj))
+	}
+	wgj := wgj_.(*sync.WaitGroup)
 	wgj.Done()
 	return parameters, nil
 }
@@ -68,7 +73,11 @@ func ProcessRound5PartI(_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *ts
 func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round5)
 	j := Pj.Index
-	wgj := parameters.DoubleDictionary["waitGroups"][Pj].(*sync.WaitGroup)
+	wgj_, ok := SafeDoubleDictionaryGet(parameters.DoubleDictionary, "waitGroups", Pj)
+	if !ok {
+		return parameters, round.WrapError(fmt.Errorf("waitGroups error for party %v", Pj))
+	}
+	wgj := wgj_.(*sync.WaitGroup)
 	wgj.Wait()
 	r1msg2 := parameters.DoubleDictionary["r1msg2s"][Pj].(*SignRound1Message2)
 	bigR := parameters.Dictionary["bigR"].(*crypto.ECPoint)
