@@ -129,13 +129,13 @@ func (round *base) resetOK() {
 }
 
 func SafeDoubleDictionaryGet(doubleDictionary map[string]map[*tss.PartyID]interface{}, key string, Pj *tss.PartyID) (interface{}, bool) {
-    if doubleDictionary == nil {
-    	return nil, false
-    }
+	if doubleDictionary == nil {
+		return nil, false
+	}
 	val, ok := doubleDictionary[key]
 	if !ok {
-	    return nil, ok
-    }
+		return nil, ok
+	}
 	val2, ok2 := val[Pj]
 	return val2, ok2
 }
