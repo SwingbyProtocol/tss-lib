@@ -305,7 +305,9 @@ func type4IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 	// Intercepting a round 5 broadcast message to inject a bad k_i and trigger a type 4 abort
 	if msg.Type() == "SignRound5Message" && msg.IsBroadcast() && msg.GetFrom().Index == type4failureFromParty {
 		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
+		party.Lock()
 		r5msg, meta, ok := taintRound5Message(party, msg, pMsg)
+		party.Unlock()
 		if !ok {
 			return
 		}
@@ -322,9 +324,11 @@ func type4IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage) (*SignRound5Message, tss.MessageRouting, bool) {
 	r5msg := pMsg.Content().(*SignRound5Message)
 	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
-	party.Lock()
-	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
-	party.Unlock()
+	bigR, err := crypto.NewECPointFromProtobuf(round5.temp.BigR)
+	if err != nil {
+		common.Logger.Error(err)
+		return nil, tss.MessageRouting{}, false
+	}
 	fakekI := new(big.Int).SetInt64(1)
 	fakeBigRBarI := bigR.ScalarMult(fakekI)
 
