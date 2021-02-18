@@ -294,11 +294,8 @@ func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
 	}
 	var multiErr error
 	errCh := make(chan *Error, queueClone.Len())
-	wg := sync.WaitGroup{}
-	wg.Add(int(queueClone.Len()))
 	mutex := sync.RWMutex{}
 	f := func(msgs_ interface{}) {
-		defer wg.Done()
 		msgs2_ := msgs_.([]ParsedMessage)
 		for _, msg := range msgs2_ {
 			if !pRound.CanProcess(msg) {
@@ -325,8 +322,7 @@ func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
 			}
 		}
 	}
-	go queue.ExecuteInParallel(queueClone, f)
-	wg.Wait()
+	queue.ExecuteInParallel(queueClone, f)
 	close(errCh)
 	culprits := make([]*PartyID, 0, queueClone.Len())
 	if len(errCh) > 0 {
