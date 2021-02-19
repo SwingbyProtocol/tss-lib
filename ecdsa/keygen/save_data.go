@@ -7,28 +7,20 @@
 package keygen
 
 import (
-	"crypto/ecdsa"
 	"encoding/hex"
-	"encoding/json"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
+	"github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
 type (
-	// We will customize the Json serialization of the public key
-	// used for party authentication.
-	// The serialization of the Koblitz curve showed problems,
-	// as the type does not expose a number of attributes.
-	MarshallableEcdsaPrivateKey ecdsa.PrivateKey
-	MarshallableEcdsaPublicKey  ecdsa.PublicKey
-
 	LocalPreParams struct {
 		PaillierSK          *paillier.PrivateKey // ski
-		AuthEcdsaPrivateKey *MarshallableEcdsaPrivateKey
+		AuthEcdsaPrivateKey *ecdsautils.MarshallableEcdsaPrivateKey
 		NTildei,
 		H1i, H2i,
 		Alpha, Beta,
@@ -52,9 +44,9 @@ type (
 		NTildej, H1j, H2j []*big.Int
 
 		// public keys (Xj = uj*G for each Pj)
-		BigXj             []*crypto.ECPoint             // Xj
-		PaillierPKs       []*paillier.PublicKey         // pkj
-		AuthenticationPKs []*MarshallableEcdsaPublicKey // auth_yj
+		BigXj             []*crypto.ECPoint                        // Xj
+		PaillierPKs       []*paillier.PublicKey                    // pkj
+		AuthenticationPKs []*ecdsautils.MarshallableEcdsaPublicKey // auth_yj
 
 		// the ECDSA public key
 		ECDSAPub *crypto.ECPoint // y
@@ -67,7 +59,7 @@ func NewLocalPartySaveData(partyCount int) (saveData LocalPartySaveData) {
 	saveData.H1j, saveData.H2j = make([]*big.Int, partyCount), make([]*big.Int, partyCount)
 	saveData.BigXj = make([]*crypto.ECPoint, partyCount)
 	saveData.PaillierPKs = make([]*paillier.PublicKey, partyCount)
-	saveData.AuthenticationPKs = make([]*MarshallableEcdsaPublicKey, partyCount)
+	saveData.AuthenticationPKs = make([]*ecdsautils.MarshallableEcdsaPublicKey, partyCount)
 	return
 }
 
@@ -111,52 +103,4 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 		newData.AuthenticationPKs[j] = sourceData.AuthenticationPKs[savedIdx]
 	}
 	return newData
-}
-
-func (k MarshallableEcdsaPrivateKey) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		PublicKey MarshallableEcdsaPublicKey
-		D         *big.Int
-	}{
-		PublicKey: (MarshallableEcdsaPublicKey)(k.PublicKey),
-		D:         k.D,
-	})
-}
-
-func (k *MarshallableEcdsaPrivateKey) UnmarshalJSON(b []byte) error {
-	// PrivateKey represents an ECDSA private key.
-	newKey := new(struct {
-		PublicKey MarshallableEcdsaPublicKey
-		D         *big.Int
-	})
-	if err := json.Unmarshal(b, &newKey); err != nil {
-		return err
-	}
-	k.D = newKey.D
-	k.PublicKey = (ecdsa.PublicKey)(newKey.PublicKey)
-
-	return nil
-}
-
-func (k MarshallableEcdsaPublicKey) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		X, Y *big.Int
-	}{
-		X: k.X,
-		Y: k.Y,
-	})
-}
-
-func (k *MarshallableEcdsaPublicKey) UnmarshalJSON(b []byte) error {
-	newKey := new(struct {
-		X, Y *big.Int
-	})
-	if err := json.Unmarshal(b, &newKey); err != nil {
-		return err
-	}
-	k.X = newKey.X
-	k.Y = newKey.Y
-	k.Curve = tss.EC()
-
-	return nil
 }

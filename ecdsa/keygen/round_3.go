@@ -23,16 +23,6 @@ import (
 	"github.com/binance-chain/tss-lib/tss"
 )
 
-// The evidence of an eventual Feldman check failure will be evaluated
-// during the abort identification in round 4.
-type FeldmanCheckFailureEvidence struct {
-	sigmaji            *vss.Share
-	authSignaturePkj   ecdsa.PublicKey
-	accusedPartyj      uint32
-	KGDj               []*big.Int
-	authEcdsaSignature *ecdsautils.ECDSASignature
-}
-
 func (round *round3) Start() *tss.Error {
 	if round.started {
 		return round.WrapError(errors.New("round already started"))
@@ -54,7 +44,7 @@ func (round *round3) Start() *tss.Error {
 	type vssOut struct {
 		unWrappedErr            error
 		pjVs                    vss.Vs
-		feldmanCheckFailureArgs *FeldmanCheckFailureEvidence
+		feldmanCheckFailureArgs *ecdsautils.FeldmanCheckFailureEvidence
 	}
 	chs := make([]chan vssOut, len(Ps))
 	for i := range chs {
@@ -104,15 +94,15 @@ func (round *round3) Start() *tss.Error {
 
 			if ok = PjShare.Verify(round.Threshold(), PjVs) && !round.shouldTriggerAbortInFeldmanCheck(); !ok {
 				// Prepare evidence to be verified during the abort identification
-				evidence := FeldmanCheckFailureEvidence{
-					sigmaji: &PjShare,
-					authSignaturePkj: ecdsa.PublicKey{
+				evidence := ecdsautils.FeldmanCheckFailureEvidence{
+					Sigmaji: &PjShare,
+					AuthSignaturePkj: ecdsa.PublicKey{
 						Curve: tss.EC(),
 						X:     round.save.AuthenticationPKs[j].X,
 						Y:     round.save.AuthenticationPKs[j].Y},
-					accusedPartyj:      uint32(j),
-					KGDj:               KGDj,
-					authEcdsaSignature: authEcdsaSignature,
+					AccusedPartyj:         uint32(j),
+					TheHashCommitDecommit: commitments.HashCommitDecommit{C: KGCj, D: KGDj},
+					AuthEcdsaSignature:    authEcdsaSignature,
 				}
 
 				ch <- vssOut{errors.New("vss verify failed"), nil,
@@ -141,7 +131,7 @@ func (round *round3) Start() *tss.Error {
 	vssResults := make([]vssOut, len(Ps))
 	{
 		culprits := make([]*tss.PartyID, 0, len(Ps)) // who caused the error(s)
-		feldmanCheckFailures := make([]*FeldmanCheckFailureEvidence, 0)
+		feldmanCheckFailures := make([]*ecdsautils.FeldmanCheckFailureEvidence, 0)
 		for j, Pj := range Ps {
 			if j == PIdx {
 				continue
@@ -156,7 +146,7 @@ func (round *round3) Start() *tss.Error {
 			}
 		}
 		if len(feldmanCheckFailures) > 0 {
-			vssShareWithAuthSigMessages := prepareShareWithAuthSigMessages(feldmanCheckFailures, round.PartyID())
+			vssShareWithAuthSigMessages := ecdsautils.PrepareShareWithAuthSigMessages(feldmanCheckFailures, round.PartyID())
 
 			// BROADCAST the failed sigma and the authentication signature for the abort identification
 			r3msg := NewKGRound3MessageAbortMode(round.PartyID(), vssShareWithAuthSigMessages)
@@ -245,32 +235,6 @@ func (round *round3) Start() *tss.Error {
 	round.temp.kgRound3Messages[PIdx] = r3msg
 	round.out <- r3msg
 	return nil
-}
-
-func prepareShareWithAuthSigMessages(feldmanCheckFailures []*FeldmanCheckFailureEvidence, partyID *tss.PartyID) []*VSSShareWithAuthSigMessage {
-	vssShareWithAuthSigMessages := make([]*VSSShareWithAuthSigMessage, len(feldmanCheckFailures))
-	for a, evidence := range feldmanCheckFailures {
-		ecPoint := common.ECPoint{X: evidence.authSignaturePkj.X.Bytes(), Y: evidence.authSignaturePkj.Y.Bytes()}
-		KGDjmsg := make([][]byte, len(evidence.KGDj))
-		for b, k := range evidence.KGDj {
-			KGDjmsg[b] = k.Bytes()
-		}
-
-		msg := VSSShareWithAuthSigMessage{
-			VssThreshold:        uint32(evidence.sigmaji.Threshold),
-			VssId:               evidence.sigmaji.ID.Bytes(),
-			VssSigma:            evidence.sigmaji.Share.Bytes(),
-			AccusedParty:        evidence.accusedPartyj,
-			AuthSigPk:           &ecPoint,
-			KGDj:                KGDjmsg,
-			AuthEcdsaSignatureR: evidence.authEcdsaSignature.R.Bytes(),
-			AuthEcdsaSignatureS: evidence.authEcdsaSignature.S.Bytes()}
-		vssShareWithAuthSigMessages[a] = &msg
-		common.Logger.Warnf("party %v is the plaintiff triggering an abort identification"+
-			" accusing party %v",
-			partyID, evidence.accusedPartyj)
-	}
-	return vssShareWithAuthSigMessages
 }
 
 func (round *round3) CanAccept(msg tss.ParsedMessage) bool {

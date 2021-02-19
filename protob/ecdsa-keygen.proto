@@ -55,17 +55,6 @@ message KGRound3Message {
     bytes proof_xi_t = 3;
 }
 
-message VSSShareWithAuthSigMessage {
-    uint32 vss_threshold = 1;
-    bytes vss_id = 2;
-    bytes vss_sigma = 3;
-    uint32 accused_party = 4;
-    ECPoint auth_sig_pk = 5;
-    bytes authEcdsaSignature_r = 6;
-    bytes authEcdsaSignature_s = 7;
-    repeated bytes KGDj = 8;
-}
-
 /*
  * Represents a BROADCAST message sent to each party during Round 3 of the ECDSA TSS keygen protocol
  * when in abort mode.

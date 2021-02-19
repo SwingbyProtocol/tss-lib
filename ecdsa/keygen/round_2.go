@@ -144,7 +144,7 @@ func (round *round2) Start() *tss.Error {
 			r1msg.UnmarshalNTilde(),
 			r1msg.UnmarshalCommitment()
 		round.save.PaillierPKs[j] = paillierPK // used in round 4
-		round.save.AuthenticationPKs[j] = (*MarshallableEcdsaPublicKey)(authEcdsaPKj)
+		round.save.AuthenticationPKs[j] = (*ecdsautils.MarshallableEcdsaPublicKey)(authEcdsaPKj)
 		round.save.NTildej[j] = NTildej
 		round.save.H1j[j], round.save.H2j[j] = H1j, H2j
 		round.temp.KGCs[j] = KGC

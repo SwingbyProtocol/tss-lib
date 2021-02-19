@@ -16,7 +16,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/dlnp"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
-	zkp "github.com/binance-chain/tss-lib/crypto/zkp"
+	"github.com/binance-chain/tss-lib/crypto/zkp"
 	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -258,7 +258,7 @@ func (m *KGRound3Message) UnmarshalXiProof() (*zkp.DLogProof, error) {
 
 func NewKGRound3MessageAbortMode(
 	from *tss.PartyID,
-	suspiciousVssShareWithAuthSigMessages []*VSSShareWithAuthSigMessage,
+	suspiciousVssShareWithAuthSigMessages []*common.VSSShareWithAuthSigMessage,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
@@ -281,7 +281,8 @@ func (m *KGRound3MessageAbortMode) ValidateBasic() bool {
 			common.NonEmptyBytes(b.GetVssSigma()) &&
 			common.NonEmptyBytes(b.GetAuthEcdsaSignatureR()) &&
 			common.NonEmptyBytes(b.GetAuthEcdsaSignatureS()) &&
-			common.NonEmptyMultiBytes(b.GetKGDj())
+			common.NonEmptyMultiBytes(b.GetDj()) &&
+			common.NonEmptyBytes(b.GetCj())
 
 		if !ok {
 			return false
@@ -290,9 +291,9 @@ func (m *KGRound3MessageAbortMode) ValidateBasic() bool {
 	return true
 }
 
-func (m *KGRound3MessageAbortMode) UnmarshalFeldmanCheckFailureEvidence() ([]*FeldmanCheckFailureEvidence, int) {
+func (m *KGRound3MessageAbortMode) UnmarshalFeldmanCheckFailureEvidence() ([]*ecdsautils.FeldmanCheckFailureEvidence, int) {
 	suspiciousVsss := m.GetSuspiciousVsss()
-	feldmanCheckFailures := make([]*FeldmanCheckFailureEvidence, len(suspiciousVsss))
+	feldmanCheckFailures := make([]*ecdsautils.FeldmanCheckFailureEvidence, len(suspiciousVsss))
 	for n, vsss := range suspiciousVsss {
 		share := vss.Share{Share: new(big.Int).SetBytes(vsss.GetVssSigma()),
 			ID:        new(big.Int).SetBytes(vsss.GetVssId()),
@@ -303,15 +304,16 @@ func (m *KGRound3MessageAbortMode) UnmarshalFeldmanCheckFailureEvidence() ([]*Fe
 			Curve: tss.EC()}
 		authEcdsaSignature := ecdsautils.ECDSASignature{R: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureR()),
 			S: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureS())}
-		var KGDj = make([]*big.Int, len(vsss.GetKGDj()))
-		for a, k := range vsss.GetKGDj() {
-			KGDj[a] = new(big.Int).SetBytes(k)
+		var Dj = make([]*big.Int, len(vsss.GetDj()))
+		Cj := new(big.Int).SetBytes(vsss.GetCj())
+		for a, k := range vsss.GetDj() {
+			Dj[a] = new(big.Int).SetBytes(k)
 		}
 
-		e := FeldmanCheckFailureEvidence{sigmaji: &share, authSignaturePkj: pk,
-			accusedPartyj:      vsss.GetAccusedParty(),
-			KGDj:               KGDj,
-			authEcdsaSignature: &authEcdsaSignature}
+		e := ecdsautils.FeldmanCheckFailureEvidence{Sigmaji: &share, AuthSignaturePkj: pk,
+			AccusedPartyj:         vsss.GetAccusedParty(),
+			TheHashCommitDecommit: cmt.HashCommitDecommit{C: Cj, D: Dj},
+			AuthEcdsaSignature:    &authEcdsaSignature}
 		feldmanCheckFailures[n] = &e
 	}
 	return feldmanCheckFailures, int(m.GetPlaintiffParty())

@@ -9,6 +9,8 @@ package resharing
 import (
 	"errors"
 
+	"github.com/binance-chain/tss-lib/common"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -24,6 +26,26 @@ func (round *round5) Start() *tss.Error {
 
 	Pi := round.PartyID()
 	i := Pi.Index
+
+	abortMessages := make([]*DGRound4Message_AbortData, 0)
+	culprits := make([]ecdsautils.AttributionOfBlame, 0)
+	culpritSet := make(map[*tss.PartyID]struct{})
+	for _, m := range round.temp.dgRound4Messages {
+		if a, isAbort := m.Content().(*DGRound4Message).Content.(*DGRound4Message_Abort); isAbort {
+			feldmanCheckFailureEvidences, plaintiffParty := a.Abort.UnmarshalFeldmanCheckFailureEvidence()
+			if i == plaintiffParty {
+				common.Logger.Debugf("party %v is the plaintiff and is excusing itself from the attribution of blame",
+					Pi)
+				continue
+			}
+
+			ecdsautils.FindFeldmanCulprits(i, round.Parties().IDs(), feldmanCheckFailureEvidences, round.save.AuthenticationPKs,
+				round.Threshold(), round.Parties().IDs(), plaintiffParty, &culprits, culpritSet)
+		}
+	}
+	if len(abortMessages) > 0 {
+
+	}
 
 	if round.IsNewCommittee() {
 		// 21.

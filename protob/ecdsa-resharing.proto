@@ -48,6 +48,8 @@ message DGRound3Message1 {
     bytes share = 1;
     bytes authentication_ecdsa_sig_r = 2;
     bytes authentication_ecdsa_sig_s = 3;
+    bytes authentication_ecdsa_public_key_x = 4;
+    bytes authentication_ecdsa_public_key_y = 5;
 }
 
 /*
@@ -61,4 +63,14 @@ message DGRound3Message2 {
  * The Round 4 "ACK" is broadcast to peers of the Old and New Committees from the New Committee in this message.
  */
 message DGRound4Message {
+    message ACK {
+    }
+    message AbortData {
+         uint32 plaintiff_party = 1;
+         repeated VSSShareWithAuthSigMessage suspicious_vsss = 2;
+    }
+    oneof content {
+        ACK ack = 1;
+        AbortData abort = 2;
+    }
 }

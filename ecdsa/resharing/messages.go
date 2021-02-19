@@ -199,6 +199,7 @@ func NewDGRound3Message1(
 	from *tss.PartyID,
 	share *vss.Share,
 	authenticationEcdsaSig *ecdsautils.ECDSASignature,
+	authEcdsaPK *ecdsa.PublicKey,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:             from,
@@ -207,9 +208,11 @@ func NewDGRound3Message1(
 		IsToOldCommittee: false,
 	}
 	content := &DGRound3Message1{
-		Share:                   share.Share.Bytes(),
-		AuthenticationEcdsaSigR: authenticationEcdsaSig.R.Bytes(),
-		AuthenticationEcdsaSigS: authenticationEcdsaSig.S.Bytes(),
+		Share:                         share.Share.Bytes(),
+		AuthenticationEcdsaSigR:       authenticationEcdsaSig.R.Bytes(),
+		AuthenticationEcdsaSigS:       authenticationEcdsaSig.S.Bytes(),
+		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
+		AuthenticationEcdsaPublicKeyY: authEcdsaPK.Y.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -218,6 +221,18 @@ func NewDGRound3Message1(
 func (m *DGRound3Message1) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyBytes(m.Share)
+}
+
+func (m *DGRound3Message1) UnmarshalAuthEcdsaSignature() *ecdsautils.ECDSASignature {
+	return ecdsautils.NewECDSASignature(new(big.Int).SetBytes(m.AuthenticationEcdsaSigR),
+		new(big.Int).SetBytes(m.AuthenticationEcdsaSigS))
+}
+
+func (m *DGRound3Message1) UnmarshalAuthEcdsaPK() *ecdsa.PublicKey {
+	return &ecdsa.PublicKey{X: new(big.Int).SetBytes(m.GetAuthenticationEcdsaPublicKeyX()),
+		Y:     new(big.Int).SetBytes(m.GetAuthenticationEcdsaPublicKeyY()),
+		Curve: tss.EC(),
+	}
 }
 
 // ----- //
@@ -253,7 +268,7 @@ func (m *DGRound3Message2) UnmarshalVDeCommitment() cmt.HashDeCommitment {
 
 // ----- //
 
-func NewDGRound4Message(
+func NewDGRound4MessageAck(
 	to []*tss.PartyID,
 	from *tss.PartyID,
 ) tss.ParsedMessage {
@@ -263,11 +278,66 @@ func NewDGRound4Message(
 		IsBroadcast:             true,
 		IsToOldAndNewCommittees: true,
 	}
-	content := &DGRound4Message{}
+	content := &DGRound4Message{
+		Content: &DGRound4Message_Ack{},
+	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
 }
 
 func (m *DGRound4Message) ValidateBasic() bool {
 	return true
+}
+
+// ----- //
+
+func NewDGRound4MessageAbort(
+	to []*tss.PartyID,
+	from *tss.PartyID,
+	suspiciousVssShareWithAuthSigMessages []*common.VSSShareWithAuthSigMessage,
+) tss.ParsedMessage {
+	meta := tss.MessageRouting{
+		From:                    from,
+		To:                      to,
+		IsBroadcast:             true,
+		IsToOldAndNewCommittees: true,
+	}
+	content := &DGRound4Message{
+		Content: &DGRound4Message_Abort{
+			Abort: &DGRound4Message_AbortData{
+				SuspiciousVsss: suspiciousVssShareWithAuthSigMessages,
+				PlaintiffParty: uint32(from.Index),
+			},
+		},
+	}
+	msg := tss.NewMessageWrapper(meta, content)
+	return tss.NewMessage(meta, content, msg)
+}
+
+func (m *DGRound4Message_AbortData) UnmarshalFeldmanCheckFailureEvidence() ([]*ecdsautils.FeldmanCheckFailureEvidence, int) {
+	suspiciousVsss := m.GetSuspiciousVsss()
+	feldmanCheckFailures := make([]*ecdsautils.FeldmanCheckFailureEvidence, len(suspiciousVsss))
+	for n, vsss := range suspiciousVsss {
+		share := vss.Share{Share: new(big.Int).SetBytes(vsss.GetVssSigma()),
+			ID:        new(big.Int).SetBytes(vsss.GetVssId()),
+			Threshold: int(vsss.GetVssThreshold()),
+		}
+		pk := ecdsa.PublicKey{X: new(big.Int).SetBytes(vsss.GetAuthSigPk().GetX()),
+			Y:     new(big.Int).SetBytes(vsss.GetAuthSigPk().GetY()),
+			Curve: tss.EC()}
+		authEcdsaSignature := ecdsautils.ECDSASignature{R: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureR()),
+			S: new(big.Int).SetBytes(vsss.GetAuthEcdsaSignatureS())}
+		var Dj = make([]*big.Int, len(vsss.GetDj()))
+		Cj := new(big.Int).SetBytes(vsss.GetCj())
+		for a, k := range vsss.GetDj() {
+			Dj[a] = new(big.Int).SetBytes(k)
+		}
+
+		e := ecdsautils.FeldmanCheckFailureEvidence{Sigmaji: &share, AuthSignaturePkj: pk,
+			AccusedPartyj:         vsss.GetAccusedParty(),
+			TheHashCommitDecommit: cmt.HashCommitDecommit{C: Cj, D: Dj},
+			AuthEcdsaSignature:    &authEcdsaSignature}
+		feldmanCheckFailures[n] = &e
+	}
+	return feldmanCheckFailures, int(m.GetPlaintiffParty())
 }

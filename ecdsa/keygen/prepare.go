@@ -16,6 +16,7 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
+	"github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -145,7 +146,7 @@ consumer:
 
 	preParams := &LocalPreParams{
 		PaillierSK:          paiSK,
-		AuthEcdsaPrivateKey: (*MarshallableEcdsaPrivateKey)(authEcdsaKey),
+		AuthEcdsaPrivateKey: (*ecdsautils.MarshallableEcdsaPrivateKey)(authEcdsaKey),
 		NTildei:             NTildei,
 		H1i:                 h1i,
 		H2i:                 h2i,

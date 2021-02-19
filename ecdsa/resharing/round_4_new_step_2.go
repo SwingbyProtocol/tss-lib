@@ -8,12 +8,12 @@ package resharing
 
 import (
 	"crypto/ecdsa"
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"math/big"
 	"sync"
 
+	"github.com/hashicorp/go-multierror"
 	errors2 "github.com/pkg/errors"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -116,31 +116,41 @@ func (round *round4) Start() *tss.Error {
 		round.save.NTildej[j] = new(big.Int).SetBytes(r2msg1.NTilde)
 		round.save.H1j[j] = new(big.Int).SetBytes(r2msg1.H1)
 		round.save.H2j[j] = new(big.Int).SetBytes(r2msg1.H2)
+		round.save.AuthenticationPKs[j] = (*ecdsautils.MarshallableEcdsaPublicKey)(r2msg1.UnmarshalAuthEcdsaPK())
 	}
 
 	// 4.
 	newXi := big.NewInt(0)
 
-	// 5-9.
+	// 5-13.
+	type culpritTuple struct {
+		Pj                      *tss.PartyID
+		err                     error
+		feldmanCheckFailureArgs *ecdsautils.FeldmanCheckFailureEvidence
+	}
 	modQ := common.ModInt(tss.EC().Params().N)
 	vjc := make([][]*crypto.ECPoint, len(round.OldParties().IDs()))
+	culpritTuples := make([]culpritTuple, 0, len(round.OldParties().IDs()))
 	for j := 0; j <= len(vjc)-1; j++ { // P1..P_t+1. Ps are indexed from 0 here
 		// 6-7.
 		r1msg := round.temp.dgRound1Messages[j].Content().(*DGRound1Message)
 		r3msg2 := round.temp.dgRound3Message2s[j].Content().(*DGRound3Message2)
-
+		Pj := round.OldParties().IDs()[j]
 		vCj, vDj := r1msg.UnmarshalVCommitment(), r3msg2.UnmarshalVDeCommitment()
 
 		// 6. unpack flat "v" commitment content
 		vCmtDeCmt := commitments.HashCommitDecommit{C: vCj, D: vDj}
 		ok, flatVs := vCmtDeCmt.DeCommit()
 		if !ok || len(flatVs) != (round.NewThreshold()+1)*2 { // they're points so * 2
-			// TODO collect culprits and return a list of them as per convention
-			return round.WrapError(errors.New("de-commitment of v_j0..v_jt failed"), round.Parties().IDs()[j])
+			culprit := culpritTuple{Pj, errors.New("de-commitment of v_j0..v_jt failed"), nil}
+			culpritTuples = append(culpritTuples, culprit)
+			continue
 		}
 		vj, err := crypto.UnFlattenECPoints(tss.EC(), flatVs)
 		if err != nil {
-			return round.WrapError(err, round.Parties().IDs()[j])
+			culprit := culpritTuple{Pj, err, nil}
+			culpritTuples = append(culpritTuples, culprit)
+			continue
 		}
 		vjc[j] = vj
 
@@ -151,29 +161,74 @@ func (round *round4) Start() *tss.Error {
 			ID:        round.PartyID().KeyInt(),
 			Share:     new(big.Int).SetBytes(r3msg1.Share),
 		}
-		r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(round.save.AuthEcdsaPrivateKey),
-			ecdsautils.HashShare(sharej))
-		authEcdsaSignature := ecdsautils.NewECDSASignature(r, s)
-		if err != nil {
-			authSignaturesFailCulprits[j] = round.Parties().IDs()[j]
-		}
-		authEcdsaSignatureOk := ecdsa.Verify((*ecdsa.PublicKey)(round.save.AuthenticationPKs[j]),
+
+		authEcdsaSignature, authEcdsaPKj := r3msg1.UnmarshalAuthEcdsaSignature(), r3msg1.UnmarshalAuthEcdsaPK()
+
+		authEcdsaSignatureOk := ecdsa.Verify(authEcdsaPKj,
 			ecdsautils.HashShare(sharej),
 			authEcdsaSignature.R, authEcdsaSignature.S)
 		if !authEcdsaSignatureOk {
-			// TODO collect culprits and return a list of them as per convention
-			return round.WrapError(errors.New("ecdsa signature of VSS share for authentication failed"), round.Parties().IDs()[j])
-		}
-		if ok := sharej.Verify(round.NewThreshold(), vj); !ok {
-			// TODO collect culprits and return a list of them as per convention
-			return round.WrapError(errors.New("share from old committee did not pass Verify()"), round.Parties().IDs()[j])
+			culprit := culpritTuple{Pj, errors.New("ecdsa signature of VSS share for authentication failed"), nil}
+			culpritTuples = append(culpritTuples, culprit)
+			continue
 		}
 
-		// 9.
+		if Pj.Index == 1 && i != 1 { // hack ...
+			sharej.Share = sharej.Share.Add(sharej.Share, sharej.Share)
+		}
+		// 10.
+		if ok := sharej.Verify(round.NewThreshold(), vj); !ok {
+			evidence := ecdsautils.FeldmanCheckFailureEvidence{
+				Sigmaji: sharej,
+				AuthSignaturePkj: ecdsa.PublicKey{
+					Curve: tss.EC(),
+					X:     round.save.AuthenticationPKs[j].X,
+					Y:     round.save.AuthenticationPKs[j].Y},
+				AccusedPartyj:         uint32(j),
+				TheHashCommitDecommit: commitments.HashCommitDecommit{C: vCj, D: vDj},
+				AuthEcdsaSignature:    authEcdsaSignature,
+			}
+			culprit := culpritTuple{Pj, errors.New("share from old committee did not pass Verify()"), &evidence}
+			culpritTuples = append(culpritTuples, culprit)
+			continue
+		}
+
+		// 13.
 		newXi = new(big.Int).Add(newXi, sharej.Share)
 	}
 
-	// 10-13.
+	// handling previous errors and culprits
+	var multiErr error
+	feldmanCheckFailures := make([]*ecdsautils.FeldmanCheckFailureEvidence, 0)
+	culpritSet := make(map[*tss.PartyID]struct{})
+
+	for _, ct := range culpritTuples {
+		if ct.feldmanCheckFailureArgs == nil {
+			multiErr = multierror.Append(multiErr,
+				round.WrapError(ct.err, ct.Pj))
+			culpritSet[ct.Pj] = struct{}{}
+		} else {
+			feldmanCheckFailures = append(feldmanCheckFailures, ct.feldmanCheckFailureArgs)
+		}
+	}
+	if len(feldmanCheckFailures) > 0 {
+		vssShareWithAuthSigMessages := ecdsautils.PrepareShareWithAuthSigMessages(feldmanCheckFailures, round.PartyID())
+		r4msg := NewDGRound4MessageAbort(round.OldAndNewParties(), Pi, vssShareWithAuthSigMessages)
+		round.temp.dgRound4Messages[i] = r4msg
+		round.out <- r4msg
+		return nil
+	}
+
+	uniqueCulprits := make([]*tss.PartyID, 0, len(culpritSet))
+	for aCulprit := range culpritSet {
+		uniqueCulprits = append(uniqueCulprits, aCulprit)
+	}
+
+	if multiErr != nil {
+		return round.WrapError(multiErr, uniqueCulprits...)
+	}
+
+	// 14-17.
 	var err error
 	Vc := make([]*crypto.ECPoint, round.NewThreshold()+1)
 	for c := 0; c <= round.NewThreshold(); c++ {
@@ -186,12 +241,12 @@ func (round *round4) Start() *tss.Error {
 		}
 	}
 
-	// 14.
+	// 18.
 	if !Vc[0].Equals(round.save.ECDSAPub) {
-		return round.WrapError(errors.New("assertion failed: V_0 != y"), round.PartyID())
+		return round.WrapError(errors.New("assertion failed: V_0 != y"), round.PartyID()) // TODO - abort broadcast?
 	}
 
-	// 15-19.
+	// 21-25.
 	newKs := make([]*big.Int, 0, round.NewPartyCount())
 	newBigXjs := make([]*crypto.ECPoint, round.NewPartyCount())
 	paiProofCulprits = make([]*tss.PartyID, 0, round.NewPartyCount()) // who caused the error(s)
@@ -219,7 +274,7 @@ func (round *round4) Start() *tss.Error {
 	round.temp.newBigXjs = newBigXjs
 
 	// Send an "ACK" message to both committees to signal that we're ready to save our data
-	r4msg := NewDGRound4Message(round.OldAndNewParties(), Pi)
+	r4msg := NewDGRound4MessageAck(round.OldAndNewParties(), Pi)
 	round.temp.dgRound4Messages[i] = r4msg
 	round.out <- r4msg
 

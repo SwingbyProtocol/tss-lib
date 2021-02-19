@@ -45,7 +45,7 @@ func (round *round3) Start() *tss.Error {
 		authSignature := ecdsautils.NewECDSASignature(r, s)
 
 		share := round.temp.NewShares[j]
-		r3msg1 := NewDGRound3Message1(Pj, round.PartyID(), share, authSignature)
+		r3msg1 := NewDGRound3Message1(Pj, round.PartyID(), share, authSignature, &round.save.AuthEcdsaPrivateKey.PublicKey)
 		round.temp.dgRound3Message1s[i] = r3msg1
 		round.out <- r3msg1
 	}
