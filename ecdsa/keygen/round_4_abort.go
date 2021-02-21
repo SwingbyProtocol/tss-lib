@@ -11,11 +11,7 @@ import (
 
 func (round *round4) startInAbortMode(i int, Ps tss.SortedPartyIDs, abortr3msgs []tss.ParsedMessage) *tss.Error {
 
-	var errorMap = map[ecdsautils.FeldmanError]string{
-		ecdsautils.DecommitError:                      "abort identification - error opening de-commitment",
-		ecdsautils.UnFlattenError:                     "abort identification - error unflattening EC points from de-commitment",
-		ecdsautils.ShareVerificationError:             "abort identification - error in the Feldman share verification",
-		ecdsautils.PlaintiffTryingToFrameAccusedParty: "abort identification - the plaintiff party tried to frame the accused one"}
+	var feldmanErrorMap = ecdsautils.FeldmanErrorMap()
 
 	common.Logger.Debugf("party %v is starting the abort identification", Ps[i])
 	culprits := make([]ecdsautils.AttributionOfBlame, 0)
@@ -29,9 +25,9 @@ func (round *round4) startInAbortMode(i int, Ps tss.SortedPartyIDs, abortr3msgs 
 			continue
 		}
 
-		ecdsautils.FindFeldmanCulprits(i, Ps, feldmanCheckFailureEvidences, round.save.AuthenticationPKs,
-			round.Threshold(), round.Parties().IDs(), plaintiffParty, &culprits, culpritSet)
+		ecdsautils.FindFeldmanCulprits(Ps[i], feldmanCheckFailureEvidences, round.save.AuthenticationPKs,
+			round.Threshold(), round.Parties().IDs(), round.Parties().IDs(), plaintiffParty, &culprits, culpritSet)
 	}
 
-	return ecdsautils.HandleMultiErrorVictimAndCulprit(culpritSet, culprits, Ps, errorMap, round.WrapMultiError)
+	return ecdsautils.HandleMultiErrorVictimAndCulprit(culpritSet, culprits, Ps, feldmanErrorMap, round.WrapMultiError)
 }

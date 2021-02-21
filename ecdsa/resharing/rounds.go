@@ -108,6 +108,10 @@ func (round *base) WrapError(err error, culprits ...*tss.PartyID) *tss.Error {
 	return tss.NewError(err, TaskName, round.number, round.PartyID(), culprits...)
 }
 
+func (round *base) WrapMultiError(err error, victim *tss.PartyID, culprits ...*tss.PartyID) *tss.Error {
+	return tss.NewError(err, TaskName, round.number, victim, culprits...)
+}
+
 // ----- //
 
 // `oldOK` tracks parties which have been verified by Update()

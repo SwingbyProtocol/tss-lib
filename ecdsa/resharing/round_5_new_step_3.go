@@ -8,6 +8,7 @@ package resharing
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/binance-chain/tss-lib/common"
 	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
@@ -27,24 +28,36 @@ func (round *round5) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
-	abortMessages := make([]*DGRound4Message_AbortData, 0)
+	abortMessages := false
 	culprits := make([]ecdsautils.AttributionOfBlame, 0)
 	culpritSet := make(map[*tss.PartyID]struct{})
 	for _, m := range round.temp.dgRound4Messages {
-		if a, isAbort := m.Content().(*DGRound4Message).Content.(*DGRound4Message_Abort); isAbort {
-			feldmanCheckFailureEvidences, plaintiffParty := a.Abort.UnmarshalFeldmanCheckFailureEvidence()
-			if i == plaintiffParty {
-				common.Logger.Debugf("party %v is the plaintiff and is excusing itself from the attribution of blame",
-					Pi)
-				continue
-			}
+		a, isAbort := m.Content().(*DGRound4Message).Content.(*DGRound4Message_Abort)
+		common.Logger.Debugf("party %v, IsNewCommittee? %v, IsOldCommittee? %v, isAbort? %v", Pi,
+			round.IsNewCommittee(), round.IsOldCommittee(), isAbort)
+		abortMessages = abortMessages || isAbort
+		if isAbort {
+			if round.IsOldCommittee() {
+				feldmanCheckFailureEvidences, plaintiffParty := a.Abort.UnmarshalFeldmanCheckFailureEvidence()
+				if i == plaintiffParty {
+					common.Logger.Debugf("party %v is the plaintiff and is excusing itself from the attribution of blame",
+						Pi)
+					continue
+				}
 
-			ecdsautils.FindFeldmanCulprits(i, round.Parties().IDs(), feldmanCheckFailureEvidences, round.save.AuthenticationPKs,
-				round.Threshold(), round.Parties().IDs(), plaintiffParty, &culprits, culpritSet)
+				ecdsautils.FindFeldmanCulprits(Pi, feldmanCheckFailureEvidences, round.save.AuthenticationPKs, // TODO is nil. Why?
+					round.Threshold(), round.NewParties().IDs(), round.OldParties().IDs(), plaintiffParty, &culprits, culpritSet)
+			}
 		}
 	}
-	if len(abortMessages) > 0 {
-
+	if abortMessages {
+		if round.IsNewCommittee() {
+			return round.WrapError(fmt.Errorf("player %v (new committee) is aborting", Pi))
+		} else {
+			var feldmanErrorMap = ecdsautils.FeldmanErrorMap()
+			return ecdsautils.HandleMultiErrorVictimAndCulprit(culpritSet, culprits, round.OldParties().IDs(),
+				feldmanErrorMap, round.WrapMultiError)
+		}
 	}
 
 	if round.IsNewCommittee() {

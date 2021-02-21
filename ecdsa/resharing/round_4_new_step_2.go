@@ -173,7 +173,7 @@ func (round *round4) Start() *tss.Error {
 			continue
 		}
 
-		if Pj.Index == 1 && i != 1 { // hack ...
+		if Pj.Index == 1 && i > 3 { // TODO - delete this hack ...
 			sharej.Share = sharej.Share.Add(sharej.Share, sharej.Share)
 		}
 		// 10.
