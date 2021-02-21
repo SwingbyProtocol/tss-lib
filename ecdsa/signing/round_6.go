@@ -30,11 +30,11 @@ func (round *round6) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.number = 6
 	round.started = true
 	round.ended = false
-	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[*tss.PartyID]interface{})}
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[string]interface{})}
 
-	errs := make(map[*tss.PartyID]interface{})
-	pdlWSlackPfs := make(map[*tss.PartyID]interface{})
-	bigRBarJs := make(map[*tss.PartyID]interface{})
+	errs := make(map[string]interface{})
+	pdlWSlackPfs := make(map[string]interface{})
+	bigRBarJs := make(map[string]interface{})
 	bigRBarJProducts := (*crypto.ECPoint)(nil)
 	BigRBarJ := make(map[string]*common.ECPoint, round.Params().PartyCount())
 	parameters.DoubleDictionary["errs"] = errs
@@ -62,17 +62,23 @@ func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, P
 	r5msg := (*msg).Content().(*SignRound5Message)
 	bigRBarJ, err := r5msg.UnmarshalRI()
 	if err != nil {
-		parameters.DoubleDictionary["errs"][Pj] = err
+		parameters.DoubleDictionary["errs"][Pj.UniqueIDString()] = struct {
+			e error
+			p tss.PartyID
+		}{err, *Pj}
 		return parameters, round.WrapError(err)
 	}
-	parameters.DoubleDictionary["bigRBarJs"][Pj] = bigRBarJ
+	parameters.DoubleDictionary["bigRBarJs"][Pj.UniqueIDString()] = bigRBarJ
 	BigRBarJ[Pj.Id] = bigRBarJ.ToProtobufPoint()
 	parameters.Dictionary["BigRBarJ"] = BigRBarJ
 
 	mutex.Lock()
 	// find products of all Rdash_i to ensure it equals the G point of the curve
 	if bigRBarJProducts, err = bigRBarJProducts.Add(bigRBarJ); err != nil {
-		parameters.DoubleDictionary["errs"][Pj] = err
+		parameters.DoubleDictionary["errs"][Pj.UniqueIDString()] = struct {
+			e error
+			p tss.PartyID
+		}{err, *Pj}
 		mutex.Unlock()
 		return parameters, round.WrapError(err)
 	}
@@ -86,10 +92,13 @@ func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, P
 	// ported from: https://git.io/Jf69a
 	pdlWSlackPf, err := r5msg.UnmarshalPDLwSlackProof()
 	if err != nil {
-		parameters.DoubleDictionary["errs"][Pj] = err
+		parameters.DoubleDictionary["errs"][Pj.UniqueIDString()] = struct {
+			e error
+			p tss.PartyID
+		}{err, *Pj}
 		return parameters, round.WrapError(err)
 	}
-	parameters.DoubleDictionary["pdlWSlackPfs"][Pj] = pdlWSlackPf
+	parameters.DoubleDictionary["pdlWSlackPfs"][Pj.UniqueIDString()] = pdlWSlackPf
 	return parameters, nil
 }
 
@@ -97,8 +106,8 @@ func ProcessRound6PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 	round := round_.(*round6)
 	j := Pj.Index
 	r1msg1 := (*msg).Content().(*SignRound1Message1)
-	pdlWSlackPf := parameters.DoubleDictionary["pdlWSlackPfs"][Pj].(*zkp.PDLwSlackProof)
-	bigRBarJ := parameters.DoubleDictionary["bigRBarJs"][Pj].(*crypto.ECPoint)
+	pdlWSlackPf := parameters.DoubleDictionary["pdlWSlackPfs"][Pj.UniqueIDString()].(*zkp.PDLwSlackProof)
+	bigRBarJ := parameters.DoubleDictionary["bigRBarJs"][Pj.UniqueIDString()].(*crypto.ECPoint)
 
 	bigR, _ := crypto.NewECPointFromProtobuf(round.temp.BigR)
 	pdlWSlackStatement := zkp.PDLwSlackStatement{
@@ -112,9 +121,12 @@ func ProcessRound6PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 	}
 
 	if !pdlWSlackPf.Verify(pdlWSlackStatement) {
-		e := fmt.Errorf("failed to verify ZK proof of consistency between R_i and E_i(k_i) for P %d", j)
+		err := fmt.Errorf("failed to verify ZK proof of consistency between R_i and E_i(k_i) for P %d", j)
 		mutex.Lock()
-		parameters.DoubleDictionary["errs"][Pj] = e
+		parameters.DoubleDictionary["errs"][Pj.UniqueIDString()] = struct {
+			e error
+			p tss.PartyID
+		}{err, *Pj}
 		mutex.Unlock()
 		return parameters, nil
 	}
@@ -136,10 +148,13 @@ func (round *round6) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	if 0 < len(errs) {
 		var multiErr error
 		culprits := make([]*tss.PartyID, 0, len(errs))
-		for Pj, err_ := range errs {
-			err := err_.(error)
-			multiErr = multierror.Append(multiErr, err)
-			culprits = append(culprits, Pj)
+		for _, err_ := range errs {
+			err := err_.(struct {
+				e error
+				p tss.PartyID
+			})
+			multiErr = multierror.Append(multiErr, err.e)
+			culprits = append(culprits, &err.p)
 		}
 		return round.WrapError(multiErr, culprits...)
 	}

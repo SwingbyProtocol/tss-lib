@@ -32,7 +32,7 @@ type (
 
 	GenericParameters struct {
 		Dictionary       map[string]interface{}
-		DoubleDictionary map[string]map[*PartyID]interface{}
+		DoubleDictionary map[string]map[string]interface{}
 	}
 )
 

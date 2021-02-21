@@ -128,7 +128,7 @@ func (round *base) resetOK() {
 	}
 }
 
-func SafeDoubleDictionaryGet(doubleDictionary map[string]map[*tss.PartyID]interface{}, key string, Pj *tss.PartyID) (interface{}, bool) {
+func SafeDoubleDictionaryGet(doubleDictionary map[string]map[string]interface{}, key string, Pj *tss.PartyID) (interface{}, bool) {
 	if doubleDictionary == nil {
 		return nil, false
 	}
@@ -136,6 +136,6 @@ func SafeDoubleDictionaryGet(doubleDictionary map[string]map[*tss.PartyID]interf
 	if !ok {
 		return nil, ok
 	}
-	val2, ok2 := val[Pj]
+	val2, ok2 := val[Pj.UniqueIDString()]
 	return val2, ok2
 }

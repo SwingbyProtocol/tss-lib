@@ -7,6 +7,7 @@
 package tss
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"sort"
@@ -54,6 +55,10 @@ func NewPartyID(id, moniker string, key *big.Int) *PartyID {
 
 func (pid PartyID) String() string {
 	return fmt.Sprintf("{%d,%s}", pid.Index, pid.Moniker)
+}
+
+func (pid *PartyID) UniqueIDString() string {
+	return fmt.Sprintf("%d,%s,%s", pid.Index, hex.EncodeToString(pid.Key), pid.Moniker)
 }
 
 // ----- //
