@@ -33,17 +33,17 @@ func (round *round3) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
 	wg := sync.WaitGroup{}
 	wg.Add((len(round.Parties().IDs()) - 1) * 2)
-	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[*tss.PartyID]interface{})}
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[string]interface{})}
 	parameters.Dictionary["errChs"] = errChs
-	parameters.DoubleDictionary["alphaIJs"] = make(map[*tss.PartyID]interface{})
+	parameters.DoubleDictionary["alphaIJs"] = make(map[string]interface{})
 
 	// mod q'd
-	parameters.DoubleDictionary["muIJs"] = make(map[*tss.PartyID]interface{})
+	parameters.DoubleDictionary["muIJs"] = make(map[string]interface{})
 
 	// raw recovered
-	parameters.DoubleDictionary["muIJRecs"] = make(map[*tss.PartyID]interface{})
+	parameters.DoubleDictionary["muIJRecs"] = make(map[string]interface{})
 
-	parameters.DoubleDictionary["muRandIJ"] = make(map[*tss.PartyID]interface{})
+	parameters.DoubleDictionary["muRandIJ"] = make(map[string]interface{})
 	parameters.Dictionary["wgp"] = &wg
 	parameters.Dictionary["roundMutex"] = &sync.RWMutex{}
 	return parameters, nil
@@ -82,7 +82,7 @@ func ProcessRound3(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *ts
 			return
 		}
 		roundMutex.Lock()
-		parameters.DoubleDictionary["alphaIJs"][Pj] = alphaIJ
+		parameters.DoubleDictionary["alphaIJs"][Pj.UniqueIDString()] = alphaIJ
 		round.temp.r5AbortData.AlphaIJ[j] = alphaIJ.Bytes()
 		roundMutex.Unlock()
 	}(j, Pj)
@@ -109,9 +109,9 @@ func ProcessRound3(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *ts
 			return
 		}
 		roundMutex.Lock()
-		parameters.DoubleDictionary["muIJs"][Pj] = muIJ       // mod q'd
-		parameters.DoubleDictionary["muIJRecs"][Pj] = muIJRec // raw recovered
-		parameters.DoubleDictionary["muRandIJ"][Pj] = muIJRand
+		parameters.DoubleDictionary["muIJs"][Pj.UniqueIDString()] = muIJ       // mod q'd
+		parameters.DoubleDictionary["muIJRecs"][Pj.UniqueIDString()] = muIJRec // raw recovered
+		parameters.DoubleDictionary["muRandIJ"][Pj.UniqueIDString()] = muIJRand
 		roundMutex.Unlock()
 	}(j, Pj)
 
@@ -157,10 +157,10 @@ func (round *round3) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 		if j == i {
 			continue
 		}
-		alphaIJj := alphaIJs[Pj].(*big.Int)
-		muIJsj := muIJs[Pj].(*big.Int)
-		muIJRecsA[j] = muIJRecs[Pj].(*big.Int)
-		muRandIJA[j] = muRandIJ[Pj].(*big.Int)
+		alphaIJj := alphaIJs[Pj.UniqueIDString()].(*big.Int)
+		muIJsj := muIJs[Pj.UniqueIDString()].(*big.Int)
+		muIJRecsA[j] = muIJRecs[Pj.UniqueIDString()].(*big.Int)
+		muRandIJA[j] = muRandIJ[Pj.UniqueIDString()].(*big.Int)
 		beta := modN.Sub(zero, round.temp.vJIs[j])
 		deltaI.Add(deltaI, alphaIJj.Add(alphaIJj, round.temp.betas[j]))
 		sigmaI.Add(sigmaI, muIJsj.Add(muIJsj, beta))

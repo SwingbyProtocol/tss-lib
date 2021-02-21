@@ -34,14 +34,14 @@ func (round *round7) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	round.number = 7
 	round.started = true
 	round.ended = false
-	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[*tss.PartyID]interface{})}
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{}), DoubleDictionary: make(map[string]map[string]interface{})}
 	culprits := make([]*tss.PartyID, 0, round.PartyCount())
 	var multiErr error
 	parameters.Dictionary["culprits"] = culprits
 	parameters.Dictionary["multiErr"] = multiErr
-	parameters.DoubleDictionary["calcDeltaJs"] = make(map[*tss.PartyID]interface{})
-	parameters.DoubleDictionary["bigSIs"] = make(map[*tss.PartyID]interface{})
-	parameters.DoubleDictionary["stProofs"] = make(map[*tss.PartyID]interface{})
+	parameters.DoubleDictionary["calcDeltaJs"] = make(map[string]interface{})
+	parameters.DoubleDictionary["bigSIs"] = make(map[string]interface{})
+	parameters.DoubleDictionary["stProofs"] = make(map[string]interface{})
 
 	var bigSJ = make(map[string]*common.ECPoint)
 	parameters.Dictionary["bigSJ"] = bigSJ
@@ -111,7 +111,7 @@ func processRound7Aborting(round_ tss.PreprocessingRound, msg *tss.ParsedMessage
 		}
 		calcDeltaJ = modN.Add(calcDeltaJ, new(big.Int).SetBytes(b))
 	}
-	parameters.DoubleDictionary["calcDeltaJs"][Pj] = calcDeltaJ
+	parameters.DoubleDictionary["calcDeltaJs"][Pj.UniqueIDString()] = calcDeltaJ
 
 	return parameters, nil
 }
@@ -143,7 +143,7 @@ func processRound7Normal(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 	if err != nil {
 		return r(culprits, &err, &multiErr, Pj, parameters, round)
 	}
-	parameters.DoubleDictionary["bigSIs"][Pj] = bigSI
+	parameters.DoubleDictionary["bigSIs"][Pj.UniqueIDString()] = bigSI
 	bigSJ[Pj.Id] = bigSI.ToProtobufPoint()
 	parameters.Dictionary["bigSJ"] = bigSJ
 
@@ -151,7 +151,7 @@ func processRound7Normal(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 	if err != nil {
 		return r(culprits, &err, &multiErr, Pj, parameters, round)
 	}
-	parameters.DoubleDictionary["stProofs"][Pj] = stProof
+	parameters.DoubleDictionary["stProofs"][Pj.UniqueIDString()] = stProof
 	return parameters, nil
 }
 
@@ -161,7 +161,7 @@ func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
 
 	if round.abortingT5 {
-		calcDeltaJ_, ok := parameters.DoubleDictionary["calcDeltaJs"][Pj]
+		calcDeltaJ_, ok := parameters.DoubleDictionary["calcDeltaJs"][Pj.UniqueIDString()]
 		if !ok {
 			return parameters, nil
 		}
@@ -188,11 +188,11 @@ func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 		if err != nil {
 			return r(culprits, &err, &multiErr, Pj, parameters, round)
 		}
-		stProof := parameters.DoubleDictionary["stProofs"][Pj].(*zkp.STProof)
+		stProof := parameters.DoubleDictionary["stProofs"][Pj.UniqueIDString()].(*zkp.STProof)
 		if err != nil {
 			return r(culprits, &err, &multiErr, Pj, parameters, round)
 		}
-		bigSI := parameters.DoubleDictionary["bigSIs"][Pj].(*crypto.ECPoint)
+		bigSI := parameters.DoubleDictionary["bigSIs"][Pj.UniqueIDString()].(*crypto.ECPoint)
 
 		// bigR is stored as bytes for the OneRoundData protobuf struct
 		bigRX, bigRY := new(big.Int).SetBytes(round.temp.BigR.GetX()), new(big.Int).SetBytes(round.temp.BigR.GetY())
