@@ -305,16 +305,15 @@ func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
 				errCh <- pRound.WrapError(e, []*PartyID{msg.GetFrom()}...)
 				break
 			}
-			toP := msg.GetTo()
 			var errP *Error
-			if toP == nil { // broadcast
+			if msg.IsBroadcast() { // broadcast
 				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, mutex)
 				if errP != nil {
 					errCh <- errP
 					break
 				}
 			} else { // P2P
-				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetTo()[0], parameters, mutex)
+				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, mutex)
 			}
 			if errP != nil {
 				errCh <- errP
