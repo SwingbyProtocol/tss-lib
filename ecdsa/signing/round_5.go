@@ -53,6 +53,7 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 		wgj := &sync.WaitGroup{}
 		wgj.Add(1)
 		parameters.DoubleDictionary["waitGroups"][Pj.UniqueIDString()] = wgj
+		common.Logger.Infof("party %v is adding Pj %v %v to waitGroups", round.PartyID(), Pj, Pj.UniqueIDString())
 	}
 	common.Logger.Infof("party %v round 5 in Preprocess (#wg: %v)", round.PartyID(), len(parameters.DoubleDictionary["waitGroups"]))
 	return parameters, nil
@@ -61,10 +62,19 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 func ProcessRound5PartI(round tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r1msg2 := (*msg).Content().(*SignRound1Message2)
 	parameters.DoubleDictionary["r1msg2s"][Pj.UniqueIDString()] = r1msg2
+	common.Logger.Infof("party %v is accesing Pj %v %v from waitGroups in ProcessRound5PartI",
+		round.Params().PartyID(), Pj, Pj.UniqueIDString())
 	wgj_, ok := SafeDoubleDictionaryGet(parameters.DoubleDictionary, "waitGroups", Pj)
 	if !ok {
 		if parameters.DoubleDictionary != nil {
-			common.Logger.Errorf("party %v, ProcessRound5PartI debug info #wg: %v, pc: %v", Pj, len(parameters.DoubleDictionary), round.Params().PartyCount())
+			common.Logger.Errorf("err party %v, Pj: %v %v, ProcessRound5PartI debug info #wg: %v, pc: %v",
+				round.Params().PartyID(), Pj, Pj.UniqueIDString(), len(parameters.DoubleDictionary), round.Params().PartyCount())
+			wgs, ok2 := parameters.DoubleDictionary["waitGroups"]
+			if ok2 {
+				for key, _ := range wgs {
+					common.Logger.Errorf("err party %v, Pj: %v %v key: %v", round.Params().PartyID(), Pj, Pj.UniqueIDString(), key)
+				}
+			}
 		}
 		return parameters, round.WrapError(fmt.Errorf("waitGroups error for party %v", Pj))
 	}
