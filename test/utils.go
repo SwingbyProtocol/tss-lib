@@ -7,6 +7,8 @@
 package test
 
 import (
+	"fmt"
+
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -33,6 +35,8 @@ func SharedPartyUpdater(party tss.Party, msg tss.Message, errCh chan<- *tss.Erro
 func SharedPartyUpdaterWithQueues(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
 	// do not send a message from this party back to itself
 	if party.PartyID() == msg.GetFrom() {
+		err := fmt.Errorf("party %v cannot send message to self", party.PartyID())
+		errCh <- party.WrapError(err)
 		return
 	}
 	bz, _, err := msg.WireBytes()

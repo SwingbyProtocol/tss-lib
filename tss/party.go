@@ -334,22 +334,21 @@ func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
 	return nil
 }
 
-func BaseValidateAndStore(p Party, msg ParsedMessage) (ok bool, err *Error) {
+func BaseValidateAndStore(toParty Party, msg ParsedMessage) (ok bool, err *Error) {
 	// fast-fail on an invalid message; do not lock the mutex yet
-	if _, err := p.ValidateMessage(msg); err != nil {
+	if _, err := toParty.ValidateMessage(msg); err != nil {
 		return false, err
 	}
-	p.Lock()
-	defer p.Unlock()
-	common.Logger.Debugf("party %v msg %v BaseValidateAndStore", p, msg)
-	qp := p.(QueuingParty)
+	toParty.Lock()
+	defer toParty.Unlock()
+	common.Logger.Debugf("party %v msg %v BaseValidateAndStore", toParty, msg)
+	qp := toParty.(QueuingParty)
 	isRepeated := qp.IsMessageAlreadyStored(msg)
-	// defer common.Logger.Debugf("party %v msg %v BaseValidateAndStore will unlock", p, msg)
-	if ok, err := p.StoreMessage(msg); err != nil || !ok {
+	if ok, err := toParty.StoreMessage(msg); err != nil || !ok {
 		return false, err
 	}
 	if isRepeated {
-		common.Logger.Warnf("ignoring repeated message %v from party %v", msg, p)
+		common.Logger.Warnf("ignoring repeated message %v from party %v to %v", msg, msg.GetFrom(), toParty)
 	} else if ok, err := qp.StoreMessageInQueues(msg); err != nil || !ok {
 		return false, err
 	}

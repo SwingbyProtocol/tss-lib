@@ -214,6 +214,9 @@ func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
 			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
 	}
+	if p.PartyID().Index == msg.GetFrom().Index {
+		return false, p.WrapError(fmt.Errorf("party %v cannot send message to self",  msg.GetFrom()))
+	}
 	return true, nil
 }
 
