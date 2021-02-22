@@ -246,11 +246,18 @@ func StartAndProcessQueues(p Party, task string) *Error {
 					return p.WrapError(errQ)
 				}
 				parsedMessages := make([]ParsedMessage, len(msgFromIndices))
+				set := make(map[int]interface{}, len(msgFromIndices))
 				p.Lock()
 				for a, index_ := range msgFromIndices {
-					index := index_.(int)
-					m := (*queueAndFunction.Messages)[index]
+					fromPartyIndex := index_.(int)
+					set[fromPartyIndex] = fromPartyIndex
+					m := (*queueAndFunction.Messages)[fromPartyIndex]
 					parsedMessages[a] = m
+				}
+				if len(set) != len(parsedMessages) {
+					err := fmt.Errorf("party %v: there are repeated party indices, but there should not be", p.PartyID())
+					common.Logger.Error(err)
+					return p.WrapError(err)
 				}
 				p.Unlock()
 				if e := processInParallel(parsedMessages, pRound, queueAndFunction.MessageProcessingFunction, parameters); e != nil {
