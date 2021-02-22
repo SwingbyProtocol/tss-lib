@@ -215,7 +215,7 @@ func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
 	}
 	if p.PartyID().Index == msg.GetFrom().Index {
-		return false, p.WrapError(fmt.Errorf("party %v cannot send message to self",  msg.GetFrom()))
+		return false, p.WrapError(fmt.Errorf("party %v cannot send message to self", msg.GetFrom()))
 	}
 	return true, nil
 }
