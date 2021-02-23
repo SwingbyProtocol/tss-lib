@@ -117,6 +117,8 @@ func (round *round4) Start() *tss.Error {
 		round.save.H1j[j] = new(big.Int).SetBytes(r2msg1.H1)
 		round.save.H2j[j] = new(big.Int).SetBytes(r2msg1.H2)
 		round.save.AuthenticationPKs[j] = (*ecdsautils.MarshallableEcdsaPublicKey)(r2msg1.UnmarshalAuthEcdsaPK())
+		common.Logger.Debugf("party %v %p, Pj: %v, sv pk: %v",
+			Pi, Pi, j, ecdsautils.FormatEcdsaPublicKey((*ecdsa.PublicKey)(round.save.AuthenticationPKs[j])))
 	}
 
 	// 4.
@@ -167,23 +169,26 @@ func (round *round4) Start() *tss.Error {
 		authEcdsaSignatureOk := ecdsa.Verify(authEcdsaPKj,
 			ecdsautils.HashShare(sharej),
 			authEcdsaSignature.R, authEcdsaSignature.S)
+
+		common.Logger.Debugf(" Pj: %v, auth pk: %v, sigmaji: %v , r: %v, s: %v", Pj,
+			ecdsautils.FormatEcdsaPublicKey(authEcdsaPKj),
+			ecdsautils.FormatShare(*sharej),
+			ecdsautils.FormatBigInt(authEcdsaSignature.R), ecdsautils.FormatBigInt(authEcdsaSignature.S))
+
 		if !authEcdsaSignatureOk {
 			culprit := culpritTuple{Pj, errors.New("ecdsa signature of VSS share for authentication failed"), nil}
 			culpritTuples = append(culpritTuples, culprit)
 			continue
 		}
 
-		if Pj.Index == 1 && i > 3 { // TODO - delete this hack ...
-			sharej.Share = sharej.Share.Add(sharej.Share, sharej.Share)
-		}
 		// 10.
-		if ok := sharej.Verify(round.NewThreshold(), vj); !ok {
+		if ok := sharej.Verify(round.NewThreshold(), vj) && !round.shouldTriggerAbortInFeldmanCheck(); !ok {
 			evidence := ecdsautils.FeldmanCheckFailureEvidence{
 				Sigmaji: sharej,
 				AuthSignaturePkj: ecdsa.PublicKey{
 					Curve: tss.EC(),
-					X:     round.save.AuthenticationPKs[j].X,
-					Y:     round.save.AuthenticationPKs[j].Y},
+					X:     authEcdsaPKj.X,
+					Y:     authEcdsaPKj.Y},
 				AccusedPartyj:         uint32(j),
 				TheHashCommitDecommit: commitments.HashCommitDecommit{C: vCj, D: vDj},
 				AuthEcdsaSignature:    authEcdsaSignature,
@@ -213,7 +218,7 @@ func (round *round4) Start() *tss.Error {
 	}
 	if len(feldmanCheckFailures) > 0 {
 		vssShareWithAuthSigMessages := ecdsautils.PrepareShareWithAuthSigMessages(feldmanCheckFailures, round.PartyID())
-		r4msg := NewDGRound4MessageAbort(round.OldAndNewParties(), Pi, vssShareWithAuthSigMessages)
+		r4msg := NewDGRound4MessageAbort(round.OldParties().IDs(), Pi, vssShareWithAuthSigMessages)
 		round.temp.dgRound4Messages[i] = r4msg
 		round.out <- r4msg
 		return nil
@@ -305,4 +310,8 @@ func (round *round4) Update() (bool, *tss.Error) {
 func (round *round4) NextRound() tss.Round {
 	round.started = false
 	return &round5{round}
+}
+
+func (round *round4) shouldTriggerAbortInFeldmanCheck() bool {
+	return round.shouldTriggerAbort(ecdsautils.FeldmanCheckFailure)
 }

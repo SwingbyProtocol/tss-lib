@@ -4,10 +4,13 @@ package ecdsautils
 
 import (
 	"crypto/ecdsa"
+	"math/big"
+	"strconv"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/commitments"
+	"github.com/binance-chain/tss-lib/crypto/vss"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -59,12 +62,20 @@ func FindFeldmanCulprits(Pi *tss.PartyID, feldmanCheckFailureEvidences []*Feldma
 			continue
 		}
 
-		common.Logger.Debugf("party %v round 4 plaintiff party: %v, accused party: %v", plaintiffsPartyIDs[plaintiffParty],
-			plaintiffParty, evidence.AccusedPartyj)
-
-		authSignaturesAreEqual := len(authenticationPKs) > int(evidence.AccusedPartyj) &&
-			authenticationPKs[int(evidence.AccusedPartyj)] != nil &&
-			evidence.AuthSignaturePkj.Equal((*ecdsa.PublicKey)(authenticationPKs[int(evidence.AccusedPartyj)]))
+		var authSignaturesAreEqual bool
+		if authenticationPKs != nil && authenticationPKs[int(evidence.AccusedPartyj)] != nil {
+			authSignaturesAreEqual = len(authenticationPKs) > int(evidence.AccusedPartyj) &&
+				authenticationPKs[int(evidence.AccusedPartyj)] != nil &&
+				evidence.AuthSignaturePkj.Equal((*ecdsa.PublicKey)(authenticationPKs[int(evidence.AccusedPartyj)]))
+		} else {
+			authSignaturesAreEqual = true
+		}
+		common.Logger.Debugf("plaintiff party %v w/ index %v, accused party: %v w/ index %v, auth pk: %v, sigmaji: %v , r: %v, s: %v",
+			plaintiffsPartyIDs[plaintiffParty],
+			plaintiffParty, accusedPartyIDs[evidence.AccusedPartyj], evidence.AccusedPartyj,
+			FormatEcdsaPublicKey(&evidence.AuthSignaturePkj),
+			FormatShare(*evidence.Sigmaji),
+			FormatBigInt(evidence.AuthEcdsaSignature.R), FormatBigInt(evidence.AuthEcdsaSignature.S))
 
 		authEcdsaSignatureOk := ecdsa.Verify(&evidence.AuthSignaturePkj, HashShare(evidence.Sigmaji),
 			evidence.AuthEcdsaSignature.R, evidence.AuthEcdsaSignature.S)
@@ -98,3 +109,22 @@ func FeldmanErrorMap() map[FeldmanError]string {
 		ShareVerificationError:             "abort identification - error in the Feldman share verification",
 		PlaintiffTryingToFrameAccusedParty: "abort identification - the plaintiff party tried to frame the accused one"}
 }
+
+func FormatShare(s vss.Share) string {
+	return "S:" + FormatBigInt(s.Share) + ", T:" + strconv.Itoa(s.Threshold) + ", ID:" + FormatBigInt(s.ID)
+}
+
+func FormatEcdsaPublicKey(pk *ecdsa.PublicKey) string {
+	return "X:" + FormatBigInt(pk.X) + ", Y:" + FormatBigInt(pk.Y) + ", C:" + pk.Curve.Params().Name
+}
+
+func FormatBigInt(a *big.Int) string {
+	var aux = new(big.Int).SetInt64(0xFFFFFFFF)
+	return func(i *big.Int) string {
+		return new(big.Int).And(i, aux).Text(16)
+	}(a)
+}
+
+const (
+	FeldmanCheckFailure AbortTrigger = iota
+)

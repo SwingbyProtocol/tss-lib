@@ -4,7 +4,7 @@
 // terms governing use, modification, and redistribution, is contained in the
 // file LICENSE at the root of the source code distribution tree.
 
-package resharing_test
+package resharing
 
 import (
 	"crypto/ecdsa"
@@ -21,8 +21,9 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
-	. "github.com/binance-chain/tss-lib/ecdsa/resharing"
+	// . "github.com/binance-chain/tss-lib/ecdsa/resharing"
 	"github.com/binance-chain/tss-lib/ecdsa/signing"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
@@ -234,7 +235,36 @@ signing:
 	}
 }
 
-func TestIdentifiableAbortFeldmanShareFail(t *testing.T) {
+// Set an abort flag to trigger a false Feldman check failure.
+func sharedPartyUpdaterFalseFeldmanFramingError(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
+	// do not send a message from this party back to itself
+	if party.PartyID() == msg.GetFrom() {
+		return
+	}
+	bz, _, err := msg.WireBytes()
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+	pMsg, err := tss.ParseWireMessage(bz, msg.GetFrom(), msg.IsBroadcast())
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+
+	// Intercepting a round 2 broadcast message
+	if msg.Type() == "DGRound3Message1" && !msg.IsBroadcast() && msg.GetFrom().Index == 0 && party.PartyID().Index == 1 {
+		tlp := party.(*LocalParty)
+		tlp.temp.abortTriggers = []ecdsautils.AbortTrigger{ecdsautils.FeldmanCheckFailure}
+	}
+
+	if _, err := party.Update(pMsg); err != nil {
+		errCh <- err
+	}
+
+}
+
+func TestIdentifiableAbortFalseFeldmanFraming(t *testing.T) {
 	setUp("debug")
 
 	// tss.SetCurve(elliptic.P256())
@@ -265,7 +295,7 @@ func TestIdentifiableAbortFeldmanShareFail(t *testing.T) {
 	outCh := make(chan tss.Message, bothCommitteesPax)
 	endCh := make(chan keygen.LocalPartySaveData, bothCommitteesPax)
 
-	updater := test.SharedPartyUpdater
+	updater := sharedPartyUpdaterFalseFeldmanFramingError
 
 	// init the old parties first
 	for j, pID := range oldPIDs {
@@ -311,13 +341,13 @@ func TestIdentifiableAbortFeldmanShareFail(t *testing.T) {
 			common.Logger.Errorf("Error: %s", err)
 			if len(err.Culprits()) > 0 {
 				msg := err.Cause().Error()
-				assert.Truef(t, strings.Contains(msg, "abort identification - error in the Feldman share verification"),
-					"the error detected should have been for abort identification")
+				assert.Truef(t, strings.Contains(msg, "abort identification - the plaintiff party tried to frame the accused one"),
+					"the error detected should have been a framing case in abort identification")
 				mError := err.Cause().(*multierror.Error)
 				assert.Greaterf(t, len(mError.Errors), 0, "too few errors returned", len(mError.Errors))
 				vc := (mError.Errors[0]).(*tss.VictimAndCulprit)
-				assert.Truef(t, vc.Culprit != nil && vc.Culprit.Index == 1,
-					"the culprit should have been 1 but it was %v instead", vc.Culprit.Index)
+				assert.EqualValues(t, vc.Culprit.Index, 1,
+					"the 1st culprit should have been 1 but it was %d instead", vc.Culprit.Index)
 				return
 			}
 

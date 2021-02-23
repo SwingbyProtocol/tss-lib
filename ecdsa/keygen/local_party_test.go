@@ -293,7 +293,7 @@ func sharedPartyUpdaterFalseFeldmanFramingError(party tss.Party, msg tss.Message
 	if msg.Type() == "KGRound2Message2" && msg.IsBroadcast() && msg.GetFrom().Index == 0 && party.PartyID().Index == 1 {
 		common.Logger.Debugf("party %s at round 2 - msg %s from %s", party.PartyID(), msg.Type(), msg.GetFrom())
 		tlp := party.(*LocalParty)
-		tlp.temp.abortTriggers = []AbortTrigger{FeldmanCheckFailure}
+		tlp.temp.abortTriggers = []ecdsautils.AbortTrigger{ecdsautils.FeldmanCheckFailure}
 	}
 
 	if _, err := party.Update(pMsg); err != nil {
@@ -379,7 +379,7 @@ func sharedPartyUpdaterTaintFeldmanShareFramingError(party tss.Party, msg tss.Me
 	if msg.Type() == "KGRound2Message2" && msg.IsBroadcast() && msg.GetFrom().Index == 0 && party.PartyID().Index == 1 {
 		common.Logger.Debugf("intercepting message %s from %s", msg.Type(), msg.GetFrom())
 		tlp := party.(*LocalParty)
-		tlp.temp.abortTriggers = []AbortTrigger{FeldmanCheckFailure}
+		tlp.temp.abortTriggers = []ecdsautils.AbortTrigger{ecdsautils.FeldmanCheckFailure}
 	} else if msg.Type() == "KGRound3MessageAbortMode" && msg.IsBroadcast() && party.PartyID().Index == 0 {
 		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
 		r3msg := pMsg.Content().(*KGRound3MessageAbortMode)

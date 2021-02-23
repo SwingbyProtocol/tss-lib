@@ -20,6 +20,8 @@ type ECDSASignature struct {
 	R, S *big.Int
 }
 
+type AbortTrigger int
+
 func HashShare(share *vss.Share) (hash []byte) {
 	hash = append(share.ID.Bytes(), share.Share.Bytes()...)
 	hash = append(hash, big.NewInt(int64(share.Threshold)).Bytes()...)
@@ -102,7 +104,7 @@ type FeldmanCheckFailureEvidence struct {
 	AuthEcdsaSignature    *ECDSASignature
 }
 
-func PrepareShareWithAuthSigMessages(feldmanCheckFailures []*FeldmanCheckFailureEvidence, partyID *tss.PartyID) []*common.VSSShareWithAuthSigMessage {
+func PrepareShareWithAuthSigMessages(feldmanCheckFailures []*FeldmanCheckFailureEvidence, plaintiffPartyID *tss.PartyID) []*common.VSSShareWithAuthSigMessage {
 	vssShareWithAuthSigMessages := make([]*common.VSSShareWithAuthSigMessage, len(feldmanCheckFailures))
 	for a, evidence := range feldmanCheckFailures {
 		ecPoint := common.ECPoint{X: evidence.AuthSignaturePkj.X.Bytes(), Y: evidence.AuthSignaturePkj.Y.Bytes()}
@@ -124,7 +126,7 @@ func PrepareShareWithAuthSigMessages(feldmanCheckFailures []*FeldmanCheckFailure
 		vssShareWithAuthSigMessages[a] = &msg
 		common.Logger.Warnf("party %v is the plaintiff triggering an abort identification"+
 			" accusing party %v",
-			partyID, evidence.AccusedPartyj)
+			plaintiffPartyID, evidence.AccusedPartyj)
 	}
 	return vssShareWithAuthSigMessages
 }

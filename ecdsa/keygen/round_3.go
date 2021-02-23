@@ -267,5 +267,5 @@ func (round *round3) NextRound() tss.Round {
 }
 
 func (round *round3) shouldTriggerAbortInFeldmanCheck() bool {
-	return round.shouldTriggerAbort(FeldmanCheckFailure)
+	return round.shouldTriggerAbort(ecdsautils.FeldmanCheckFailure)
 }

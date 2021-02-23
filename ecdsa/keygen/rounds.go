@@ -7,6 +7,7 @@
 package keygen
 
 import (
+	"github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -99,7 +100,7 @@ func (round *base) resetOK() {
 	}
 }
 
-func (round *base) shouldTriggerAbort(trigger AbortTrigger) bool {
+func (round *base) shouldTriggerAbort(trigger ecdsautils.AbortTrigger) bool {
 	if len(round.temp.abortTriggers) == 0 {
 		return false
 	}

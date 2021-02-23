@@ -14,6 +14,7 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	"github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -51,14 +52,8 @@ type (
 		vs            vss.Vs
 		shares        vss.Shares
 		deCommitPolyG cmt.HashDeCommitment
-		abortTriggers []AbortTrigger
+		abortTriggers []ecdsautils.AbortTrigger
 	}
-)
-
-type AbortTrigger int
-
-const (
-	FeldmanCheckFailure AbortTrigger = iota
 )
 
 // Exported, used in `tss` client

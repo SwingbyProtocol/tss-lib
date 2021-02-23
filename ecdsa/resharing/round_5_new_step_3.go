@@ -33,7 +33,7 @@ func (round *round5) Start() *tss.Error {
 	culpritSet := make(map[*tss.PartyID]struct{})
 	for _, m := range round.temp.dgRound4Messages {
 		a, isAbort := m.Content().(*DGRound4Message).Content.(*DGRound4Message_Abort)
-		common.Logger.Debugf("party %v, IsNewCommittee? %v, IsOldCommittee? %v, isAbort? %v", Pi,
+		common.Logger.Debugf("party %v %p, IsNewCommittee? %v, IsOldCommittee? %v, isAbort? %v", Pi, Pi,
 			round.IsNewCommittee(), round.IsOldCommittee(), isAbort)
 		abortMessages = abortMessages || isAbort
 		if isAbort {
@@ -45,7 +45,7 @@ func (round *round5) Start() *tss.Error {
 					continue
 				}
 
-				ecdsautils.FindFeldmanCulprits(Pi, feldmanCheckFailureEvidences, round.save.AuthenticationPKs, // TODO is nil. Why?
+				ecdsautils.FindFeldmanCulprits(Pi, feldmanCheckFailureEvidences, nil,
 					round.Threshold(), round.NewParties().IDs(), round.OldParties().IDs(), plaintiffParty, &culprits, culpritSet)
 			}
 		}
