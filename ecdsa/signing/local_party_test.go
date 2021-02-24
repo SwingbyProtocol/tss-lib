@@ -258,7 +258,6 @@ signing:
 		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
 		select {
 		case err := <-errCh:
-			common.Logger.Debugf("TODO err %v", err)
 			assert.NotNil(t, err, "an error should have been produced")
 			assert.NotNil(t, err.Culprits(), "culprits should have been identified")
 			assert.Equalf(t, len(err.Culprits()), 1, "there should have been one culprit")

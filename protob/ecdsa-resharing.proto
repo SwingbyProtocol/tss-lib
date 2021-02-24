@@ -39,6 +39,8 @@ message DGRound2Message1 {
  * The Round 2 "ACK" is broadcast to peers of the Old Committee in this message.
  */
 message DGRound2Message2 {
+    bytes authentication_ecdsa_public_key_x = 1;
+    bytes authentication_ecdsa_public_key_y = 2;
 }
 
 /*

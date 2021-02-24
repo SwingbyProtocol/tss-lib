@@ -35,6 +35,12 @@ func (round *round3) Start() *tss.Error {
 	i := Pi.Index
 	authSignaturesFailCulprits := make([]*tss.PartyID, len(round.NewParties().IDs()))
 
+	for j, msg := range round.temp.dgRound2Message2s {
+		r2msg2 := msg.Content().(*DGRound2Message2)
+		authEcdsaPKj := r2msg2.UnmarshalAuthEcdsaPK()
+		round.save.AuthenticationPKs[j] = (*ecdsautils.MarshallableEcdsaPublicKey)(authEcdsaPKj)
+	}
+
 	// 2. send share to Pj from the new committee
 	for j, Pj := range round.NewParties().IDs() {
 		r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(round.save.AuthEcdsaPrivateKey),
@@ -46,7 +52,6 @@ func (round *round3) Start() *tss.Error {
 
 		share := round.temp.NewShares[j]
 		r3msg1 := NewDGRound3Message1(Pj, round.PartyID(), share, authSignature, &round.save.AuthEcdsaPrivateKey.PublicKey)
-		round.temp.dgRound3Message1s[i] = r3msg1
 		round.out <- r3msg1
 	}
 	var multiErr error

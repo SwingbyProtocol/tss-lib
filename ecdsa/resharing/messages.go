@@ -176,6 +176,7 @@ func (m *DGRound2Message1) UnmarshalAuthPaillierSignature() *ecdsautils.ECDSASig
 func NewDGRound2Message2(
 	to []*tss.PartyID,
 	from *tss.PartyID,
+	authEcdsaPK *ecdsa.PublicKey,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:             from,
@@ -183,13 +184,23 @@ func NewDGRound2Message2(
 		IsBroadcast:      true,
 		IsToOldCommittee: true,
 	}
-	content := &DGRound2Message2{}
+	content := &DGRound2Message2{
+		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
+		AuthenticationEcdsaPublicKeyY: authEcdsaPK.Y.Bytes(),
+	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
 }
 
 func (m *DGRound2Message2) ValidateBasic() bool {
 	return true
+}
+
+func (m *DGRound2Message2) UnmarshalAuthEcdsaPK() *ecdsa.PublicKey {
+	return &ecdsa.PublicKey{X: new(big.Int).SetBytes(m.GetAuthenticationEcdsaPublicKeyX()),
+		Y:     new(big.Int).SetBytes(m.GetAuthenticationEcdsaPublicKeyY()),
+		Curve: tss.EC(),
+	}
 }
 
 // ----- //
@@ -300,7 +311,8 @@ func NewDGRound4MessageAbort(
 		From:                    from,
 		To:                      to,
 		IsBroadcast:             true,
-		IsToOldAndNewCommittees: true,
+		IsToOldAndNewCommittees: false,
+		IsToOldCommittee:        true,
 	}
 	content := &DGRound4Message{
 		Content: &DGRound4Message_Abort{

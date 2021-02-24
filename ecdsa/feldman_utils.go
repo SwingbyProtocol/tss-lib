@@ -4,8 +4,6 @@ package ecdsautils
 
 import (
 	"crypto/ecdsa"
-	"math/big"
-	"strconv"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
@@ -26,9 +24,19 @@ const (
 )
 
 type AttributionOfBlame struct {
-	PartyToBlame    *tss.PartyID
+	CulpritParty    *tss.PartyID
 	Victim          uint32
 	TheFeldmanError FeldmanError
+}
+
+// The evidence of an eventual Feldman check failure will be evaluated
+// during the abort identification in round 4 of keygen and in resharing.
+type FeldmanCheckFailureEvidence struct {
+	Sigmaji               *vss.Share
+	AuthSignaturePkj      ecdsa.PublicKey
+	AccusedPartyj         uint32
+	TheHashCommitDecommit commitments.HashCommitDecommit
+	AuthEcdsaSignature    *ECDSASignature
 }
 
 func FeldmanCheck(feldmanCheckFailureEvidence *FeldmanCheckFailureEvidence,
@@ -62,44 +70,60 @@ func FindFeldmanCulprits(Pi *tss.PartyID, feldmanCheckFailureEvidences []*Feldma
 			continue
 		}
 
-		var authSignaturesAreEqual bool
-		if authenticationPKs != nil && authenticationPKs[int(evidence.AccusedPartyj)] != nil {
-			authSignaturesAreEqual = len(authenticationPKs) > int(evidence.AccusedPartyj) &&
-				authenticationPKs[int(evidence.AccusedPartyj)] != nil &&
-				evidence.AuthSignaturePkj.Equal((*ecdsa.PublicKey)(authenticationPKs[int(evidence.AccusedPartyj)]))
-		} else {
-			authSignaturesAreEqual = true
-		}
-		common.Logger.Debugf("plaintiff party %v w/ index %v, accused party: %v w/ index %v, auth pk: %v, sigmaji: %v , r: %v, s: %v",
-			plaintiffsPartyIDs[plaintiffParty],
-			plaintiffParty, accusedPartyIDs[evidence.AccusedPartyj], evidence.AccusedPartyj,
-			FormatEcdsaPublicKey(&evidence.AuthSignaturePkj),
-			FormatShare(*evidence.Sigmaji),
-			FormatBigInt(evidence.AuthEcdsaSignature.R), FormatBigInt(evidence.AuthEcdsaSignature.S))
+		authSignaturesAreEqual := len(authenticationPKs) > int(evidence.AccusedPartyj) &&
+			authenticationPKs[int(evidence.AccusedPartyj)] != nil &&
+			evidence.AuthSignaturePkj.Equal((*ecdsa.PublicKey)(authenticationPKs[int(evidence.AccusedPartyj)]))
 
 		authEcdsaSignatureOk := ecdsa.Verify(&evidence.AuthSignaturePkj, HashShare(evidence.Sigmaji),
 			evidence.AuthEcdsaSignature.R, evidence.AuthEcdsaSignature.S)
-		var partyToBlame *tss.PartyID
+		var culpritParty *tss.PartyID
 		if !authEcdsaSignatureOk || !authSignaturesAreEqual {
-			partyToBlame = plaintiffsPartyIDs[plaintiffParty]
-			*culprits = append(*culprits, AttributionOfBlame{PartyToBlame: partyToBlame, Victim: evidence.AccusedPartyj,
+			culpritParty = plaintiffsPartyIDs[plaintiffParty]
+			*culprits = append(*culprits, AttributionOfBlame{CulpritParty: culpritParty, Victim: evidence.AccusedPartyj,
 				TheFeldmanError: PlaintiffTryingToFrameAccusedParty})
 		} else {
 			ok, feldmanError := FeldmanCheck(evidence, roundThreshold)
 			if !ok {
-				partyToBlame = accusedPartyIDs[evidence.AccusedPartyj]
-				*culprits = append(*culprits, AttributionOfBlame{PartyToBlame: partyToBlame,
+				culpritParty = accusedPartyIDs[evidence.AccusedPartyj]
+				*culprits = append(*culprits, AttributionOfBlame{CulpritParty: culpritParty,
 					Victim:          uint32(plaintiffParty),
 					TheFeldmanError: feldmanError})
 			} else {
-				partyToBlame = plaintiffsPartyIDs[plaintiffParty]
-				*culprits = append(*culprits, AttributionOfBlame{PartyToBlame: partyToBlame,
+				culpritParty = plaintiffsPartyIDs[plaintiffParty]
+				*culprits = append(*culprits, AttributionOfBlame{CulpritParty: culpritParty,
 					TheFeldmanError: PlaintiffTryingToFrameAccusedParty})
 			}
 		}
-		common.Logger.Warnf("party %v deliberated and blames party %v ", Pi, partyToBlame)
-		culpritSet[partyToBlame] = struct{}{}
+		common.Logger.Warnf("party %v deliberated and blames party %v ", Pi, culpritParty)
+		culpritSet[culpritParty] = struct{}{}
 	}
+}
+
+func PrepareShareWithAuthSigMessages(feldmanCheckFailures []*FeldmanCheckFailureEvidence, plaintiffPartyID *tss.PartyID) []*common.VSSShareWithAuthSigMessage {
+	vssShareWithAuthSigMessages := make([]*common.VSSShareWithAuthSigMessage, len(feldmanCheckFailures))
+	for a, evidence := range feldmanCheckFailures {
+		ecPoint := common.ECPoint{X: evidence.AuthSignaturePkj.X.Bytes(), Y: evidence.AuthSignaturePkj.Y.Bytes()}
+		DjBytes := make([][]byte, len(evidence.TheHashCommitDecommit.D))
+		for b, k := range evidence.TheHashCommitDecommit.D {
+			DjBytes[b] = k.Bytes()
+		}
+
+		msg := common.VSSShareWithAuthSigMessage{
+			VssThreshold:        uint32(evidence.Sigmaji.Threshold),
+			VssId:               evidence.Sigmaji.ID.Bytes(),
+			VssSigma:            evidence.Sigmaji.Share.Bytes(),
+			AccusedParty:        evidence.AccusedPartyj,
+			AuthSigPk:           &ecPoint,
+			Dj:                  DjBytes,
+			Cj:                  evidence.TheHashCommitDecommit.C.Bytes(),
+			AuthEcdsaSignatureR: evidence.AuthEcdsaSignature.R.Bytes(),
+			AuthEcdsaSignatureS: evidence.AuthEcdsaSignature.S.Bytes()}
+		vssShareWithAuthSigMessages[a] = &msg
+		common.Logger.Warnf("party %v is the plaintiff triggering an abort identification"+
+			" accusing party %v",
+			plaintiffPartyID, evidence.AccusedPartyj)
+	}
+	return vssShareWithAuthSigMessages
 }
 
 func FeldmanErrorMap() map[FeldmanError]string {
@@ -108,21 +132,6 @@ func FeldmanErrorMap() map[FeldmanError]string {
 		UnFlattenError:                     "abort identification - error unflattening EC points from de-commitment",
 		ShareVerificationError:             "abort identification - error in the Feldman share verification",
 		PlaintiffTryingToFrameAccusedParty: "abort identification - the plaintiff party tried to frame the accused one"}
-}
-
-func FormatShare(s vss.Share) string {
-	return "S:" + FormatBigInt(s.Share) + ", T:" + strconv.Itoa(s.Threshold) + ", ID:" + FormatBigInt(s.ID)
-}
-
-func FormatEcdsaPublicKey(pk *ecdsa.PublicKey) string {
-	return "X:" + FormatBigInt(pk.X) + ", Y:" + FormatBigInt(pk.Y) + ", C:" + pk.Curve.Params().Name
-}
-
-func FormatBigInt(a *big.Int) string {
-	var aux = new(big.Int).SetInt64(0xFFFFFFFF)
-	return func(i *big.Int) string {
-		return new(big.Int).And(i, aux).Text(16)
-	}(a)
 }
 
 const (

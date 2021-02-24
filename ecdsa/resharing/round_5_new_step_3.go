@@ -45,7 +45,7 @@ func (round *round5) Start() *tss.Error {
 					continue
 				}
 
-				ecdsautils.FindFeldmanCulprits(Pi, feldmanCheckFailureEvidences, nil,
+				ecdsautils.FindFeldmanCulprits(Pi, feldmanCheckFailureEvidences, round.save.AuthenticationPKs,
 					round.Threshold(), round.NewParties().IDs(), round.OldParties().IDs(), plaintiffParty, &culprits, culpritSet)
 			}
 		}

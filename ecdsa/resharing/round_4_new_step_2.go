@@ -117,8 +117,7 @@ func (round *round4) Start() *tss.Error {
 		round.save.H1j[j] = new(big.Int).SetBytes(r2msg1.H1)
 		round.save.H2j[j] = new(big.Int).SetBytes(r2msg1.H2)
 		round.save.AuthenticationPKs[j] = (*ecdsautils.MarshallableEcdsaPublicKey)(r2msg1.UnmarshalAuthEcdsaPK())
-		common.Logger.Debugf("party %v %p, Pj: %v, sv pk: %v",
-			Pi, Pi, j, ecdsautils.FormatEcdsaPublicKey((*ecdsa.PublicKey)(round.save.AuthenticationPKs[j])))
+
 	}
 
 	// 4.
@@ -169,11 +168,6 @@ func (round *round4) Start() *tss.Error {
 		authEcdsaSignatureOk := ecdsa.Verify(authEcdsaPKj,
 			ecdsautils.HashShare(sharej),
 			authEcdsaSignature.R, authEcdsaSignature.S)
-
-		common.Logger.Debugf(" Pj: %v, auth pk: %v, sigmaji: %v , r: %v, s: %v", Pj,
-			ecdsautils.FormatEcdsaPublicKey(authEcdsaPKj),
-			ecdsautils.FormatShare(*sharej),
-			ecdsautils.FormatBigInt(authEcdsaSignature.R), ecdsautils.FormatBigInt(authEcdsaSignature.S))
 
 		if !authEcdsaSignatureOk {
 			culprit := culpritTuple{Pj, errors.New("ecdsa signature of VSS share for authentication failed"), nil}
@@ -248,7 +242,7 @@ func (round *round4) Start() *tss.Error {
 
 	// 18.
 	if !Vc[0].Equals(round.save.ECDSAPub) {
-		return round.WrapError(errors.New("assertion failed: V_0 != y"), round.PartyID()) // TODO - abort broadcast?
+		return round.WrapError(errors.New("assertion failed: V_0 != y"), round.PartyID()) // abort broadcast?
 	}
 
 	// 21-25.

@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
 	"github.com/binance-chain/tss-lib/tss"
@@ -94,43 +93,6 @@ type MarshallableEcdsaPublicKey ecdsa.PublicKey
 
 type MarshallableEcdsaPrivateKey ecdsa.PrivateKey
 
-// The evidence of an eventual Feldman check failure will be evaluated
-// during the abort identification in round 4 of keygen and in resharing.
-type FeldmanCheckFailureEvidence struct {
-	Sigmaji               *vss.Share
-	AuthSignaturePkj      ecdsa.PublicKey
-	AccusedPartyj         uint32
-	TheHashCommitDecommit commitments.HashCommitDecommit
-	AuthEcdsaSignature    *ECDSASignature
-}
-
-func PrepareShareWithAuthSigMessages(feldmanCheckFailures []*FeldmanCheckFailureEvidence, plaintiffPartyID *tss.PartyID) []*common.VSSShareWithAuthSigMessage {
-	vssShareWithAuthSigMessages := make([]*common.VSSShareWithAuthSigMessage, len(feldmanCheckFailures))
-	for a, evidence := range feldmanCheckFailures {
-		ecPoint := common.ECPoint{X: evidence.AuthSignaturePkj.X.Bytes(), Y: evidence.AuthSignaturePkj.Y.Bytes()}
-		DjBytes := make([][]byte, len(evidence.TheHashCommitDecommit.D))
-		for b, k := range evidence.TheHashCommitDecommit.D {
-			DjBytes[b] = k.Bytes()
-		}
-
-		msg := common.VSSShareWithAuthSigMessage{
-			VssThreshold:        uint32(evidence.Sigmaji.Threshold),
-			VssId:               evidence.Sigmaji.ID.Bytes(),
-			VssSigma:            evidence.Sigmaji.Share.Bytes(),
-			AccusedParty:        evidence.AccusedPartyj,
-			AuthSigPk:           &ecPoint,
-			Dj:                  DjBytes,
-			Cj:                  evidence.TheHashCommitDecommit.C.Bytes(),
-			AuthEcdsaSignatureR: evidence.AuthEcdsaSignature.R.Bytes(),
-			AuthEcdsaSignatureS: evidence.AuthEcdsaSignature.S.Bytes()}
-		vssShareWithAuthSigMessages[a] = &msg
-		common.Logger.Warnf("party %v is the plaintiff triggering an abort identification"+
-			" accusing party %v",
-			plaintiffPartyID, evidence.AccusedPartyj)
-	}
-	return vssShareWithAuthSigMessages
-}
-
 func HandleMultiErrorVictimAndCulprit(culpritSet map[*tss.PartyID]struct{}, culprits []AttributionOfBlame,
 	Ps tss.SortedPartyIDs, errorMap map[FeldmanError]string, wrapMultiErrorFunc func(err error, victim *tss.PartyID, culprits ...*tss.PartyID) *tss.Error) *tss.Error {
 	uniqueCulprits := make([]*tss.PartyID, 0, len(culpritSet))
@@ -140,7 +102,7 @@ func HandleMultiErrorVictimAndCulprit(culpritSet map[*tss.PartyID]struct{}, culp
 
 	var multiErr error
 	for _, culprit := range culprits {
-		vc := &tss.VictimAndCulprit{Victim: Ps[culprit.Victim], Culprit: culprit.PartyToBlame,
+		vc := &tss.VictimAndCulprit{Victim: Ps[culprit.Victim], Culprit: culprit.CulpritParty,
 			Message: errorMap[culprit.TheFeldmanError]}
 		multiErr = multierror.Append(multiErr, vc)
 	}
