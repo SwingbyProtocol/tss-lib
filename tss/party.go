@@ -255,7 +255,7 @@ func StartAndProcessQueues(p Party, task string) *Error {
 					parsedMessages[a] = m
 				}
 				if len(set) != len(parsedMessages) {
-					err := fmt.Errorf("party %v: there are repeated party indices, but there should not be", p.PartyID())
+					err := fmt.Errorf("party %v: there are repeated party messages or messages to self", p.PartyID())
 					common.Logger.Error(err)
 					return p.WrapError(err)
 				}
