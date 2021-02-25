@@ -25,7 +25,7 @@ func (round *round5) InboundQueuesToConsume() []tss.QueueFunction {
 	return []tss.QueueFunction{
 		{round.temp.signRound1Message2sQ, &round.temp.signRound1Message2s, ProcessRound5PartI, true},
 		{round.temp.signRound4MessagesQ, &round.temp.signRound4Messages, ProcessRound5PartII, true},
-		{round.temp.signRound3MessagesQ, &round.temp.signRound3Messages, ProcessRound5PartIII, false},
+		{round.temp.signRound3MessagesQ, &round.temp.signRound3Messages, ProcessRound5PartIII, true},
 	}
 }
 
@@ -103,15 +103,20 @@ func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 	return parameters, nil
 }
 
-func ProcessRound5PartIII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartIII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, _ *tss.PartyID,
+	parameters *tss.GenericParameters, mutex sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r3msg := (*msg).Content().(*SignRound3Message)
+	mutex.Lock()
 	deltaSum := parameters.Dictionary["deltaSum"].(*big.Int)
+	mutex.Unlock()
 	modN := common.ModInt(tss.EC().Params().N)
 
 	// calculating delta^-1 (below)
 	deltaJ := r3msg.GetDeltaI()
 	deltaSum = modN.Add(deltaSum, new(big.Int).SetBytes(deltaJ))
+	mutex.Lock()
 	parameters.Dictionary["deltaSum"] = deltaSum
+	mutex.Unlock()
 	return parameters, nil
 }
 

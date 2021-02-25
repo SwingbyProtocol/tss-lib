@@ -266,12 +266,10 @@ func StartAndProcessQueues(p Party, task string) *Error {
 			}
 			// queueAndFunction.Queue.Dispose()
 		}
-		p.Lock()
-		common.Logger.Debugf("party %s: %s round %d params %p postproc starting", Pi,
-			task, p.round().RoundNumber(), parameters)
 		if errO := pRound.Postprocess(parameters); errO != nil {
 			return errO
 		}
+		p.Lock()
 		for {
 			if p.round().CanProceed() {
 				// common.Logger.Debugf("party %v is advancing", Pi)
@@ -313,15 +311,7 @@ func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
 				break
 			}
 			var errP *Error
-			if msg.IsBroadcast() { // broadcast
-				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, mutex)
-				if errP != nil {
-					errCh <- errP
-					break
-				}
-			} else { // P2P
-				parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, mutex)
-			}
+			parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, mutex)
 			if errP != nil {
 				errCh <- errP
 				break
