@@ -20,6 +20,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	"github.com/binance-chain/tss-lib/crypto/zkp"
 	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -47,6 +48,7 @@ func (round *round4) Start() *tss.Error {
 	paiProofCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s)) // who caused the error(s)
 	dlnProof1FailCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s))
 	dlnProof2FailCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s))
+	squareFreeProofFailCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s))
 	authSignaturesFailCulprits := make([]*tss.PartyID, len(round.temp.dgRound2Message1s))
 	wg := new(sync.WaitGroup)
 	for j, msg := range round.temp.dgRound2Message1s {
@@ -70,7 +72,7 @@ func (round *round4) Start() *tss.Error {
 			return round.WrapError(errors.New("this h2j was already used by another party"), msg.GetFrom())
 		}
 		h1H2Map[h1JHex], h1H2Map[h2JHex] = struct{}{}, struct{}{}
-		wg.Add(4)
+		wg.Add(5)
 		go func(j int, msg tss.ParsedMessage, r2msg1 *DGRound2Message1) {
 			if ok, err := r2msg1.UnmarshalPaillierProof().Verify(paillierPKj.N, msg.GetFrom().KeyInt(), round.save.ECDSAPub); err != nil || !ok {
 				paiProofCulprits[j] = msg.GetFrom()
@@ -92,6 +94,15 @@ func (round *round4) Start() *tss.Error {
 			}
 			wg.Done()
 		}(j, msg, r2msg1, H1j, H2j, NTildej)
+		go func(j int, msg tss.ParsedMessage, r2msg1 *DGRound2Message1, NTildej *big.Int) {
+			yNj := common.ModInt(NTildej).Exp(r2msg1.UnmarshalProofNSquareFree(), NTildej)
+			randIntProofNSquareFreej := r2msg1.UnmarshalRandomIntProofNSquareFree()
+
+			if yNj.Cmp(randIntProofNSquareFreej) != 0 {
+				squareFreeProofFailCulprits[j] = msg.GetFrom()
+			}
+			wg.Done()
+		}(j, msg, r2msg1, NTildej)
 		go func(j int, msg tss.ParsedMessage, r2msg1 *DGRound2Message1) {
 			verifies := ecdsa.Verify(authEcdsaPKj, ecdsautils.HashPaillierKey(paillierPKj), authPaillierSigj.R, authPaillierSigj.S)
 			if !verifies {
@@ -105,6 +116,11 @@ func (round *round4) Start() *tss.Error {
 	for _, culprit := range append(append(paiProofCulprits, dlnProof1FailCulprits...), dlnProof2FailCulprits...) {
 		if culprit != nil {
 			return round.WrapError(errors.New("dln proof verification failed"), culprit)
+		}
+	}
+	for _, culprit := range squareFreeProofFailCulprits {
+		if culprit != nil {
+			return round.WrapError(errors.New("big N square-free proof verification failed"), culprit)
 		}
 	}
 	// save NTilde_j, h1_j, h2_j received in NewCommitteeStep1 here
@@ -268,12 +284,18 @@ func (round *round4) Start() *tss.Error {
 		return round.WrapError(errors2.Wrapf(err, "newBigXj.Add(Vc[c].ScalarMult(z))"), paiProofCulprits...)
 	}
 
+	// Compute Schnorr's ZK proof of knowledge of xi
+	zkProofxi, err := zkp.NewDLogProof(newXi, newBigXjs[Pi.Index])
+	if err != nil {
+		return round.WrapError(errors2.Wrapf(err, "NewDLogProof(xi, Xi)"), Pi)
+	}
+
 	round.temp.newXi = newXi
 	round.temp.newKs = newKs
 	round.temp.newBigXjs = newBigXjs
 
 	// Send an "ACK" message to both committees to signal that we're ready to save our data
-	r4msg := NewDGRound4MessageAck(round.OldAndNewParties(), Pi)
+	r4msg := NewDGRound4MessageAck(round.OldAndNewParties(), *zkProofxi, Pi)
 	round.temp.dgRound4Messages[i] = r4msg
 	round.out <- r4msg
 

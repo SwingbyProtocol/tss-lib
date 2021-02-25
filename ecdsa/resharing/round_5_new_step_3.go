@@ -33,8 +33,6 @@ func (round *round5) Start() *tss.Error {
 	culpritSet := make(map[*tss.PartyID]struct{})
 	for _, m := range round.temp.dgRound4Messages {
 		a, isAbort := m.Content().(*DGRound4Message).Content.(*DGRound4Message_Abort)
-		common.Logger.Debugf("party %v %p, IsNewCommittee? %v, IsOldCommittee? %v, isAbort? %v", Pi, Pi,
-			round.IsNewCommittee(), round.IsOldCommittee(), isAbort)
 		abortMessages = abortMessages || isAbort
 		if isAbort {
 			if round.IsOldCommittee() {
@@ -61,6 +59,24 @@ func (round *round5) Start() *tss.Error {
 	}
 
 	if round.IsNewCommittee() {
+
+		for j, m := range round.temp.dgRound4Messages {
+			Pj := round.NewParties().IDs()[j]
+			zkProofxi, err := m.Content().(*DGRound4Message).UnmarshalXiProof()
+			if err != nil {
+				common.Logger.Error("party %v: error unmarshalling the xj ZK proof for party %v", Pi, Pj)
+				return round.WrapError(fmt.Errorf("party %v: error unmarshalling the xj ZK proof for party %v", Pi, Pj))
+			} else {
+				bigXj := round.temp.newBigXjs[j]
+				ok := zkProofxi.Verify(bigXj)
+				if !ok {
+					err2 := fmt.Errorf("error in the verification the xj ZK proof for party %v", Pj)
+					common.Logger.Error(err2)
+					return round.WrapError(err2, m.GetFrom())
+				}
+			}
+		}
+
 		// 21.
 		// for this P: SAVE data
 		round.save.BigXj = round.temp.newBigXjs

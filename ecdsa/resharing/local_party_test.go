@@ -378,7 +378,7 @@ func partyUpdaterTaintFeldmanShareFramingError(party tss.Party, msg tss.Message,
 			common.Logger.Debugf("intercepting and changing message %v from %s", msg, msg.GetFrom())
 			feldmanCheckFailureEvidences, _ := ab.Abort.UnmarshalFeldmanCheckFailureEvidence()
 			for _, evidence := range feldmanCheckFailureEvidences {
-				evidence.TheHashCommitDecommit.C = new(big.Int).SetInt64(0)
+				evidence.TheHashCommitDecommit.C = new(big.Int).SetInt64(1)
 			}
 
 			// repackaging the message

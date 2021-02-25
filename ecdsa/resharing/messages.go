@@ -16,6 +16,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/dlnp"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	"github.com/binance-chain/tss-lib/crypto/zkp"
 	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -79,7 +80,7 @@ func NewDGRound2Message1(
 	authEcdsaPK *ecdsa.PublicKey,
 	authPaillierSignature *ecdsautils.ECDSASignature,
 	paillierPf paillier.Proof,
-	NTildei, H1i, H2i *big.Int,
+	NTildei, H1i, H2i, proofNSquareFree, randIntProofNSquareFree *big.Int,
 	dlnProof1, dlnProof2 *dlnp.Proof,
 ) (tss.ParsedMessage, error) {
 	meta := tss.MessageRouting{
@@ -105,6 +106,8 @@ func NewDGRound2Message1(
 		H2:                            H2i.Bytes(),
 		Dlnproof_1:                    dlnProof1Bz,
 		Dlnproof_2:                    dlnProof2Bz,
+		ProofNSquareFree:              proofNSquareFree.Bytes(),
+		RandIntProofNSquareFree:       randIntProofNSquareFree.Bytes(),
 		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
 		AuthenticationEcdsaPublicKeyY: authEcdsaPK.Y.Bytes(),
 		AuthenticationPaillierSigR:    authPaillierSignature.R.Bytes(),
@@ -121,6 +124,8 @@ func (m *DGRound2Message1) ValidateBasic() bool {
 		common.NonEmptyBytes(m.NTilde) &&
 		common.NonEmptyBytes(m.H1) &&
 		common.NonEmptyBytes(m.H2) &&
+		common.NonEmptyBytes(m.GetProofNSquareFree()) &&
+		common.NonEmptyBytes(m.GetRandIntProofNSquareFree()) &&
 		// expected len of dln proof = sizeof(int64) + len(alpha) + len(t)
 		common.NonEmptyMultiBytes(m.GetDlnproof_1(), 2+(dlnp.Iterations*2)) &&
 		common.NonEmptyMultiBytes(m.GetDlnproof_2(), 2+(dlnp.Iterations*2))
@@ -142,6 +147,14 @@ func (m *DGRound2Message1) UnmarshalH1() *big.Int {
 
 func (m *DGRound2Message1) UnmarshalH2() *big.Int {
 	return new(big.Int).SetBytes(m.GetH2())
+}
+
+func (m *DGRound2Message1) UnmarshalProofNSquareFree() *big.Int {
+	return new(big.Int).SetBytes(m.GetProofNSquareFree())
+}
+
+func (m *DGRound2Message1) UnmarshalRandomIntProofNSquareFree() *big.Int {
+	return new(big.Int).SetBytes(m.GetRandIntProofNSquareFree())
 }
 
 func (m *DGRound2Message1) UnmarshalPaillierProof() paillier.Proof {
@@ -281,6 +294,7 @@ func (m *DGRound3Message2) UnmarshalVDeCommitment() cmt.HashDeCommitment {
 
 func NewDGRound4MessageAck(
 	to []*tss.PartyID,
+	zkProofxi zkp.DLogProof,
 	from *tss.PartyID,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
@@ -290,14 +304,51 @@ func NewDGRound4MessageAck(
 		IsToOldAndNewCommittees: true,
 	}
 	content := &DGRound4Message{
-		Content: &DGRound4Message_Ack{},
+		Content: &DGRound4Message_Ack{
+			Ack: &DGRound4Message_ACK{
+				ProofXiAlpha: zkProofxi.Alpha.ToProtobufPoint(),
+				ProofXiT:     zkProofxi.T.Bytes(),
+			},
+		},
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
 }
 
 func (m *DGRound4Message) ValidateBasic() bool {
+	if m == nil {
+		return false
+	}
+	a, isAbort := m.Content.(*DGRound4Message_Abort)
+	if isAbort {
+		for _, vsss := range a.Abort.SuspiciousVsss {
+			if !common.NonEmptyBytes(vsss.AuthEcdsaSignatureR) || !common.NonEmptyBytes(vsss.AuthEcdsaSignatureS) ||
+				!common.NonEmptyBytes(vsss.Cj) || !common.NonEmptyBytes(vsss.VssSigma) || !common.NonEmptyBytes(vsss.VssId) ||
+				!common.NonEmptyMultiBytes(vsss.Dj) {
+				return false
+			}
+		}
+	} else {
+		ack := m.Content.(*DGRound4Message_Ack)
+		if !common.NonEmptyBytes(ack.Ack.ProofXiAlpha.X) || !common.NonEmptyBytes(ack.Ack.ProofXiAlpha.Y) ||
+			!common.NonEmptyBytes(ack.Ack.ProofXiT) {
+			return false
+		}
+	}
 	return true
+}
+
+func (m *DGRound4Message) UnmarshalXiProof() (*zkp.DLogProof, error) {
+	ack := m.Content.(*DGRound4Message_Ack)
+
+	point, err := crypto.NewECPointFromProtobuf(ack.Ack.ProofXiAlpha)
+	if err != nil {
+		return nil, err
+	}
+	return &zkp.DLogProof{
+		Alpha: point,
+		T:     new(big.Int).SetBytes(ack.Ack.ProofXiT),
+	}, nil
 }
 
 // ----- //

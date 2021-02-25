@@ -112,3 +112,13 @@ func HandleMultiErrorVictimAndCulprit(culpritSet map[*tss.PartyID]struct{}, culp
 		return nil
 	}
 }
+
+func ProofNSquareFree(NTildei *big.Int, p *big.Int, q *big.Int) (*big.Int, *big.Int) {
+	randIntProofNSquareFreei := common.GetRandomPositiveInt(NTildei)
+
+	// Using Euler's totient function: phi(N)=phi(P)(Q)=(P-1)(Q-1)=2p2q
+	phiNTildei := new(big.Int).Mul(new(big.Int).Mul(big.NewInt(4), p), q)
+	bigM := new(big.Int).ModInverse(NTildei, phiNTildei)
+	proofNSquareFree := common.ModInt(NTildei).Exp(randIntProofNSquareFreei, bigM)
+	return randIntProofNSquareFreei, proofNSquareFree
+}

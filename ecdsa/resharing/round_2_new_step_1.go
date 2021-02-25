@@ -79,6 +79,9 @@ func (round *round2) Start() *tss.Error {
 		preParams.P,
 		preParams.Q,
 		preParams.NTildei
+
+	randIntProofNSquareFreei, proofNSquareFree := ecdsautils.ProofNSquareFree(NTildei, p, q)
+
 	dlnProof1 := dlnp.NewProof(h1i, h2i, alpha, p, q, NTildei)
 	dlnProof2 := dlnp.NewProof(h2i, h1i, beta, p, q, NTildei)
 
@@ -88,7 +91,7 @@ func (round *round2) Start() *tss.Error {
 		&preParams.PaillierSK.PublicKey,
 		&preParams.AuthEcdsaPrivateKey.PublicKey,
 		authPaillierSignaturei,
-		paillierPf, preParams.NTildei, preParams.H1i, preParams.H2i, dlnProof1, dlnProof2)
+		paillierPf, preParams.NTildei, preParams.H1i, preParams.H2i, proofNSquareFree, randIntProofNSquareFreei, dlnProof1, dlnProof2)
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
