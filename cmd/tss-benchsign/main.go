@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"math/rand"
 	"os"
 	"runtime"
 	"sync/atomic"
@@ -46,6 +47,7 @@ func main() {
 		startQuorum = flag.Int("q", 3, "the minimum quorum (t+1) to use (default: 6)")
 		endQuorum   = flag.Int("n", 8, "the maximum quorum (t+1) to benchmark up to (min: 2, default: 10)")
 		runs        = flag.Int("r", 3, "the number of benchmarking runs (default: 3)")
+		msgLatency  = flag.Int("l", 50, "the target network latency (simulated) per message in milliseconds (default: 50)")
 		procs       = flag.Int("procs", runtime.NumCPU(), "the number of max go procs (threads) to use")
 	)
 	flag.Usage = usage
@@ -75,7 +77,11 @@ func main() {
 	fmt.Println("-----------------------------------")
 	fmt.Printf("Will test quorums %d-%d in %d runs\n", *startQuorum, *endQuorum, *runs)
 	fmt.Printf("Max go procs (threads): %d\n", *procs)
-	fmt.Println("No network latency.")
+	if *msgLatency == 0 {
+		fmt.Println("No network latency.")
+	} else {
+		fmt.Println("Network latency per message:", *msgLatency, "ms.")
+	}
 	fmt.Println("-----------------------------------")
 
 	runtime.GOMAXPROCS(*procs)
@@ -86,7 +92,7 @@ func main() {
 		for q := *startQuorum; q <= *endQuorum; q++ {
 			fmt.Printf("  Quorum %d... ", q)
 			start := time.Now()
-			runSign(dir, q-1)
+			runSign(dir, q-1, *msgLatency)
 			elapsed := time.Since(start)
 			results[run] = append(results[run], result{
 				quorum:   q,
@@ -107,10 +113,11 @@ func setUp(level string) {
 	}
 }
 
-func runSign(dir string, t int) {
+func runSign(dir string, t, msgLatency int) {
 	setUp(libLogLevel)
 
 	q := t + 1
+	minMsgLatency, maxMsgLatency := msgLatency/2, 3*(msgLatency)/2
 	keys, signPIDs, err := loadKeyGenData(dir, q)
 	if err != nil {
 		panic(err)
@@ -127,7 +134,7 @@ func runSign(dir string, t int) {
 	outCh := make(chan tss.Message, len(signPIDs))
 	endCh := make(chan *signing.SignatureData, len(signPIDs))
 
-	updater := test.SharedPartyUpdater
+	updater := test.SharedPartyUpdaterWithQueues
 
 	// init the parties
 	for i := 0; i < len(signPIDs); i++ {
@@ -151,6 +158,9 @@ outer:
 
 		case msg := <-outCh:
 			dest := msg.GetTo()
+			if msgLatency > 0 {
+				delay(minMsgLatency, maxMsgLatency)
+			}
 			if dest == nil {
 				for _, P := range parties {
 					if P.PartyID().Index == msg.GetFrom().Index {
@@ -193,6 +203,10 @@ outer:
 			}
 		}
 	}
+}
+
+func delay(minD, maxD int) {
+	time.Sleep(time.Duration(rand.Intn(maxD-minD)+minD) * time.Millisecond)
 }
 
 func printSummary(results [][]result) {
