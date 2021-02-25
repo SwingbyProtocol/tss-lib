@@ -10,6 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
+
+	"github.com/Workiva/go-datastructures/queue"
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/binance-chain/tss-lib/common"
 )
@@ -38,11 +42,20 @@ type Party interface {
 	Unlock()
 }
 
+type QueuingParty interface {
+	StoreMessageInQueues(msg ParsedMessage) (bool, *Error)
+	ValidateAndStoreInQueues(msg ParsedMessage) (ok bool, err *Error)
+	IsMessageAlreadyStored(msg ParsedMessage) bool
+}
+
 type BaseParty struct {
 	mtx        sync.Mutex
 	rnd        Round
 	FirstRound Round
 }
+
+const QueuePollTimeoutInSeconds = 180
+const QueueWaitTimeInMilliseconds = 100
 
 func (p *BaseParty) Running() bool {
 	return p.rnd != nil
@@ -79,7 +92,10 @@ func (p *BaseParty) ValidateMessage(msg ParsedMessage) (bool, *Error) {
 }
 
 func (p *BaseParty) String() string {
-	return fmt.Sprintf("round: %d", p.round().RoundNumber())
+	if p.round() != nil {
+		return fmt.Sprintf("round: %d", p.round().RoundNumber())
+	}
+	return "BaseParty (round nil)"
 }
 
 // -----
@@ -180,4 +196,158 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 		return r(true, nil)
 	}
 	return r(true, nil)
+}
+
+// ----- //
+
+func StartAndProcessQueues(p Party, task string) *Error {
+	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
+		return p.WrapError(fmt.Errorf("could not start. this party has an invalid PartyID: %+v", p.PartyID()))
+	}
+	if p.round() != nil {
+		return p.WrapError(errors.New("could not start. this party is in an unexpected state. use the constructor and Start()"))
+	}
+	round := p.FirstRound()
+	Pi := p.PartyID()
+	if err := p.setRound(round); err != nil {
+		return err
+	}
+	partyCount := len(p.round().Params().parties.IDs())
+	for {
+		p.Lock()
+		if p.round() == nil {
+			p.Unlock()
+			break // The last round finished
+		}
+		pRound := p.round().(PreprocessingRound)
+		parameters, errPP := pRound.Preprocess()
+		rndNum := p.round().RoundNumber()
+		p.Unlock()
+		common.Logger.Infof("party %s: %s round %d started", Pi, task, rndNum)
+		if errPP != nil {
+			common.Logger.Error(errPP)
+			return p.WrapError(errPP)
+		}
+		queuesAndFunctions := pRound.InboundQueuesToConsume()
+		for _, queueAndFunction := range queuesAndFunctions {
+			elementsProcessed := 0
+			for elementsProcessed < partyCount-1 {
+				var number int64
+				if queueAndFunction.Parallel {
+					number = int64(partyCount - elementsProcessed - 1)
+				} else {
+					number = 1
+				}
+				// common.Logger.Debugf("party %v will read &q %p", Pi, queueAndFunction.Queue)
+				msgFromIndices, errQ := queueAndFunction.Queue.Poll(number, QueuePollTimeoutInSeconds*time.Second)
+				elementsProcessed = elementsProcessed + len(msgFromIndices)
+				if errQ != nil {
+					common.Logger.Errorf("error: %v", errQ)
+					return p.WrapError(errQ)
+				}
+				parsedMessages := make([]ParsedMessage, len(msgFromIndices))
+				set := make(map[int]interface{}, len(msgFromIndices))
+				p.Lock()
+				for a, index_ := range msgFromIndices {
+					fromPartyIndex := index_.(int)
+					set[fromPartyIndex] = fromPartyIndex
+					m := (*queueAndFunction.Messages)[fromPartyIndex]
+					parsedMessages[a] = m
+				}
+				if len(set) != len(parsedMessages) {
+					err := fmt.Errorf("party %v: there are repeated party messages or messages to self", p.PartyID())
+					common.Logger.Error(err)
+					return p.WrapError(err)
+				}
+				p.Unlock()
+				if e := processInParallel(parsedMessages, pRound, queueAndFunction.MessageProcessingFunction, parameters); e != nil {
+					return e
+				}
+			}
+			// queueAndFunction.Queue.Dispose()
+		}
+		if errO := pRound.Postprocess(parameters); errO != nil {
+			return errO
+		}
+		p.Lock()
+		for {
+			if p.round().CanProceed() {
+				// common.Logger.Debugf("party %v is advancing", Pi)
+				p.advance()
+				break
+			} else {
+				p.Unlock()
+				// common.Logger.Debugf("party %v cannot proceed yet and will sleep", Pi)
+				time.Sleep(QueueWaitTimeInMilliseconds * time.Millisecond)
+				p.Lock()
+			}
+		}
+		p.Unlock()
+	}
+	defer func() {
+		common.Logger.Debugf("party %s: %s finished", Pi, task)
+	}()
+	return nil
+}
+
+func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
+	messageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters, sync.RWMutex) (*GenericParameters, *Error),
+	parameters *GenericParameters) *Error {
+	queueClone := new(queue.Queue)
+	if err := queueClone.Put(msgs); err != nil {
+		return pRound.WrapError(err)
+	}
+	var multiErr error
+	errCh := make(chan *Error, queueClone.Len())
+	mutex := sync.RWMutex{}
+	f := func(msgs_ interface{}) {
+		msgs2_ := msgs_.([]ParsedMessage)
+		for _, msg := range msgs2_ {
+			if !pRound.CanProcess(msg) {
+				errorMessage := fmt.Sprintf("invalid message %v from party %v", msg, msg.GetFrom())
+				e := errors.New(errorMessage)
+				common.Logger.Warnf(errorMessage)
+				errCh <- pRound.WrapError(e, []*PartyID{msg.GetFrom()}...)
+				break
+			}
+			var errP *Error
+			parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, mutex)
+			if errP != nil {
+				errCh <- errP
+				break
+			}
+		}
+	}
+	queue.ExecuteInParallel(queueClone, f)
+	close(errCh)
+	culprits := make([]*PartyID, 0, queueClone.Len())
+	if len(errCh) > 0 {
+		for err := range errCh {
+			culprits = append(culprits, err.Culprits()...)
+			multiErr = multierror.Append(multiErr, err.Cause())
+		}
+		return pRound.WrapError(multiErr, culprits...)
+	}
+	return nil
+}
+
+func BaseValidateAndStore(toParty Party, msg ParsedMessage) (ok bool, err *Error) {
+	// fast-fail on an invalid message; do not lock the mutex yet
+	if _, err := toParty.ValidateMessage(msg); err != nil {
+		return false, err
+	}
+	toParty.Lock()
+	defer toParty.Unlock()
+	common.Logger.Debugf("party %v msg %v BaseValidateAndStore", toParty, msg)
+	qp := toParty.(QueuingParty)
+	isRepeated := qp.IsMessageAlreadyStored(msg)
+	if ok, err := toParty.StoreMessage(msg); err != nil || !ok {
+		return false, err
+	}
+	if isRepeated {
+		common.Logger.Warnf("ignoring repeated message %v from party %v to %v", msg, msg.GetFrom(), toParty)
+	} else if ok, err := qp.StoreMessageInQueues(msg); err != nil || !ok {
+		return false, err
+	}
+	return true, nil
 }

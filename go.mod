@@ -3,6 +3,7 @@ module github.com/binance-chain/tss-lib
 go 1.15
 
 require (
+	github.com/Workiva/go-datastructures v1.0.52
 	github.com/agl/ed25519 v0.0.0-20200225211852-fd4d107ace12
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.0

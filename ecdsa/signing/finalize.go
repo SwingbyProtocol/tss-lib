@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/hashicorp/go-multierror"
@@ -30,6 +31,13 @@ const (
 // -----
 // One Round Finalization (async/offline)
 // -----
+
+func (round *finalization) InboundQueuesToConsume() []tss.QueueFunction {
+	return []tss.QueueFunction{
+		{round.temp.signRound7MessagesQ, &round.temp.signRound7Messages, ProcessFinalization1Round, false},
+		{round.temp.signRound1Message1sQIII, &round.temp.signRound1Message1s, ProcessFinalization2Abort, false},
+	}
+}
 
 // FinalizeGetOurSigShare is called in one-round signing mode after the online rounds have finished to compute s_i.
 func FinalizeGetOurSigShare(state *SignatureData, msg *big.Int) (sI *big.Int) {
@@ -164,98 +172,171 @@ func FinalizeWrapError(err error, victim *tss.PartyID, culprits ...*tss.PartyID)
 // Full Online Finalization &
 // Identify Aborts of "Type 7"
 // ------
-
-func (round *finalization) Start() *tss.Error {
+func (round *finalization) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	if round.started {
-		return round.WrapError(errors.New("round already started"))
+		return nil, round.WrapError(errors.New("round already started"))
 	}
-	round.number = 8
+	round.number = 9
 	round.started = true
-	round.resetOK()
-
+	round.ended = false
 	Ps := round.Parties().IDs()
-	Pi := round.PartyID()
-	i := Pi.Index
-
-	culprits := make([]*tss.PartyID, 0, len(round.temp.signRound6Messages))
-
+	parameters := &tss.GenericParameters{Dictionary: make(map[string]interface{})}
+	culprits := make([]*tss.PartyID, 0, round.PartyCount())
+	parameters.Dictionary["culprits"] = culprits
 	// Identifiable Abort Type 7 triggered during Phase 6 (GG20)
+	common.Logger.Debugf("party %v finalization Preprocess abortingT7? %v", round.PartyID(), round.abortingT7)
 	if round.abortingT7 {
 		common.Logger.Infof("round 8: Abort Type 7 code path triggered")
-		q := tss.EC().Params().N
+
 		kIs := make([][]byte, len(Ps))
 		gMus := make([][]*crypto.ECPoint, len(Ps))
-		gNus := make([][]*crypto.ECPoint, len(Ps))
 		gSigmaIPfs := make([]*zkp.ECDDHProof, len(Ps))
 		for i := range gMus {
 			gMus[i] = make([]*crypto.ECPoint, len(Ps))
 		}
+		parameters.Dictionary["gMus"] = gMus
+		parameters.Dictionary["gSigmaIPfs"] = gSigmaIPfs
+		parameters.Dictionary["kIs"] = kIs
+	} else {
+		otherSIs := make(map[*tss.PartyID]*big.Int, len(Ps)-1)
+		parameters.Dictionary["otherSIs"] = otherSIs
+	}
+	return parameters, nil
+}
+
+func ProcessFinalization1Round(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+	round := round_.(*finalization)
+	if round.abortingT7 {
+		return processFinalization1Abort(round_, msg, Pj, parameters)
+	} else {
+		return processFinalizationNormal(round_, msg, Pj, parameters)
+	}
+}
+
+func processFinalization1Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+	var err error
+	var paiPKJ *paillier.PublicKey
+	round := round_.(*finalization)
+	Ps := round.Parties().IDs()
+	i := round.PartyID().Index
+	j := Pj.Index
+	q := tss.EC().Params().N
+	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
+	kIs := parameters.Dictionary["kIs"].([][]byte)
+	gSigmaIPfs := parameters.Dictionary["gSigmaIPfs"].([]*zkp.ECDDHProof)
+	gMus := parameters.Dictionary["gMus"].([][]*crypto.ECPoint)
+	if round.abortingT7 {
+		paiPKJ = round.key.PaillierPKs[j]
+
+		r7msgInner, ok := (*msg).Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort)
+		if !ok {
+			common.Logger.Warnf("party %v, Pj %v, round 8: unexpected success message while in aborting mode: %+v",
+				round.PartyID(), Pj, r7msgInner)
+			culprits = append(culprits, Pj)
+			parameters.Dictionary["culprits"] = culprits
+			return parameters, nil
+		}
+		r7msg := r7msgInner.Abort
+
+		// keep k_i and the g^sigma_i proof for later
+		kIs[j] = r7msg.GetKI()
+		if gSigmaIPfs[j], err = r7msg.UnmarshalSigmaIProof(); err != nil {
+			culprits = append(culprits, Pj)
+			parameters.Dictionary["culprits"] = culprits
+			return parameters, nil
+		}
+
+		// content length sanity check
+		// note: the len equivalence of each of the slices in this msg have already been checked in ValidateBasic(), so just look at the UIJ slice here
+		if len(r7msg.GetMuIJ()) != len(Ps) {
+			culprits = append(culprits, Pj)
+			parameters.Dictionary["culprits"] = culprits
+			return parameters, nil
+		}
+
+		// re-encrypt k_i to make sure it matches the one we have "on record"
+		cA, err := paiPKJ.EncryptWithChosenRandomness(
+			new(big.Int).SetBytes(r7msg.GetKI()),
+			new(big.Int).SetBytes(r7msg.GetKRandI()))
+		if err != nil {
+			culprits = append(culprits, Pj)
+			parameters.Dictionary["culprits"] = culprits
+			return parameters, nil
+		}
+		parameters.Dictionary["cA"] = cA
+
+		mus := common.ByteSlicesToBigInts(r7msg.GetMuIJ())
+		muRands := common.ByteSlicesToBigInts(r7msg.GetMuRandIJ())
+
+		// check correctness of mu_i_j
+		muIJ, muRandIJ := mus[i], muRands[i]
+		cB, err := paiPKJ.EncryptWithChosenRandomness(muIJ, muRandIJ)
+		if err != nil || !bytes.Equal(cB.Bytes(), round.temp.c2JIs[j].Bytes()) {
+			culprits = append(culprits, Pj)
+			parameters.Dictionary["culprits"] = culprits
+			return parameters, nil
+		}
+		// compute g^mu_i_j
+		for k, mu := range mus {
+			if k == j {
+				continue
+			}
+			gMus[j][k] = crypto.ScalarBaseMult(tss.EC(), mu.Mod(mu, q))
+		}
+		parameters.Dictionary["gMus"] = gMus
+	}
+	return parameters, nil
+}
+
+func ProcessFinalization2Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+	round := round_.(*finalization)
+	if round.abortingT7 {
+		cA := parameters.Dictionary["cA"].(*big.Int)
+		culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
+		r1msg1 := (*msg).Content().(*SignRound1Message1)
+		if !bytes.Equal(cA.Bytes(), r1msg1.GetC()) {
+			culprits = append(culprits, Pj)
+			parameters.Dictionary["culprits"] = culprits
+		}
+	}
+	return parameters, nil
+}
+
+func processFinalizationNormal(round tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters) (*tss.GenericParameters, *tss.Error) {
+	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
+	otherSIs := parameters.Dictionary["otherSIs"].(map[*tss.PartyID]*big.Int)
+	var multiErr error
+	if parameters.Dictionary["multiErr"] != nil {
+		multiErr = parameters.Dictionary["multiErr"].(error)
+	}
+	r7msgInner, ok := (*msg).Content().(*SignRound7Message).GetContent().(*SignRound7Message_SI)
+	if !ok {
+		culprits = append(culprits, Pj)
+		multiErr = multierror.Append(multiErr, fmt.Errorf("round 8: unexpected abort message while in success mode: %v %+v",
+			*msg, r7msgInner))
+		parameters.Dictionary["culprits"] = culprits
+		parameters.Dictionary["multiErr"] = multiErr
+		return parameters, round.WrapError(multiErr, culprits...)
+	}
+	sI := r7msgInner.SI
+	otherSIs[Pj] = new(big.Int).SetBytes(sI)
+	parameters.Dictionary["otherSIs"] = otherSIs
+	return parameters, nil
+}
+
+func (round *finalization) Postprocess(parameters *tss.GenericParameters) *tss.Error {
+	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
+	if round.abortingT7 {
+		Ps := round.Parties().IDs()
+		bigR := round.temp.rI
+		gNus := make([][]*crypto.ECPoint, len(Ps))
 		for j := range gNus {
 			gNus[j] = make([]*crypto.ECPoint, len(Ps))
 		}
-	outer:
-		for j, msg := range round.temp.signRound7Messages {
-			Pj := round.Parties().IDs()[j]
-			var err error
-			var paiPKJ *paillier.PublicKey
-			if j == i {
-				paiPKJ = &round.key.PaillierSK.PublicKey
-			} else {
-				paiPKJ = round.key.PaillierPKs[j]
-			}
+		gMus := parameters.Dictionary["gMus"].([][]*crypto.ECPoint)
+		gSigmaIPfs := parameters.Dictionary["gSigmaIPfs"].([]*zkp.ECDDHProof)
+		kIs := parameters.Dictionary["kIs"].([][]byte)
 
-			r7msgInner, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort)
-			if !ok {
-				common.Logger.Warnf("round 8: unexpected success message while in aborting mode: %+v", r7msgInner)
-				culprits = append(culprits, Pj)
-				continue
-			}
-			r7msg := r7msgInner.Abort
-
-			// keep k_i and the g^sigma_i proof for later
-			kIs[j] = r7msg.GetKI()
-			if gSigmaIPfs[j], err = r7msg.UnmarshalSigmaIProof(); err != nil {
-				culprits = append(culprits, Pj)
-				continue
-			}
-
-			// content length sanity check
-			// note: the len equivalence of each of the slices in this msg have already been checked in ValidateBasic(), so just look at the UIJ slice here
-			if len(r7msg.GetMuIJ()) != len(Ps) {
-				culprits = append(culprits, Pj)
-				continue
-			}
-
-			// re-encrypt k_i to make sure it matches the one we have "on record"
-			cA, err := paiPKJ.EncryptWithChosenRandomness(
-				new(big.Int).SetBytes(r7msg.GetKI()),
-				new(big.Int).SetBytes(r7msg.GetKRandI()))
-			r1msg1 := round.temp.signRound1Message1s[j].Content().(*SignRound1Message1)
-			if err != nil || !bytes.Equal(cA.Bytes(), r1msg1.GetC()) {
-				culprits = append(culprits, Pj)
-				continue
-			}
-
-			mus := common.ByteSlicesToBigInts(r7msg.GetMuIJ())
-			muRands := common.ByteSlicesToBigInts(r7msg.GetMuRandIJ())
-
-			// check correctness of mu_i_j
-			if muIJ, muRandIJ := mus[i], muRands[i]; j != i {
-				cB, err := paiPKJ.EncryptWithChosenRandomness(muIJ, muRandIJ)
-				if err != nil || !bytes.Equal(cB.Bytes(), round.temp.c2JIs[j].Bytes()) {
-					culprits = append(culprits, Pj)
-					continue outer
-				}
-			}
-			// compute g^mu_i_j
-			for k, mu := range mus {
-				if k == j {
-					continue
-				}
-				gMus[j][k] = crypto.ScalarBaseMult(tss.EC(), mu.Mod(mu, q))
-			}
-		}
-		bigR := round.temp.rI
 		if 0 < len(culprits) {
 			goto fail
 		}
@@ -290,51 +371,47 @@ func (round *finalization) Start() *tss.Error {
 		}
 	fail:
 		return round.WrapError(errors.New("round 7 consistency check failed: y != bigSJ products, Type 7 identified abort, culprits known"), culprits...)
-	}
-
-	ourSI := round.temp.sI
-	otherSIs := make(map[*tss.PartyID]*big.Int, len(Ps)-1)
-	var multiErr error
-	for j, msg := range round.temp.signRound7Messages {
-		if j == i {
-			continue
+	} else {
+		var multiErr error
+		if parameters.Dictionary["multiErr"] != nil {
+			multiErr = parameters.Dictionary["multiErr"].(error)
 		}
-		Pj := round.Parties().IDs()[j]
-		r7msgInner, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_SI)
-		if !ok {
-			culprits = append(culprits, Pj)
-			multiErr = multierror.Append(multiErr, fmt.Errorf("round 8: unexpected abort message while in success mode: %+v", r7msgInner))
-			continue
+		if 0 < len(culprits) {
+			return round.WrapError(multiErr, culprits...)
 		}
-		sI := r7msgInner.SI
-		otherSIs[Pj] = new(big.Int).SetBytes(sI)
+		ourSI := round.temp.sI
+		otherSIs := parameters.Dictionary["otherSIs"].(map[*tss.PartyID]*big.Int)
+		pk := &ecdsa.PublicKey{
+			Curve: tss.EC(),
+			X:     round.key.ECDSAPub.X(),
+			Y:     round.key.ECDSAPub.Y(),
+		}
+		data, _, err := FinalizeGetAndVerifyFinalSig(round.data, pk, round.temp.m, round.PartyID(), ourSI, otherSIs)
+		if err != nil {
+			return err
+		}
+		round.data = data
+		round.end <- round.data
+		round.ended = true
+		return nil
 	}
-	if 0 < len(culprits) {
-		return round.WrapError(multiErr, culprits...)
-	}
-
-	pk := &ecdsa.PublicKey{
-		Curve: tss.EC(),
-		X:     round.key.ECDSAPub.X(),
-		Y:     round.key.ECDSAPub.Y(),
-	}
-	data, _, err := FinalizeGetAndVerifyFinalSig(round.data, pk, round.temp.m, round.PartyID(), ourSI, otherSIs)
-	if err != nil {
-		return err
-	}
-	round.data = data
-	round.end <- round.data
-	return nil
 }
 
-func (round *finalization) CanAccept(msg tss.ParsedMessage) bool {
-	// not expecting any incoming messages in this round
+func (round *finalization) CanProceed() bool {
+	return round.started && round.ended
+}
+
+func (round *finalization) CanProcess(msg tss.ParsedMessage) bool {
+	if _, ok := msg.Content().(*SignRound1Message1); ok {
+		return !msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_Abort); ok {
+		return msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound7Message).GetContent().(*SignRound7Message_SI); ok {
+		return msg.IsBroadcast()
+	}
 	return false
-}
-
-func (round *finalization) Update() (bool, *tss.Error) {
-	// not expecting any incoming messages in this round
-	return false, nil
 }
 
 func (round *finalization) NextRound() tss.Round {

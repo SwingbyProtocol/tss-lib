@@ -25,6 +25,7 @@ type (
 		end     chan<- *SignatureData
 		ok      []bool // `ok` tracks parties which have been verified by Update()
 		started bool
+		ended   bool
 		number  int
 	}
 	round1 struct {
@@ -65,16 +66,16 @@ type (
 )
 
 var (
-	_ tss.Round = (*round1)(nil)
-	_ tss.Round = (*round2)(nil)
-	_ tss.Round = (*round3)(nil)
-	_ tss.Round = (*round4)(nil)
-	_ tss.Round = (*round5)(nil)
-	_ tss.Round = (*round6)(nil)
-	_ tss.Round = (*round7AbortPrep)(nil)
-	_ tss.Round = (*round7)(nil)
-	_ tss.Round = (*finalizationAbortPrep)(nil)
-	_ tss.Round = (*finalization)(nil)
+	_ tss.PreprocessingRound = (*round1)(nil)
+	_ tss.PreprocessingRound = (*round2)(nil)
+	_ tss.PreprocessingRound = (*round3)(nil)
+	_ tss.PreprocessingRound = (*round4)(nil)
+	_ tss.PreprocessingRound = (*round5)(nil)
+	_ tss.PreprocessingRound = (*round6)(nil)
+	_ tss.PreprocessingRound = (*round7)(nil)
+	_ tss.PreprocessingRound = (*round7AbortPrep)(nil)
+	_ tss.PreprocessingRound = (*finalizationAbortPrep)(nil)
+	_ tss.PreprocessingRound = (*finalization)(nil)
 )
 
 // ----- //
@@ -89,15 +90,16 @@ func (round *base) RoundNumber() int {
 
 // CanProceed is inherited by other rounds
 func (round *base) CanProceed() bool {
-	if !round.started {
-		return false
-	}
-	for _, ok := range round.ok {
-		if !ok {
-			return false
-		}
-	}
-	return true
+	return round.started && round.ended
+}
+
+func (round *base) Process(*tss.ParsedMessage, *tss.PartyID, *tss.GenericParameters) *tss.Error {
+	return nil
+}
+
+func (round *base) Postprocess(parameters *tss.GenericParameters) *tss.Error {
+	round.ended = true
+	return nil
 }
 
 // WaitingFor is called by a Party for reporting back to the caller
@@ -124,4 +126,16 @@ func (round *base) resetOK() {
 	for j := range round.ok {
 		round.ok[j] = false
 	}
+}
+
+func SafeDoubleDictionaryGet(doubleDictionary map[string]map[string]interface{}, key string, Pj *tss.PartyID) (interface{}, bool) {
+	if doubleDictionary == nil {
+		return nil, false
+	}
+	val, ok := doubleDictionary[key]
+	if !ok {
+		return nil, ok
+	}
+	val2, ok2 := val[Pj.UniqueIDString()]
+	return val2, ok2
 }

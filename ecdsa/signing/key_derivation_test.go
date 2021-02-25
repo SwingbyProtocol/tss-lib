@@ -36,6 +36,7 @@ func TestHDKeyDerivation(t *testing.T) {
 	assert.NoError(t, err, "should load keygen fixtures")
 	assert.Equal(t, testThreshold+1, len(keys))
 	assert.Equal(t, testThreshold+1, len(signPIDs))
+	assert.NotNil(t, keys[0].ECDSAPub, "the first ECDSA public key must not be null")
 
 	// build ecdsa key pair
 	parentPkX, parentPkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
@@ -77,7 +78,7 @@ func TestHDKeyDerivation(t *testing.T) {
 	outCh := make(chan tss.Message, len(signPIDs))
 	endCh := make(chan *SignatureData, len(signPIDs))
 
-	updater := test.SharedPartyUpdater
+	updater := test.SharedPartyUpdaterWithQueues
 
 	msg, parties, errCh := initTheParties(signPIDs, p2pCtx, threshold, keys, keyDerivationDelta, outCh, endCh, parties, errCh)
 

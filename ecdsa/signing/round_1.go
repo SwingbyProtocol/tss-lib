@@ -26,12 +26,38 @@ var (
 // round 1 represents round 1 of the signing part of the GG18 ECDSA TSS spec (Gennaro, Goldfeder; 2018)
 func newRound1(params *tss.Parameters, key *keygen.LocalPartySaveData, data *SignatureData, temp *localTempData, out chan<- tss.Message, end chan<- *SignatureData) tss.Round {
 	return &round1{
-		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 1}}
+		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, false, 1}}
 }
 
 func (round *round1) Start() *tss.Error {
+	return nil
+}
+
+func (round *round1) Update() (bool, *tss.Error) {
+	return true, nil
+}
+
+//
+func (round *round1) CanProceed() bool {
+	return round.started
+}
+
+func (round *round1) InboundQueuesToConsume() []tss.QueueFunction {
+	return nil
+}
+
+func (round *round1) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	if round.started {
-		return round.WrapError(errors.New("round already started"))
+		return nil, round.WrapError(errors.New("round already started"))
+	}
+	round.number = 1
+	common.Logger.Debugf("party %v r1 Preprocess", round.PartyID())
+	round.started = true
+	round.ended = false
+
+	err2 := round.prepare()
+	if err2 != nil {
+		return nil, round.WrapError(err2)
 	}
 
 	// Spec requires calculate H(M) here,
@@ -40,33 +66,31 @@ func (round *round1) Start() *tss.Error {
 	// https://github.com/btcsuite/btcd/blob/c26ffa870fd817666a857af1bf6498fabba1ffe3/btcec/signature.go#L263
 	if round.temp.m != nil &&
 		round.temp.m.Cmp(tss.EC().Params().N) >= 0 {
-		return round.WrapError(errors.New("hashed message is not valid"))
+		return nil, round.WrapError(errors.New("hashed message is not valid"))
 	}
-
-	round.number = 1
-	round.started = true
-	round.resetOK()
 
 	Pi := round.PartyID()
 	i := Pi.Index
 	round.ok[i] = true
 
+	dict := make(map[string]interface{})
+	parameters := &tss.GenericParameters{Dictionary: dict}
 	gammaI := common.GetRandomPositiveInt(tss.EC().Params().N)
 	kI := common.GetRandomPositiveInt(tss.EC().Params().N)
 	round.temp.gammaI = gammaI
 	round.temp.r5AbortData.GammaI = gammaI.Bytes()
-
 	gammaIG := crypto.ScalarBaseMult(tss.EC(), gammaI)
 	round.temp.gammaIG = gammaIG
-
 	cmt := commitments.NewHashCommitment(gammaIG.X(), gammaIG.Y())
 	round.temp.deCommit = cmt.D
+	parameters.Dictionary["cmt.C"] = cmt.C
 
 	// MtA round 1
 	paiPK := round.key.PaillierPKs[i]
+
 	cA, rA, err := paiPK.EncryptAndReturnRandomness(kI)
 	if err != nil {
-		return round.WrapError(err, Pi)
+		return nil, round.WrapError(err, Pi)
 	}
 
 	// set "k"-related temporary variables, also used for identified aborts later in the protocol
@@ -79,6 +103,17 @@ func (round *round1) Start() *tss.Error {
 		round.temp.rAKI = rA
 		round.temp.r7AbortData.KRandI = rA.Bytes()
 	}
+	return parameters, nil
+}
+
+func (round *round1) Postprocess(parameters *tss.GenericParameters) *tss.Error {
+	Pi := round.PartyID()
+	i := Pi.Index
+
+	paiPK := round.key.PaillierPKs[i]
+	kI := new(big.Int).SetBytes(round.temp.KI)
+	cA := round.temp.cAKI
+	rA := round.temp.rAKI
 
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
@@ -89,47 +124,15 @@ func (round *round1) Start() *tss.Error {
 			return round.WrapError(fmt.Errorf("failed to init mta: %v", err))
 		}
 		r1msg1 := NewSignRound1Message1(Pj, round.PartyID(), cA, pi)
-		round.temp.signRound1Message1s[i] = r1msg1
 		round.temp.c1Is[j] = cA
 		round.out <- r1msg1
 	}
 
-	r1msg2 := NewSignRound1Message2(round.PartyID(), cmt.C)
-	round.temp.signRound1Message2s[i] = r1msg2
+	cmtC := parameters.Dictionary["cmt.C"].(commitments.HashCommitment)
+	r1msg2 := NewSignRound1Message2(round.PartyID(), cmtC)
 	round.out <- r1msg2
+	round.ended = true
 	return nil
-}
-
-func (round *round1) Update() (bool, *tss.Error) {
-	for j, msg1 := range round.temp.signRound1Message1s {
-		if round.ok[j] {
-			continue
-		}
-		if msg1 == nil || !round.CanAccept(msg1) {
-			return false, nil
-		}
-		msg2 := round.temp.signRound1Message2s[j]
-		if msg2 == nil || !round.CanAccept(msg2) {
-			return false, nil
-		}
-		round.ok[j] = true
-	}
-	return true, nil
-}
-
-func (round *round1) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound1Message1); ok {
-		return !msg.IsBroadcast()
-	}
-	if _, ok := msg.Content().(*SignRound1Message2); ok {
-		return msg.IsBroadcast()
-	}
-	return false
-}
-
-func (round *round1) NextRound() tss.Round {
-	round.started = false
-	return &round2{round}
 }
 
 // ----- //
@@ -154,4 +157,18 @@ func (round *round1) prepare() error {
 		round.temp.bigWs = bigWs
 	}
 	return nil
+}
+
+func (round *round1) CanAccept(msg tss.ParsedMessage) bool {
+	return false
+}
+
+func (round *round1) CanProcess(msg tss.ParsedMessage) bool {
+	// No message expected
+	return false
+}
+
+func (round *round1) NextRound() tss.Round {
+	round.started = false
+	return &round2{round1: round}
 }

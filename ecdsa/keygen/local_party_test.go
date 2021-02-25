@@ -167,9 +167,11 @@ func TestBadMessageCulprits(t *testing.T) {
 	}
 	assert.Equal(t, 1, len(err2.Culprits()))
 	assert.Equal(t, pIDs[1], err2.Culprits()[0])
-	assert.Equal(t,
-		"task ecdsa-keygen, party {0,P[1]}, round 1, culprits [{1,2}]: message failed ValidateBasic: Type: KGRound1Message, From: {1,2}",
-		err2.Error())
+	assert.Contains(t, err2.Error(),
+		"task ecdsa-keygen, party {0,P[1]}, round 1, culprits [{1,")
+	assert.Contains(t, err2.Error(),
+		": message failed ValidateBasic: Type: KGRound1Message, From: {1,")
+	assert.Regexp(t, ".+culprits \\[\\{1,.*?2.*?\\}\\].+", err2.Error())
 }
 
 // The function will change the Feldman shares at the end of round 1

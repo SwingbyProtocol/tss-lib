@@ -7,9 +7,10 @@
 package signing
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
+
+	"github.com/Workiva/go-datastructures/queue"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
@@ -22,6 +23,7 @@ import (
 // Implements Party
 // Implements Stringer
 var _ tss.Party = (*LocalParty)(nil)
+var _ tss.QueuingParty = (*LocalParty)(nil)
 var _ fmt.Stringer = (*LocalParty)(nil)
 
 type (
@@ -47,6 +49,19 @@ type (
 		signRound5Messages,
 		signRound6Messages,
 		signRound7Messages []tss.ParsedMessage
+
+		signRound1Message1sQ,
+		signRound1Message1sQII,
+		signRound1Message1sQIII,
+		signRound1Message2sQ,
+		signRound2MessagesQ,
+		signRound3MessagesQ,
+		signRound3MessagesQII,
+		signRound4MessagesQ,
+		signRound5MessagesQ,
+		signRound6MessagesQ,
+		signRound7MessagesQ,
+		signRound7MessagesQII *queue.Queue
 	}
 
 	localTempData struct {
@@ -83,6 +98,7 @@ type (
 
 		// round 6
 		SignatureData_OneRoundData
+		bigSI *crypto.ECPoint
 
 		// round 7
 		sI *big.Int
@@ -112,6 +128,7 @@ func NewLocalParty(
 		end:       end,
 	}
 	// msgs init
+
 	p.temp.signRound1Message1s = make([]tss.ParsedMessage, partyCount)
 	p.temp.signRound1Message2s = make([]tss.ParsedMessage, partyCount)
 	p.temp.signRound2Messages = make([]tss.ParsedMessage, partyCount)
@@ -120,6 +137,22 @@ func NewLocalParty(
 	p.temp.signRound5Messages = make([]tss.ParsedMessage, partyCount)
 	p.temp.signRound6Messages = make([]tss.ParsedMessage, partyCount)
 	p.temp.signRound7Messages = make([]tss.ParsedMessage, partyCount)
+
+	p.temp.signRound1Message1sQ = new(queue.Queue)
+	p.temp.signRound1Message1sQII = new(queue.Queue)
+	p.temp.signRound1Message1sQIII = new(queue.Queue)
+	p.temp.signRound1Message2sQ = new(queue.Queue)
+	p.temp.signRound2MessagesQ = new(queue.Queue)
+	p.temp.signRound3MessagesQ = new(queue.Queue)
+	p.temp.signRound3MessagesQII = new(queue.Queue)
+	p.temp.signRound4MessagesQ = new(queue.Queue)
+	p.temp.signRound5MessagesQ = new(queue.Queue)
+	p.temp.signRound6MessagesQ = new(queue.Queue)
+	p.temp.signRound7MessagesQ = new(queue.Queue)
+	p.temp.signRound7MessagesQII = new(queue.Queue)
+
+	// message channels
+
 	// temp data init
 	p.temp.keyDerivationDelta = keyDerivationDelta
 	p.temp.m = msg
@@ -153,16 +186,11 @@ func (p *LocalParty) FirstRound() tss.Round {
 }
 
 func (p *LocalParty) Start() *tss.Error {
-	return tss.BaseStart(p, TaskName, func(round tss.Round) *tss.Error {
-		round1, ok := round.(*round1)
-		if !ok {
-			return round.WrapError(errors.New("unable to Start(). party is in an unexpected round"))
-		}
-		if err := round1.prepare(); err != nil {
-			return round.WrapError(err)
-		}
-		return nil
-	})
+	return tss.StartAndProcessQueues(p, TaskName)
+}
+
+func (p *LocalParty) ValidateAndStoreInQueues(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
+	return tss.BaseValidateAndStore(p, msg)
 }
 
 func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
@@ -174,7 +202,7 @@ func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroa
 	if err != nil {
 		return false, p.WrapError(err)
 	}
-	return p.Update(msg)
+	return p.ValidateAndStoreInQueues(msg)
 }
 
 func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
@@ -185,6 +213,10 @@ func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	if maxFromIdx := len(p.params.Parties().IDs()) - 1; maxFromIdx < msg.GetFrom().Index {
 		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
 			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
+	}
+	if p.PartyID().Index == msg.GetFrom().Index {
+		common.Logger.Warnf("party %v should not send message to self", msg.GetFrom())
+		return true, nil
 	}
 	return true, nil
 }
@@ -220,6 +252,93 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func (p *LocalParty) StoreMessageInQueues(msg tss.ParsedMessage) (bool, *tss.Error) {
+	// ValidateBasic is cheap; double-check the message here in case the public StoreMessage was called externally
+	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
+		return ok, err
+	}
+	fromPIdx := msg.GetFrom().Index
+	// switch/case is necessary to store any messages beyond current round
+	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
+	switch msg.Content().(type) {
+	case *SignRound1Message1:
+		if err := p.temp.signRound1Message1sQ.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+		if err := p.temp.signRound1Message1sQII.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+		if err := p.temp.signRound1Message1sQIII.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+	case *SignRound1Message2:
+		if err := p.temp.signRound1Message2sQ.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+	case *SignRound2Message:
+		if err := p.temp.signRound2MessagesQ.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+	case *SignRound3Message:
+		if err := p.temp.signRound3MessagesQ.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+		if err := p.temp.signRound3MessagesQII.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+	case *SignRound4Message:
+		if err := p.temp.signRound4MessagesQ.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+	case *SignRound5Message:
+		if err := p.temp.signRound5MessagesQ.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+	case *SignRound6Message:
+		if err := p.temp.signRound6MessagesQ.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+	case *SignRound7Message:
+		if err := p.temp.signRound7MessagesQ.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+		if err := p.temp.signRound7MessagesQII.Put(fromPIdx); err != nil {
+			return false, p.WrapError(err)
+		}
+	default: // unrecognised message, just ignore!
+		common.Logger.Warnf("unrecognised message ignored: %v", msg)
+		return false, nil
+	}
+	return true, nil
+}
+
+func (p *LocalParty) IsMessageAlreadyStored(msg tss.ParsedMessage) bool {
+	fromPIdx := msg.GetFrom().Index
+	// switch/case is necessary to store any messages beyond current round
+	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
+	switch msg.Content().(type) {
+	case *SignRound1Message1:
+		return p.temp.signRound1Message1s[fromPIdx] != nil
+	case *SignRound1Message2:
+		return p.temp.signRound1Message2s[fromPIdx] != nil
+	case *SignRound2Message:
+		return p.temp.signRound2Messages[fromPIdx] != nil
+	case *SignRound3Message:
+		return p.temp.signRound3Messages[fromPIdx] != nil
+	case *SignRound4Message:
+		return p.temp.signRound4Messages[fromPIdx] != nil
+	case *SignRound5Message:
+		return p.temp.signRound5Messages[fromPIdx] != nil
+	case *SignRound6Message:
+		return p.temp.signRound6Messages[fromPIdx] != nil
+	case *SignRound7Message:
+		return p.temp.signRound7Messages[fromPIdx] != nil
+	default: // unrecognised message, just ignore!
+		return false
+	}
+	return false
 }
 
 func (p *LocalParty) PartyID() *tss.PartyID {

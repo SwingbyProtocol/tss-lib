@@ -29,6 +29,11 @@ type (
 		newPartyCount int
 		newThreshold  int
 	}
+
+	GenericParameters struct {
+		Dictionary       map[string]interface{}
+		DoubleDictionary map[string]map[string]interface{}
+	}
 )
 
 const (
