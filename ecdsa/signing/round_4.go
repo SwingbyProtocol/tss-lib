@@ -42,7 +42,7 @@ func (round *round4) CanProcess(msg tss.ParsedMessage) bool {
 }
 
 func (round *round4) CanProceed() bool {
-	return round.started && round.ended
+	return round.started
 }
 
 func (round *round4) NextRound() tss.Round {
