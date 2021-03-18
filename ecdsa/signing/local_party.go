@@ -338,7 +338,6 @@ func (p *LocalParty) IsMessageAlreadyStored(msg tss.ParsedMessage) bool {
 	default: // unrecognised message, just ignore!
 		return false
 	}
-	return false
 }
 
 func (p *LocalParty) PartyID() *tss.PartyID {

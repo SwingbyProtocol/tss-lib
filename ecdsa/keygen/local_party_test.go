@@ -266,7 +266,7 @@ keygen:
 			if handleMessage(t, msg, parties, updater, errCh) {
 				return
 			}
-		case _ = <-endCh:
+		case <-endCh:
 			assert.FailNow(t, "the end channel should not have returned")
 			break keygen
 		}
@@ -351,7 +351,7 @@ keygen:
 			if handleMessage(t, msg, parties, updater, errCh) {
 				return
 			}
-		case _ = <-endCh:
+		case <-endCh:
 			assert.FailNow(t, "the end channel should not have returned")
 			break keygen
 		}
@@ -452,7 +452,7 @@ keygen:
 			if handleMessage(t, msg, parties, updater, errCh) {
 				return
 			}
-		case _ = <-endCh:
+		case <-endCh:
 			assert.FailNow(t, "the end channel should not have returned")
 			break keygen
 		}

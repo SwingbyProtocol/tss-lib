@@ -110,6 +110,9 @@ func (p *ECPoint) SetCurve(curve elliptic.Curve) *ECPoint {
 }
 
 func (p *ECPoint) ValidateBasic() bool {
+	if p == nil {
+		return false
+	}
 	onCurveKnown := atomic.LoadUint32(&p.onCurveKnown) == 1
 	res := p != nil && p.coords[0] != nil && p.coords[1] != nil && (onCurveKnown || p.IsOnCurve())
 	if res && !onCurveKnown {

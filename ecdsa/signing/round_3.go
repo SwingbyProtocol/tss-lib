@@ -50,7 +50,7 @@ func (round *round3) Preprocess() (*tss.GenericParameters, *tss.Error) {
 }
 
 func ProcessRound3(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID,
-	parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+	parameters *tss.GenericParameters, _ *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round3)
 	wg := parameters.Dictionary["wgp"].(*sync.WaitGroup)
 	errChs := parameters.Dictionary["errChs"].(chan *tss.Error)

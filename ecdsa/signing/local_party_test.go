@@ -447,7 +447,6 @@ func type5IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 
 // taint a round 5 message setting bad k_i and ZK proof
 func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage) (*SignRound5Message, tss.MessageRouting, bool) {
-	r5msg := pMsg.Content().(*SignRound5Message)
 	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
 
 	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
@@ -483,7 +482,7 @@ func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.Parsed
 
 	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, &pdlWSlackPf)
 
-	r5msg = round5Message.Content().(*SignRound5Message)
+	r5msg := round5Message.Content().(*SignRound5Message)
 	meta := tss.MessageRouting{
 		From:        msg.GetFrom(),
 		To:          msg.GetTo(),

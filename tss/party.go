@@ -291,7 +291,7 @@ func StartAndProcessQueues(p Party, task string) *Error {
 }
 
 func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
-	messageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters, sync.RWMutex) (*GenericParameters, *Error),
+	messageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters, *sync.RWMutex) (*GenericParameters, *Error),
 	parameters *GenericParameters) *Error {
 	queueClone := new(queue.Queue)
 	if err := queueClone.Put(msgs); err != nil {
@@ -311,7 +311,7 @@ func processInParallel(msgs []ParsedMessage, pRound PreprocessingRound,
 				break
 			}
 			var errP *Error
-			parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, mutex)
+			parameters, errP = messageProcessingFunction(pRound, &msg, msg.GetFrom(), parameters, &mutex)
 			if errP != nil {
 				errCh <- errP
 				break

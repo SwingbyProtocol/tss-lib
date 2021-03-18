@@ -33,7 +33,7 @@ func NewECDSASignature(r, s *big.Int) *ECDSASignature {
 }
 
 func HashPaillierKey(pk *paillier.PublicKey) (hash []byte) {
-	hash = common.SHA512_256i(append(pk.AsInts())...).Bytes()
+	hash = common.SHA512_256i(pk.AsInts()...).Bytes()
 	return
 }
 

@@ -52,7 +52,7 @@ func (round *round7) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessRound7(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound7(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round7)
 	if round.abortingT5 {
 		return processRound7Aborting(round_, msg, Pj, parameters)
@@ -155,7 +155,7 @@ func processRound7Normal(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 	return parameters, nil
 }
 
-func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound7PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round7)
 	r3msg := (*msg).Content().(*SignRound3Message)
 	culprits := parameters.Dictionary["culprits"].([]*tss.PartyID)
