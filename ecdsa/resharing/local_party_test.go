@@ -45,6 +45,7 @@ func initAndStartParties(oldPIDs tss.SortedPartyIDs, oldP2PCtx *tss.PeerContext,
 	endCh chan keygen.LocalPartySaveData, oldCommittee []*LocalParty, newPIDs tss.SortedPartyIDs,
 	fixtures []keygen.LocalPartySaveData, newCommittee []*LocalParty, errCh chan *tss.Error) ([]*LocalParty,
 	[]*LocalParty, chan *tss.Error) {
+
 	// init the old parties first
 	for j, pID := range oldPIDs {
 		params := tss.NewReSharingParameters(oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
@@ -83,6 +84,11 @@ func initAndStartParties(oldPIDs tss.SortedPartyIDs, oldP2PCtx *tss.PeerContext,
 
 func TestE2EConcurrent(t *testing.T) {
 	setUp("debug")
+	setUp("info")
+
+	// tss.SetCurve(elliptic.P256())
+
+	setUp("info")
 
 	// tss.SetCurve(elliptic.P256())
 
