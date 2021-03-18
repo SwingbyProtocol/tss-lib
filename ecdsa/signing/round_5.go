@@ -57,7 +57,7 @@ func (round *round5) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessRound5PartI(round tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartI(round tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r1msg2 := (*msg).Content().(*SignRound1Message2)
 	parameters.DoubleDictionary["r1msg2s"][Pj.UniqueIDString()] = r1msg2
 	wgj_, ok := SafeDoubleDictionaryGet(parameters.DoubleDictionary, "waitGroups", Pj)
@@ -69,7 +69,7 @@ func ProcessRound5PartI(round tss.PreprocessingRound, msg *tss.ParsedMessage, Pj
 	return parameters, nil
 }
 
-func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round5)
 	j := Pj.Index
 	wgj_, ok := SafeDoubleDictionaryGet(parameters.DoubleDictionary, "waitGroups", Pj)
@@ -104,7 +104,7 @@ func ProcessRound5PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, 
 }
 
 func ProcessRound5PartIII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, _ *tss.PartyID,
-	parameters *tss.GenericParameters, mutex sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+	parameters *tss.GenericParameters, mutex *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	r3msg := (*msg).Content().(*SignRound3Message)
 	mutex.Lock()
 	deltaSum := parameters.Dictionary["deltaSum"].(*big.Int)

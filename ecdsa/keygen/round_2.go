@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/binance-chain/tss-lib/common"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -32,7 +33,7 @@ func (round *round2) Start() *tss.Error {
 
 	// 6. verify dln proofs, store r1 message pieces, ensure uniqueness of h1j, h2j
 	h1H2Map := make(map[string]struct{}, len(round.temp.kgRound1Messages)*2)
-	authSignatures := make([]*ECDSASignature, len(round.temp.kgRound1Messages))
+	authSignatures := make([]*ecdsautils.ECDSASignature, len(round.temp.kgRound1Messages))
 	authSignaturesFailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
 	dlnProof1FailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
 	dlnProof2FailCulprits := make([]*tss.PartyID, len(round.temp.kgRound1Messages))
@@ -89,13 +90,13 @@ func (round *round2) Start() *tss.Error {
 
 		// Verify the Paillier PK with the authentication PK and sign the share
 		go func(j int, msg tss.ParsedMessage) {
-			verifies := ecdsa.Verify(authEcdsaPKj, HashPaillierKey(paillierPKj), authPaillierSigj.r, authPaillierSigj.s)
+			verifies := ecdsa.Verify(authEcdsaPKj, ecdsautils.HashPaillierKey(paillierPKj), authPaillierSigj.R, authPaillierSigj.S)
 			if !verifies {
 				authSignaturesFailCulprits[j] = msg.GetFrom()
 			} else {
 				r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(round.save.AuthEcdsaPrivateKey),
-					HashShare(round.temp.shares[j]))
-				authSignatures[j] = NewECDSASignature(r, s)
+					ecdsautils.HashShare(round.temp.shares[j]))
+				authSignatures[j] = ecdsautils.NewECDSASignature(r, s)
 				if err != nil {
 					authSignaturesFailCulprits[j] = msg.GetFrom()
 				}
@@ -143,7 +144,7 @@ func (round *round2) Start() *tss.Error {
 			r1msg.UnmarshalNTilde(),
 			r1msg.UnmarshalCommitment()
 		round.save.PaillierPKs[j] = paillierPK // used in round 4
-		round.save.AuthenticationPKs[j] = (*MarshallableEcdsaPublicKey)(authEcdsaPKj)
+		round.save.AuthenticationPKs[j] = (*ecdsautils.MarshallableEcdsaPublicKey)(authEcdsaPKj)
 		round.save.NTildej[j] = NTildej
 		round.save.H1j[j], round.save.H2j[j] = H1j, H2j
 		round.temp.KGCs[j] = KGC

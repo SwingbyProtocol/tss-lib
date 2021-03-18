@@ -7,6 +7,7 @@
 package resharing
 
 import (
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -108,6 +109,10 @@ func (round *base) WrapError(err error, culprits ...*tss.PartyID) *tss.Error {
 	return tss.NewError(err, TaskName, round.number, round.PartyID(), culprits...)
 }
 
+func (round *base) WrapMultiError(err error, victim *tss.PartyID, culprits ...*tss.PartyID) *tss.Error {
+	return tss.NewError(err, TaskName, round.number, victim, culprits...)
+}
+
 // ----- //
 
 // `oldOK` tracks parties which have been verified by Update()
@@ -132,4 +137,16 @@ func (round *base) allNewOK() {
 	for j := range round.newOK {
 		round.newOK[j] = true
 	}
+}
+
+func (round *base) shouldTriggerAbort(trigger ecdsautils.AbortTrigger) bool {
+	if len(round.temp.abortTriggers) == 0 {
+		return false
+	}
+	for _, t := range round.temp.abortTriggers {
+		if trigger == t {
+			return true
+		}
+	}
+	return false
 }

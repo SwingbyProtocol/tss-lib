@@ -28,7 +28,7 @@ func (round *finalizationAbortPrep) Preprocess() (*tss.GenericParameters, *tss.E
 	return parameters, nil
 }
 
-func ProcessFinalRoundPrep(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, _ *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessFinalRoundPrep(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, _ *tss.PartyID, parameters *tss.GenericParameters, _ *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*finalizationAbortPrep)
 	r7msg := (*msg).Content().(*SignRound7Message)
 	if r7msg.GetAbort() != nil {

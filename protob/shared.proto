@@ -26,3 +26,15 @@ message ECSignature {
     // M represents the original message digest that was signed M
     bytes m = 5;
 }
+
+message VSSShareWithAuthSigMessage {
+    uint32 vss_threshold = 1;
+    bytes vss_id = 2;
+    bytes vss_sigma = 3;
+    uint32 accused_party = 4;
+    ECPoint auth_sig_pk = 5;
+    bytes authEcdsaSignature_r = 6;
+    bytes authEcdsaSignature_s = 7;
+    repeated bytes Dj = 8;
+    bytes Cj = 9;
+}

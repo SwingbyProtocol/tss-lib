@@ -14,6 +14,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -54,9 +55,10 @@ type (
 		VD        cmt.HashDeCommitment
 
 		// temporary storage of data that is persisted by the new party in round 5 if all "ACK" messages are received
-		newXi     *big.Int
-		newKs     []*big.Int
-		newBigXjs []*crypto.ECPoint // Xj to save in round 5
+		newXi         *big.Int
+		newKs         []*big.Int
+		newBigXjs     []*crypto.ECPoint // Xj to save in round 5
+		abortTriggers []ecdsautils.AbortTrigger
 	}
 )
 

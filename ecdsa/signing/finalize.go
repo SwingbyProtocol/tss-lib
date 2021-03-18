@@ -82,10 +82,13 @@ func FinalizeGetAndVerifyFinalSig(
 	r, s := bigR.X(), ourSI
 	culprits := make([]*tss.PartyID, 0, len(otherSIs))
 	for Pj, sJ := range otherSIs {
+		if Pj == nil {
+			return nil, nil, FinalizeWrapError(errors.New("finalize sig, in loop: Pj is nil"), Pj)
+		}
 		bigRBarJBz := data.GetBigRBarJ()[Pj.Id]
 		bigSJBz := data.GetBigSJ()[Pj.Id]
-		if Pj == nil || bigRBarJBz == nil || bigSJBz == nil {
-			return nil, nil, FinalizeWrapError(errors.New("in loop: Pj or map value s_i is nil"), Pj)
+		if bigRBarJBz == nil || bigSJBz == nil {
+			return nil, nil, FinalizeWrapError(errors.New("finalize sig, in loop: map value s_i is nil"), Pj)
 		}
 
 		// prep for identify aborts in phase 7
@@ -204,7 +207,7 @@ func (round *finalization) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	return parameters, nil
 }
 
-func ProcessFinalization1Round(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessFinalization1Round(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*finalization)
 	if round.abortingT7 {
 		return processFinalization1Abort(round_, msg, Pj, parameters)
@@ -288,7 +291,7 @@ func processFinalization1Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMes
 	return parameters, nil
 }
 
-func ProcessFinalization2Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessFinalization2Abort(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, _ *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*finalization)
 	if round.abortingT7 {
 		cA := parameters.Dictionary["cA"].(*big.Int)

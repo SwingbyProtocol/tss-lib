@@ -28,6 +28,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/dlnp"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -156,7 +157,7 @@ func TestBadMessageCulprits(t *testing.T) {
 	}
 
 	badMsg, _ := NewKGRound1Message(pIDs[1], zero, &paillier.PublicKey{N: zero},
-		&ecdsa.PublicKey{Curve: tss.EC(), X: zero, Y: zero}, NewECDSASignature(zero, zero),
+		&ecdsa.PublicKey{Curve: tss.EC(), X: zero, Y: zero}, ecdsautils.NewECDSASignature(zero, zero),
 		zero, zero, zero, zero, zero, new(dlnp.Proof), new(dlnp.Proof))
 	ok, err2 := lp.Update(badMsg)
 	t.Log(err2)
@@ -256,7 +257,7 @@ keygen:
 			assert.Greaterf(t, len(mError.Errors), 0, "too few errors returned", len(mError.Errors))
 			vc := (mError.Errors[0]).(*tss.VictimAndCulprit)
 			assert.Truef(t, vc.Victim != nil && vc.Victim.Index == 0,
-				"the victim should have been 0 but it was %v instead", vc.Victim.Index)
+				"the Victim should have been 0 but it was %v instead", vc.Victim.Index)
 			assert.Truef(t, vc.Culprit != nil && vc.Culprit.Index == 1,
 				"the culprit should have been 1 but it was %v instead", vc.Culprit.Index)
 			break keygen
@@ -265,7 +266,7 @@ keygen:
 			if handleMessage(t, msg, parties, updater, errCh) {
 				return
 			}
-		case _ = <-endCh:
+		case <-endCh:
 			assert.FailNow(t, "the end channel should not have returned")
 			break keygen
 		}
@@ -294,7 +295,7 @@ func sharedPartyUpdaterFalseFeldmanFramingError(party tss.Party, msg tss.Message
 	if msg.Type() == "KGRound2Message2" && msg.IsBroadcast() && msg.GetFrom().Index == 0 && party.PartyID().Index == 1 {
 		common.Logger.Debugf("party %s at round 2 - msg %s from %s", party.PartyID(), msg.Type(), msg.GetFrom())
 		tlp := party.(*LocalParty)
-		tlp.temp.abortTriggers = []AbortTrigger{FeldmanCheckFailure}
+		tlp.temp.abortTriggers = []ecdsautils.AbortTrigger{ecdsautils.FeldmanCheckFailure}
 	}
 
 	if _, err := party.Update(pMsg); err != nil {
@@ -350,7 +351,7 @@ keygen:
 			if handleMessage(t, msg, parties, updater, errCh) {
 				return
 			}
-		case _ = <-endCh:
+		case <-endCh:
 			assert.FailNow(t, "the end channel should not have returned")
 			break keygen
 		}
@@ -380,7 +381,7 @@ func sharedPartyUpdaterTaintFeldmanShareFramingError(party tss.Party, msg tss.Me
 	if msg.Type() == "KGRound2Message2" && msg.IsBroadcast() && msg.GetFrom().Index == 0 && party.PartyID().Index == 1 {
 		common.Logger.Debugf("intercepting message %s from %s", msg.Type(), msg.GetFrom())
 		tlp := party.(*LocalParty)
-		tlp.temp.abortTriggers = []AbortTrigger{FeldmanCheckFailure}
+		tlp.temp.abortTriggers = []ecdsautils.AbortTrigger{ecdsautils.FeldmanCheckFailure}
 	} else if msg.Type() == "KGRound3MessageAbortMode" && msg.IsBroadcast() && party.PartyID().Index == 0 {
 		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
 		r3msg := pMsg.Content().(*KGRound3MessageAbortMode)
@@ -451,7 +452,7 @@ keygen:
 			if handleMessage(t, msg, parties, updater, errCh) {
 				return
 			}
-		case _ = <-endCh:
+		case <-endCh:
 			assert.FailNow(t, "the end channel should not have returned")
 			break keygen
 		}

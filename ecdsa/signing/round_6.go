@@ -35,7 +35,6 @@ func (round *round6) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	errs := make(map[string]interface{})
 	pdlWSlackPfs := make(map[string]interface{})
 	bigRBarJs := make(map[string]interface{})
-	bigRBarJProducts := (*crypto.ECPoint)(nil)
 	BigRBarJ := make(map[string]*common.ECPoint, round.Params().PartyCount())
 	parameters.DoubleDictionary["errs"] = errs
 	parameters.DoubleDictionary["pdlWSlackPfs"] = pdlWSlackPfs
@@ -44,14 +43,14 @@ func (round *round6) Preprocess() (*tss.GenericParameters, *tss.Error) {
 	kI := new(big.Int).SetBytes(round.temp.KI)
 	bigR, _ := crypto.NewECPointFromProtobuf(round.temp.BigR)
 	bigRBarI := bigR.ScalarMult(kI)
-	bigRBarJProducts = bigRBarI
+	bigRBarJProducts := bigRBarI
 
 	parameters.Dictionary["bigRBarJProducts"] = bigRBarJProducts
 	parameters.Dictionary["BigRBarJ"] = BigRBarJ
 	return parameters, nil
 }
 
-func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round6)
 	i := round.PartyID().Index
 	j := Pj.Index
@@ -102,7 +101,7 @@ func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, P
 	return parameters, nil
 }
 
-func ProcessRound6PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
+func ProcessRound6PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round6)
 	j := Pj.Index
 	r1msg1 := (*msg).Content().(*SignRound1Message1)

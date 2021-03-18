@@ -8,7 +8,10 @@ package resharing
 
 import (
 	"errors"
+	"fmt"
 
+	"github.com/binance-chain/tss-lib/common"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -25,7 +28,55 @@ func (round *round5) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
+	abortMessages := false
+	culprits := make([]ecdsautils.AttributionOfBlame, 0)
+	culpritSet := make(map[*tss.PartyID]struct{})
+	for _, m := range round.temp.dgRound4Messages {
+		a, isAbort := m.Content().(*DGRound4Message).Content.(*DGRound4Message_Abort)
+		abortMessages = abortMessages || isAbort
+		if isAbort {
+			if round.IsOldCommittee() {
+				feldmanCheckFailureEvidences, plaintiffParty := a.Abort.UnmarshalFeldmanCheckFailureEvidence()
+				if i == plaintiffParty {
+					common.Logger.Debugf("party %v is the plaintiff and is excusing itself from the attribution of blame",
+						Pi)
+					continue
+				}
+
+				ecdsautils.FindFeldmanCulprits(Pi, feldmanCheckFailureEvidences, round.save.AuthenticationPKs,
+					round.Threshold(), round.NewParties().IDs(), round.OldParties().IDs(), plaintiffParty, &culprits, culpritSet)
+			}
+		}
+	}
+	if abortMessages {
+		if round.IsNewCommittee() {
+			return round.WrapError(fmt.Errorf("player %v (new committee) is aborting", Pi))
+		} else {
+			var feldmanErrorMap = ecdsautils.FeldmanErrorMap()
+			return ecdsautils.HandleMultiErrorVictimAndCulprit(culpritSet, culprits, round.OldParties().IDs(),
+				feldmanErrorMap, round.WrapMultiError)
+		}
+	}
+
 	if round.IsNewCommittee() {
+
+		for j, m := range round.temp.dgRound4Messages {
+			Pj := round.NewParties().IDs()[j]
+			zkProofxi, err := m.Content().(*DGRound4Message).UnmarshalXiProof()
+			if err != nil {
+				common.Logger.Error("party %v: error unmarshalling the xj ZK proof for party %v", Pi, Pj)
+				return round.WrapError(fmt.Errorf("party %v: error unmarshalling the xj ZK proof for party %v", Pi, Pj))
+			} else {
+				bigXj := round.temp.newBigXjs[j]
+				ok := zkProofxi.Verify(bigXj)
+				if !ok {
+					err2 := fmt.Errorf("error in the verification the xj ZK proof for party %v", Pj)
+					common.Logger.Error(err2)
+					return round.WrapError(err2, m.GetFrom())
+				}
+			}
+		}
+
 		// 21.
 		// for this P: SAVE data
 		round.save.BigXj = round.temp.newBigXjs

@@ -17,6 +17,7 @@ import (
 	cmts "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/dlnp"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -84,11 +85,11 @@ func (round *round1) Start() *tss.Error {
 
 	// Sign the Paillier PK
 	r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(preParams.AuthEcdsaPrivateKey),
-		HashPaillierKey(&preParams.PaillierSK.PublicKey))
+		ecdsautils.HashPaillierKey(&preParams.PaillierSK.PublicKey))
 	if err != nil {
 		return round.WrapError(errors.New("ecdsa signature for authentication failed"), Pi)
 	}
-	authPaillierSignaturei := NewECDSASignature(r, s)
+	authPaillierSignaturei := ecdsautils.NewECDSASignature(r, s)
 	round.save.LocalPreParams = *preParams
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
@@ -103,12 +104,7 @@ func (round *round1) Start() *tss.Error {
 		preParams.Q,
 		preParams.NTildei
 
-	randIntProofNSquareFreei := common.GetRandomPositiveInt(NTildei)
-
-	// Using Euler's totient function: phi(N)=phi(P)(Q)=(P-1)(Q-1)=2p2q
-	phiNTildei := new(big.Int).Mul(new(big.Int).Mul(big.NewInt(4), p), q)
-	bigM := new(big.Int).ModInverse(NTildei, phiNTildei)
-	proofNSquareFree := common.ModInt(NTildei).Exp(randIntProofNSquareFreei, bigM)
+	randIntProofNSquareFreei, proofNSquareFree := ecdsautils.ProofNSquareFree(NTildei, p, q)
 
 	dlnProof1 := dlnp.NewProof(h1i, h2i, alpha, p, q, NTildei)
 	dlnProof2 := dlnp.NewProof(h2i, h1i, beta, p, q, NTildei)
