@@ -32,6 +32,9 @@ func newRound1(params *tss.Parameters, save *LocalPartySaveData, temp *localTemp
 }
 
 func (round *round1) Start() *tss.Error {
+	if err := round.ValidateParams(); err != nil {
+		return round.WrapError(*err)
+	}
 	if round.started {
 		return round.WrapError(errors.New("round already started"))
 	}

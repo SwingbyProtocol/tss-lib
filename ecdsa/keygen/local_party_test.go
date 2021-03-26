@@ -44,10 +44,75 @@ func setUp(level string) {
 	}
 }
 
-func TestStartRound1Paillier(t *testing.T) {
-	setUp("debug")
+func handleMessage(t *testing.T, msg tss.Message, parties []*LocalParty, updater func(party tss.Party, msg tss.Message, errCh chan<- *tss.Error), errCh chan *tss.Error) bool {
+	dest := msg.GetTo()
+	if dest == nil { // broadcast!
+		for _, P := range parties {
+			if P.PartyID().Index == msg.GetFrom().Index {
+				continue
+			}
+			go updater(P, msg, errCh)
+		}
+	} else { // point-to-point!
+		if dest[0].Index == msg.GetFrom().Index {
+			t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
+			return true
+		}
+		go updater(parties[dest[0].Index], msg, errCh)
+	}
+	return false
+}
 
-	pIDs := tss.GenerateTestPartyIDs(1)
+func initTheParties(pIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, threshold int, fixtures []LocalPartySaveData, outCh chan tss.Message, endCh chan LocalPartySaveData, parties []*LocalParty, errCh chan *tss.Error) ([]*LocalParty, chan *tss.Error) {
+	// init the parties
+	for i := 0; i < len(pIDs); i++ {
+		var P *LocalParty
+		params := tss.NewParameters(p2pCtx, pIDs[i], len(pIDs), threshold)
+		if i < len(fixtures) {
+			P = NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*LocalParty)
+		} else {
+			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
+		}
+		parties = append(parties, P)
+		go func(P *LocalParty) {
+			if err := P.Start(); err != nil {
+				errCh <- err
+			}
+		}(P)
+	}
+	return parties, errCh
+}
+
+func tryWriteTestFixtureFile(t *testing.T, index int, data LocalPartySaveData) {
+	fixtureFileName := makeTestFixtureFilePath(index)
+
+	// fixture file does not already exist?
+	// if it does, we won't re-create it here
+	fi, err := os.Stat(fixtureFileName)
+	if !(err == nil && fi != nil && !fi.IsDir()) {
+		fd, err := os.OpenFile(fixtureFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			assert.NoErrorf(t, err, "unable to open fixture file %s for writing", fixtureFileName)
+		}
+		bz, err := json.Marshal(&data)
+		if err != nil {
+			t.Fatalf("unable to marshal save data for fixture file %s", fixtureFileName)
+		}
+		_, err = fd.Write(bz)
+		if err != nil {
+			t.Fatalf("unable to write to fixture file %s", fixtureFileName)
+		}
+		t.Logf("Saved a test fixture file for party %d: %s", index, fixtureFileName)
+	} else {
+		t.Logf("Fixture file already exists for party %d; not re-creating: %s", index, fixtureFileName)
+	}
+	//
+}
+
+func TestStartRound1Paillier(t *testing.T) {
+	setUp("info")
+
+	pIDs := tss.GenerateTestPartyIDs(2)
 	p2pCtx := tss.NewPeerContext(pIDs)
 	threshold := 1
 	params := tss.NewParameters(p2pCtx, pIDs[0], len(pIDs), threshold)
@@ -85,9 +150,9 @@ func TestStartRound1Paillier(t *testing.T) {
 }
 
 func TestFinishAndSaveH1H2(t *testing.T) {
-	setUp("debug")
+	setUp("info")
 
-	pIDs := tss.GenerateTestPartyIDs(1)
+	pIDs := tss.GenerateTestPartyIDs(2)
 	p2pCtx := tss.NewPeerContext(pIDs)
 	threshold := 1
 	params := tss.NewParameters(p2pCtx, pIDs[0], len(pIDs), threshold)
@@ -133,7 +198,7 @@ func TestFinishAndSaveH1H2(t *testing.T) {
 }
 
 func TestBadMessageCulprits(t *testing.T) {
-	setUp("debug")
+	setUp("info")
 
 	pIDs := tss.GenerateTestPartyIDs(2)
 	p2pCtx := tss.NewPeerContext(pIDs)
@@ -602,69 +667,4 @@ keygen:
 			}
 		}
 	}
-}
-
-func handleMessage(t *testing.T, msg tss.Message, parties []*LocalParty, updater func(party tss.Party, msg tss.Message, errCh chan<- *tss.Error), errCh chan *tss.Error) bool {
-	dest := msg.GetTo()
-	if dest == nil { // broadcast!
-		for _, P := range parties {
-			if P.PartyID().Index == msg.GetFrom().Index {
-				continue
-			}
-			go updater(P, msg, errCh)
-		}
-	} else { // point-to-point!
-		if dest[0].Index == msg.GetFrom().Index {
-			t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
-			return true
-		}
-		go updater(parties[dest[0].Index], msg, errCh)
-	}
-	return false
-}
-
-func initTheParties(pIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, threshold int, fixtures []LocalPartySaveData, outCh chan tss.Message, endCh chan LocalPartySaveData, parties []*LocalParty, errCh chan *tss.Error) ([]*LocalParty, chan *tss.Error) {
-	// init the parties
-	for i := 0; i < len(pIDs); i++ {
-		var P *LocalParty
-		params := tss.NewParameters(p2pCtx, pIDs[i], len(pIDs), threshold)
-		if i < len(fixtures) {
-			P = NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*LocalParty)
-		} else {
-			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
-		}
-		parties = append(parties, P)
-		go func(P *LocalParty) {
-			if err := P.Start(); err != nil {
-				errCh <- err
-			}
-		}(P)
-	}
-	return parties, errCh
-}
-
-func tryWriteTestFixtureFile(t *testing.T, index int, data LocalPartySaveData) {
-	fixtureFileName := makeTestFixtureFilePath(index)
-
-	// fixture file does not already exist?
-	// if it does, we won't re-create it here
-	fi, err := os.Stat(fixtureFileName)
-	if !(err == nil && fi != nil && !fi.IsDir()) {
-		fd, err := os.OpenFile(fixtureFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-		if err != nil {
-			assert.NoErrorf(t, err, "unable to open fixture file %s for writing", fixtureFileName)
-		}
-		bz, err := json.Marshal(&data)
-		if err != nil {
-			t.Fatalf("unable to marshal save data for fixture file %s", fixtureFileName)
-		}
-		_, err = fd.Write(bz)
-		if err != nil {
-			t.Fatalf("unable to write to fixture file %s", fixtureFileName)
-		}
-		t.Logf("Saved a test fixture file for party %d: %s", index, fixtureFileName)
-	} else {
-		t.Logf("Fixture file already exists for party %d; not re-creating: %s", index, fixtureFileName)
-	}
-	//
 }
