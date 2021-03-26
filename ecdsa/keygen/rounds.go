@@ -7,6 +7,8 @@
 package keygen
 
 import (
+	"errors"
+
 	"github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -51,6 +53,14 @@ var (
 
 func (round *base) Params() *tss.Parameters {
 	return round.Parameters
+}
+
+func (round *base) ValidateParams() *error {
+    if round.Threshold()>=round.PartyCount() {
+    	err := errors.New("t<n necessarily with the dishonest majority assumption")
+    	return &err
+    }
+	return nil
 }
 
 func (round *base) RoundNumber() int {
