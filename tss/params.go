@@ -20,6 +20,7 @@ type (
 		partyCount              int
 		threshold               int
 		safePrimeGenTimeout     time.Duration
+		queuePollTimeout        time.Duration
 		unsafeKGIgnoreH1H2Dupes bool
 	}
 
@@ -38,20 +39,30 @@ type (
 
 const (
 	defaultSafePrimeGenTimeout = 5 * time.Minute
+	defaultQueuePollTimeout    = 180 * time.Second
 )
 
 // Exported, used in `tss` client
-func NewParameters(ctx *PeerContext, partyID *PartyID, partyCount, threshold int, optionalSafePrimeGenTimeout ...time.Duration) *Parameters {
-	var safePrimeGenTimeout time.Duration
+func NewParameters(ctx *PeerContext, partyID *PartyID, partyCount, threshold int,
+	optionalQueuePollAndSafePrimeGenTimeouts ...time.Duration) *Parameters {
+	var safePrimeGenTimeout, queuePollTimeout time.Duration
 	if threshold >= partyCount {
 		panic(errors.New("NewParameters: t<n necessarily with the dishonest majority assumption"))
 	}
-	if 0 < len(optionalSafePrimeGenTimeout) {
-		if 1 < len(optionalSafePrimeGenTimeout) {
-			panic(errors.New("NewParameters: expected 0 or 1 item in `optionalSafePrimeGenTimeout`"))
+	if 0 < len(optionalQueuePollAndSafePrimeGenTimeouts) {
+		if 1 < len(optionalQueuePollAndSafePrimeGenTimeouts) {
+			if 2 < len(optionalQueuePollAndSafePrimeGenTimeouts) {
+				panic(errors.New("NewParameters: expected 0, 1 or 2 items in `optionalQueuePollAndSafePrimeGenTimeouts`"))
+			} else {
+				queuePollTimeout = optionalQueuePollAndSafePrimeGenTimeouts[0]
+				safePrimeGenTimeout = optionalQueuePollAndSafePrimeGenTimeouts[1]
+			}
+		} else {
+			queuePollTimeout = optionalQueuePollAndSafePrimeGenTimeouts[0]
+			safePrimeGenTimeout = defaultSafePrimeGenTimeout
 		}
-		safePrimeGenTimeout = optionalSafePrimeGenTimeout[0]
 	} else {
+		queuePollTimeout = defaultQueuePollTimeout
 		safePrimeGenTimeout = defaultSafePrimeGenTimeout
 	}
 	return &Parameters{
@@ -60,6 +71,7 @@ func NewParameters(ctx *PeerContext, partyID *PartyID, partyCount, threshold int
 		partyCount:          partyCount,
 		threshold:           threshold,
 		safePrimeGenTimeout: safePrimeGenTimeout,
+		queuePollTimeout:    queuePollTimeout,
 	}
 }
 
