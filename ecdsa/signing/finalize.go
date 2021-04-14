@@ -149,8 +149,10 @@ func FinalizeGetAndVerifyFinalSig(
 	}
 
 	// save the signature for final output
+	bitSizeInBytes := tss.EC().Params().BitSize / 8
 	signature := new(common.ECSignature)
-	signature.R, signature.S = r.Bytes(), s.Bytes()
+	signature.R = padToLengthBytesInPlace(r.Bytes(), bitSizeInBytes)
+	signature.S = padToLengthBytesInPlace(s.Bytes(), bitSizeInBytes)
 	signature.Signature = append(r.Bytes(), s.Bytes()...)
 	signature.SignatureRecovery = []byte{byte(recId)}
 	signature.M = msg.Bytes()
@@ -419,4 +421,14 @@ func (round *finalization) CanProcess(msg tss.ParsedMessage) bool {
 
 func (round *finalization) NextRound() tss.Round {
 	return nil // finished!
+}
+
+func padToLengthBytesInPlace(src []byte, length int) []byte {
+	oriLen := len(src)
+	if oriLen < length {
+		for i := 0; i < length-oriLen; i++ {
+			src = append([]byte{0}, src...)
+		}
+	}
+	return src
 }
