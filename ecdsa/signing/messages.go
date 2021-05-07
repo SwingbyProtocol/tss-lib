@@ -265,7 +265,7 @@ func NewSignRound5Message(
 		pfBzss = append(pfBzss, &item)
 	}
 	content := &SignRound5Message{
-		RI:             Ri.ToProtobufPoint(),
+		RI:              Ri.ToProtobufPoint(),
 		ProofPdlWSlacks: pfBzss,
 	}
 	msg := tss.NewMessageWrapper(meta, content)

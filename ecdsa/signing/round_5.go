@@ -50,8 +50,8 @@ func (round *round5) Postprocess(parameters *tss.GenericParameters) *tss.Error {
 	// ported from: https://git.io/Jf69a
 
 	pdlWSlackWitness := zkp.PDLwSlackWitness{
-		X:  kI,
-		R:  round.temp.rAKI,
+		X: kI,
+		R: round.temp.rAKI,
 	}
 
 	var pdlWSlackPfs []zkp.PDLwSlackProof

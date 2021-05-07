@@ -332,7 +332,7 @@ func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage
 	}
 	fakekI := new(big.Int).SetInt64(1)
 	fakeBigRBarI := bigR.ScalarMult(fakekI)
-    i := party.PartyID().Index
+	i := party.PartyID().Index
 	pdlWSlackPf, _ := r5msg.UnmarshalPDLwSlackProof(i)
 	savedOriginalProofs[i].ProofPdlWSlack, _ = pdlWSlackPf.Marshal()
 	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, nil)
@@ -480,8 +480,8 @@ func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.Parsed
 		NTilde:     round5.key.NTildej[i],
 	}
 	pdlWSlackWitness := zkp.PDLwSlackWitness{
-		X:  fakekI,
-		R:  rA,
+		X: fakekI,
+		R: rA,
 	}
 	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
 
