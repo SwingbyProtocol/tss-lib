@@ -50,6 +50,9 @@ type (
 
 		// the ECDSA public key
 		ECDSAPub *crypto.ECPoint // y
+
+		// The ReshareFlag is 0 before a reshare run or 1 after a run.
+		ReshareFlag int
 	}
 )
 
@@ -89,8 +92,11 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 	newData.LocalPreParams = sourceData.LocalPreParams
 	newData.LocalSecrets = sourceData.LocalSecrets
 	newData.ECDSAPub = sourceData.ECDSAPub
+	reshareCount := big.NewInt(int64(sourceData.ReshareFlag))
 	for j, id := range sortedIDs {
-		savedIdx, ok := keysToIndices[hex.EncodeToString(id.Key)]
+		idKey := new(big.Int).SetBytes(id.Key)
+		keyAndShift := new(big.Int).Add(idKey, reshareCount)
+		savedIdx, ok := keysToIndices[hex.EncodeToString(keyAndShift.Bytes())]
 		if !ok {
 			common.Logger.Warn("BuildLocalSaveDataSubset: unable to find a signer party in the local save data", id)
 		}
