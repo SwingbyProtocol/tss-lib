@@ -51,8 +51,8 @@ type (
 		// the ECDSA public key
 		ECDSAPub *crypto.ECPoint // y
 
-		// The ReshareFlag is 0 before a reshare run or 1 after a run.
-		ReshareFlag int
+		// The ReshareCount is 0 before a reshare run and increments after each run.
+		ReshareCount uint64
 	}
 )
 
@@ -92,7 +92,7 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 	newData.LocalPreParams = sourceData.LocalPreParams
 	newData.LocalSecrets = sourceData.LocalSecrets
 	newData.ECDSAPub = sourceData.ECDSAPub
-	reshareCount := big.NewInt(int64(sourceData.ReshareFlag))
+	reshareCount := big.NewInt(int64(sourceData.ReshareCount))
 	for j, id := range sortedIDs {
 		idKey := new(big.Int).SetBytes(id.Key)
 		keyAndShift := new(big.Int).Add(idKey, reshareCount)
