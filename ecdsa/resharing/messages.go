@@ -192,10 +192,11 @@ func NewDGRound2Message2(
 	authEcdsaPK *ecdsa.PublicKey,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
-		From:             from,
-		To:               to,
-		IsBroadcast:      true,
-		IsToOldCommittee: true,
+		From:                    from,
+		To:                      to,
+		IsBroadcast:             true,
+		IsToOldCommittee:        true,
+		IsToOldAndNewCommittees: false,
 	}
 	content := &DGRound2Message2{
 		AuthenticationEcdsaPublicKeyX: authEcdsaPK.X.Bytes(),
