@@ -275,7 +275,17 @@ func NewSignRound5Message(
 func (m *SignRound5Message) ValidateBasic() bool {
 	if m == nil ||
 		m.GetRI() == nil ||
-		!m.GetRI().ValidateBasic() {
+		!m.GetRI().ValidateBasic() || len(m.GetProofPdlWSlacks()) == 0 {
+		return false
+	}
+	foundProof := false
+	for _, p := range m.GetProofPdlWSlacks() {
+		if p != nil {
+			foundProof = true
+			break
+		}
+	}
+	if !foundProof {
 		return false
 	}
 	RI, err := m.UnmarshalRI()
