@@ -280,7 +280,7 @@ func (m *SignRound5Message) ValidateBasic() bool {
 	}
 	foundProof := false
 	for _, p := range m.GetProofPdlWSlacks() {
-		if p != nil {
+		if p != nil && common.NonEmptyMultiBytes(p.GetProofPdlWSlack()) {
 			foundProof = true
 			break
 		}
