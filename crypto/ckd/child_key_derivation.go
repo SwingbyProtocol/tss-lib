@@ -44,13 +44,13 @@ func isOdd(a *big.Int) bool {
 	return a.Bit(0) == 1
 }
 
-// PaddedAppend append src to dst, if less than size padding 0 at start
-func PaddedAppend(dst []byte, srcPaddedSize int, src []byte) []byte {
-	return append(dst, PaddedBytes(srcPaddedSize, src)...)
+// paddedAppend append src to dst, if less than size padding 0 at start
+func paddedAppend(dst []byte, srcPaddedSize int, src []byte) []byte {
+	return append(dst, paddedBytes(srcPaddedSize, src)...)
 }
 
-// PaddedBytes padding byte array to size length
-func PaddedBytes(size int, src []byte) []byte {
+// paddedBytes padding byte array to size length
+func paddedBytes(size int, src []byte) []byte {
 	offset := size - len(src)
 	tmp := src
 	if offset > 0 {
@@ -68,7 +68,7 @@ func SerializeCompressed(publicKeyX *big.Int, publicKeyY *big.Int) []byte {
 		format |= 0x1
 	}
 	b = append(b, format)
-	return PaddedAppend(b, 32, publicKeyX.Bytes())
+	return paddedAppend(b, 32, publicKeyX.Bytes())
 }
 
 func DeriveChildKeyFromHierarchy(indicesHierarchy []uint32, pk *ExtendedKey, mod *big.Int) (*big.Int, *ExtendedKey, error) {
