@@ -9,7 +9,6 @@ package tss
 import (
 	"fmt"
 
-	"github.com/binance-chain/tss-lib/common"
 	"github.com/golang/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
