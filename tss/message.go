@@ -9,8 +9,9 @@ package tss
 import (
 	"fmt"
 
+	"github.com/binance-chain/tss-lib/common"
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
@@ -81,7 +82,7 @@ var (
 // NewMessageWrapper constructs a MessageWrapper from routing metadata and content
 func NewMessageWrapper(routing MessageRouting, content MessageContent) *MessageWrapper {
 	// marshal the content to the ProtoBuf Any type
-	any, _ := ptypes.MarshalAny(content)
+	any, _ := anypb.New(proto.MessageV2(content))
 	// convert given PartyIDs to the wire format
 	var to []*MessageWrapper_PartyID
 	if routing.To != nil {

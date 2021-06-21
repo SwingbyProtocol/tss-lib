@@ -7,9 +7,6 @@
 package tss
 
 import (
-	"errors"
-
-	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
 	"google.golang.org/protobuf/proto"
 )
@@ -27,16 +24,14 @@ func ParseWireMessage(wireBytes []byte, from *PartyID, isBroadcast bool) (Parsed
 }
 
 func parseWrappedMessage(wire *MessageWrapper, from *PartyID) (ParsedMessage, error) {
-	var any ptypes.DynamicAny
 	meta := MessageRouting{
 		From:        from,
 		IsBroadcast: wire.IsBroadcast,
 	}
-	if err := ptypes.UnmarshalAny(wire.Message, &any); err != nil {
+	var err error
+	var m proto.Message
+	if m, err = wire.Message.UnmarshalNew(); err != nil {
 		return nil, err
 	}
-	if content, ok := any.Message.(MessageContent); ok {
-		return NewMessage(meta, content, wire), nil
-	}
-	return nil, errors.New("ParseWireMessage: the message contained unknown content")
+	return NewMessage(meta, m.(MessageContent), wire), nil
 }
