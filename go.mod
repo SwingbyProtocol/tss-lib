@@ -7,7 +7,7 @@ require (
 	github.com/agl/ed25519 v0.0.0-20200225211852-fd4d107ace12
 	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.0
-	github.com/golang/protobuf v1.4.2
+	github.com/golang/protobuf v1.5.0
 	github.com/hashicorp/go-multierror v1.1.0
 	github.com/ipfs/go-log v1.0.4
 	github.com/ipfs/go-log/v2 v2.1.1 // indirect
@@ -23,7 +23,7 @@ require (
 	golang.org/x/mod v0.3.0 // indirect
 	golang.org/x/text v0.3.0
 	golang.org/x/tools v0.0.0-20200616133436-c1934b75d054 // indirect
-	google.golang.org/protobuf v1.25.0
+	google.golang.org/protobuf v1.26.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776 // indirect
 	honnef.co/go/tools v0.0.1-2020.1.4 // indirect
