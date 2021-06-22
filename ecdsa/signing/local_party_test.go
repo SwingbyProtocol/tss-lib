@@ -324,6 +324,7 @@ func type4IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage) (*SignRound5Message, tss.MessageRouting, bool) {
 	r5msg := pMsg.Content().(*SignRound5Message)
 	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
+	savedOriginalProofs := r5msg.GetProofPdlWSlacks()
 	bigR, err := crypto.NewECPointFromProtobuf(round5.temp.BigR)
 	if err != nil {
 		common.Logger.Error(err)
@@ -331,10 +332,12 @@ func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage
 	}
 	fakekI := new(big.Int).SetInt64(1)
 	fakeBigRBarI := bigR.ScalarMult(fakekI)
-
-	proof, _ := r5msg.UnmarshalPDLwSlackProof()
-	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, proof)
+	i := party.PartyID().Index
+	pdlWSlackPf, _ := r5msg.UnmarshalPDLwSlackProof(i)
+	savedOriginalProofs[i].ProofPdlWSlack, _ = pdlWSlackPf.Marshal()
+	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, nil)
 	r5msg = round5Message.Content().(*SignRound5Message)
+	r5msg.ProofPdlWSlacks = savedOriginalProofs
 	meta := tss.MessageRouting{
 		From:        msg.GetFrom(),
 		To:          msg.GetTo(),
@@ -449,7 +452,10 @@ func type5IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage) (*SignRound5Message, tss.MessageRouting, bool) {
 	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
 
+	r5msg := pMsg.Content().(*SignRound5Message)
 	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
+	i := party.PartyID().Index
+	savedOriginalProofs := r5msg.GetProofPdlWSlacks()
 	fakekI := new(big.Int).SetInt64(1)
 	fakeBigRBarI := bigR.ScalarMult(fakekI)
 
@@ -465,30 +471,31 @@ func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.Parsed
 	// compute ZK proof of consistency between R_i and E_i(k_i)
 	// ported from: https://git.io/Jf69a
 	pdlWSlackStatement := zkp.PDLwSlackStatement{
-		PK:         paiPK,
+		N:          paiPK.N,
 		CipherText: cA,
 		Q:          fakeBigRBarI,
 		G:          bigR,
-		H1:         round5.key.H1j[type5failureFromParty],
-		H2:         round5.key.H2j[type5failureFromParty],
-		NTilde:     round5.key.NTildej[type5failureFromParty],
+		H1:         round5.key.H1j[i],
+		H2:         round5.key.H2j[i],
+		NTilde:     round5.key.NTildej[i],
 	}
 	pdlWSlackWitness := zkp.PDLwSlackWitness{
-		SK: round5.key.PaillierSK,
-		X:  fakekI,
-		R:  rA,
+		X: fakekI,
+		R: rA,
 	}
 	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
 
-	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, &pdlWSlackPf)
+	savedOriginalProofs[i].ProofPdlWSlack, _ = pdlWSlackPf.Marshal()
+	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, nil)
 
-	r5msg := round5Message.Content().(*SignRound5Message)
+	r5msg2 := round5Message.Content().(*SignRound5Message)
+	r5msg2.ProofPdlWSlacks = savedOriginalProofs
 	meta := tss.MessageRouting{
 		From:        msg.GetFrom(),
 		To:          msg.GetTo(),
 		IsBroadcast: true,
 	}
-	return r5msg, meta, true
+	return r5msg2, meta, true
 }
 
 // Test a type 5 abort. Use a custom updater to change one round 5 message.
@@ -550,4 +557,12 @@ signing:
 			assert.FailNow(t, "the end channel should not have returned data %v", data)
 		}
 	}
+}
+
+func TestFillTo32BytesInPlace(t *testing.T) {
+	s := big.NewInt(123456789)
+	normalizedS := padToLengthBytesInPlace(s.Bytes(), 32)
+	assert.True(t, big.NewInt(0).SetBytes(normalizedS).Cmp(s) == 0)
+	assert.Equal(t, 32, len(normalizedS))
+	assert.NotEqual(t, 32, len(s.Bytes()))
 }

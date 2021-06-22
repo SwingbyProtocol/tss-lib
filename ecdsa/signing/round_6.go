@@ -89,7 +89,7 @@ func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, P
 	}
 	// verify ZK proof of consistency between R_i and E_i(k_i)
 	// ported from: https://git.io/Jf69a
-	pdlWSlackPf, err := r5msg.UnmarshalPDLwSlackProof()
+	pdlWSlackPf, err := r5msg.UnmarshalPDLwSlackProof(i)
 	if err != nil {
 		parameters.DoubleDictionary["errs"][Pj.UniqueIDString()] = struct {
 			e error
@@ -104,19 +104,20 @@ func ProcessRound6PartI(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, P
 func ProcessRound6PartII(round_ tss.PreprocessingRound, msg *tss.ParsedMessage, Pj *tss.PartyID, parameters *tss.GenericParameters, mutex *sync.RWMutex) (*tss.GenericParameters, *tss.Error) {
 	round := round_.(*round6)
 	j := Pj.Index
+	i := round.PartyID().Index
 	r1msg1 := (*msg).Content().(*SignRound1Message1)
 	pdlWSlackPf := parameters.DoubleDictionary["pdlWSlackPfs"][Pj.UniqueIDString()].(*zkp.PDLwSlackProof)
 	bigRBarJ := parameters.DoubleDictionary["bigRBarJs"][Pj.UniqueIDString()].(*crypto.ECPoint)
 
 	bigR, _ := crypto.NewECPointFromProtobuf(round.temp.BigR)
 	pdlWSlackStatement := zkp.PDLwSlackStatement{
-		PK:         round.key.PaillierPKs[Pj.Index],
+		N:          round.key.PaillierPKs[Pj.Index].N,
 		CipherText: new(big.Int).SetBytes(r1msg1.GetC()),
 		Q:          bigRBarJ,
 		G:          bigR,
-		H1:         round.key.H1j[Pj.Index],
-		H2:         round.key.H2j[Pj.Index],
-		NTilde:     round.key.NTildej[Pj.Index], // maybe i
+		H1:         round.key.H1j[i],
+		H2:         round.key.H2j[i],
+		NTilde:     round.key.NTildej[i], // maybe i
 	}
 
 	if !pdlWSlackPf.Verify(pdlWSlackStatement) {

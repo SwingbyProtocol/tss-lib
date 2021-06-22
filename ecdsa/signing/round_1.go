@@ -143,6 +143,8 @@ func (round *round1) prepare() error {
 	xi, ks, bigXs := round.key.Xi, round.key.Ks, round.key.BigXj
 
 	// adding the key derivation delta to the xi's
+	// Since Σ λi,S = 1, parties can set their share to x′i = xi + Δ, which yields
+	// Σ λi,S · x′i = Σ λi,S · (xi + Δ) = Σ λi,S · xi + Σ λi,S · Δ = x + Δ.
 	mod := common.ModInt(tss.EC().Params().N)
 	xi = mod.Add(round.temp.keyDerivationDelta, xi)
 	round.key.Xi = xi
