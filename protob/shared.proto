@@ -38,6 +38,3 @@ message VSSShareWithAuthSigMessage {
     repeated bytes Dj = 8;
     bytes Cj = 9;
 }
-
-message VoidMessage {
-}
