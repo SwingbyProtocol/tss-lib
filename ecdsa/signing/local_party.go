@@ -202,9 +202,6 @@ func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroa
 	if err != nil {
 		return false, p.WrapError(err)
 	}
-	if msg.Type() == "VoidMessage" {
-		return true, nil
-	}
 	return p.ValidateAndStoreInQueues(msg)
 }
 
