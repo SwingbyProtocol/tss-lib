@@ -8,4 +8,4 @@ jobs:
       - name: check out
         uses: actions/checkout@v2
       - name: go fmt project
-        uses: Jerome1337/gofmt-action@v1.0.2
+        uses: Jerome1337/gofmt-action@v1.0.4
