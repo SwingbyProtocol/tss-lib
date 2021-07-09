@@ -53,6 +53,8 @@ type (
 
 		// The ReshareKeyOffset is 0 before a reshare run and is set to an epoch each reshare run.
 		ReshareKeyOffset uint64
+
+		MostRecentReshareEpoch int64
 	}
 )
 
