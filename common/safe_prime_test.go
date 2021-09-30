@@ -17,26 +17,26 @@ import (
 
 func Test_getSafePrime(t *testing.T) {
 	prime := new(big.Int).SetInt64(5)
-	sPrime := getSafePrime(prime)
+	sPrime := PrimeToSafePrime(prime)
 	assert.True(t, sPrime.ProbablyPrime(50))
 }
 
 func Test_getSafePrime_Bad(t *testing.T) {
 	prime := new(big.Int).SetInt64(12)
-	sPrime := getSafePrime(prime)
+	sPrime := PrimeToSafePrime(prime)
 	assert.False(t, sPrime.ProbablyPrime(50))
 }
 
 func Test_Validate(t *testing.T) {
 	prime := new(big.Int).SetInt64(5)
-	sPrime := getSafePrime(prime)
+	sPrime := PrimeToSafePrime(prime)
 	sgp := &GermainSafePrime{prime, sPrime}
 	assert.True(t, sgp.Validate())
 }
 
 func Test_Validate_Bad(t *testing.T) {
 	prime := new(big.Int).SetInt64(12)
-	sPrime := getSafePrime(prime)
+	sPrime := PrimeToSafePrime(prime)
 	sgp := &GermainSafePrime{prime, sPrime}
 	assert.False(t, sgp.Validate())
 }

@@ -39,17 +39,18 @@ func (sgp *GermainSafePrime) SafePrime() *big.Int {
 
 func (sgp *GermainSafePrime) Validate() bool {
 	return probablyPrime(sgp.q) &&
-		getSafePrime(sgp.q).Cmp(sgp.p) == 0 &&
+		PrimeToSafePrime(sgp.q).Cmp(sgp.p) == 0 &&
 		probablyPrime(sgp.p)
 }
 
 // ----- //
 
-func getSafePrime(p *big.Int) *big.Int {
-	i := new(big.Int)
-	i.Mul(p, two)
-	i.Add(i, one)
-	return i
+func PrimeToSafePrime(q *big.Int) *big.Int {
+	// p = 2q + 1
+	p := new(big.Int)
+	p.Mul(q, two)
+	p.Add(p, one)
+	return p
 }
 
 func probablyPrime(prime *big.Int) bool {

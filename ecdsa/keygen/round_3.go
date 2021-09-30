@@ -68,9 +68,7 @@ func (round *round3) Start() *tss.Error {
 	}
 
 	// Fig 5. Round 3.2 / Fig 6. Round 3.2
-	SP := new(big.Int).Add(new(big.Int).Lsh(round.save.P, 1), big.NewInt(1))
-	SQ := new(big.Int).Add(new(big.Int).Lsh(round.save.Q, 1), big.NewInt(1))
-	proofMod, err := zkpmod.NewProof(round.save.NTildei, SP, SQ)
+	proofMod, err := zkpmod.NewProof(round.save.NTildei, common.PrimeToSafePrime(round.save.P), common.PrimeToSafePrime(round.save.Q))
 	if err != nil {
 		return round.WrapError(errors.New("create proofmod failed"))
 	}
