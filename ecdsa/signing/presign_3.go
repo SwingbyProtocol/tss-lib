@@ -8,10 +8,12 @@ package signing
 
 import (
 	"errors"
+	"math/big"
 	"sync"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
+	zkpaffg "github.com/binance-chain/tss-lib/crypto/zkp/affg"
 	zkplogstar "github.com/binance-chain/tss-lib/crypto/zkp/logstar"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
@@ -174,14 +176,14 @@ func (round *presign3) Start() *tss.Error {
 	round.temp.ChiShareBetas = nil
 	round.temp.DeltaShareAlphas = nil
 	round.temp.ChiShareAlphas = nil
-	round.temp.r1msgG = nil
-	round.temp.r2msgDeltaD = nil
-	round.temp.r2msgDeltaF = nil
-	round.temp.r2msgChiD = nil
-	round.temp.r2msgChiF = nil
-	round.temp.r2msgDeltaProof = nil
-	round.temp.r2msgChiProof = nil
-	round.temp.r2msgProofLogstar = nil
+	round.temp.r1msgG = make([]*big.Int, round.PartyCount())
+	round.temp.r2msgDeltaD = make([]*big.Int, round.PartyCount())
+	round.temp.r2msgDeltaF = make([]*big.Int, round.PartyCount())
+	round.temp.r2msgChiD = make([]*big.Int, round.PartyCount())
+	round.temp.r2msgChiF = make([]*big.Int, round.PartyCount())
+	round.temp.r2msgDeltaProof = make([]*zkpaffg.ProofAffg, round.PartyCount())
+	round.temp.r2msgChiProof = make([]*zkpaffg.ProofAffg, round.PartyCount())
+	round.temp.r2msgProofLogstar = make([]*zkplogstar.ProofLogstar, round.PartyCount())
 
 	return nil
 }

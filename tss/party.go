@@ -188,24 +188,28 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
 	}
+	// lock the mutex. need this mtx unlock hook; L108 is recursive so cannot use defer
+	r := func(ok bool, err *Error) (bool, *Error) {
+		p.unlock()
+		return ok, err
+	}
 	p.lock() // data is written to P state below
-	defer p.unlock()
 	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
 	if p.round() != nil {
 		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(), msg.String())
 	}
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
-		return false, err
+		return r(false, err)
 	}
 	if p.round() != nil {
 		common.Logger.Debugf("party %s: %s round %d update", p.round().Params().PartyID(), task, p.round().RoundNumber())
 		if _, err := p.round().Update(); err != nil {
-			return false, err
+			return r(false, err)
 		}
 		if p.round().CanProceed() {
 			if p.advance(); p.round() != nil {
 				if err := p.round().Start(); err != nil {
-					return false, err
+					return r(false, err)
 				}
 				rndNum := p.round().RoundNumber()
 				common.Logger.Infof("party %s: %s round %d started", p.round().Params().PartyID(), task, rndNum)
@@ -213,7 +217,10 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 				// finished! the round implementation will have sent the data through the `end` channel.
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
 			}
+			p.unlock()                      // recursive so can't defer after return
+			return BaseUpdate(p, msg, task) // re-run round update or finish)
 		}
+		return r(true, nil)
 	}
-	return true, nil
+	return r(true, nil)
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
+	zkpenc "github.com/binance-chain/tss-lib/crypto/zkp/enc"
 	zkplogstar "github.com/binance-chain/tss-lib/crypto/zkp/logstar"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
@@ -43,7 +44,7 @@ func (round *presign2) Start() *tss.Error {
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
-			
+
 			Kj := round.temp.r1msgK[j]
 			proof := round.temp.r1msgProof[j]
 			ok := proof.Verify(round.EC(), round.key.PaillierPKs[j], round.key.NTildei, round.key.H1i, round.key.H2i, Kj)
@@ -107,18 +108,18 @@ func (round *presign2) Start() *tss.Error {
 			wgj.Add(1)
 			go func(j int, Pj *tss.PartyID) {
 				defer wgj.Done()
-				ProofLogstar, err := zkplogstar.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.G, BigGammaShare, g ,round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.GammaShare, round.temp.GNonce)
+				ProofLogstar, err := zkplogstar.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.G, BigGammaShare, g, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.GammaShare, round.temp.GNonce)
 				if err != nil {
 					errChs <- round.WrapError(errors.New("prooflogstar failed"))
 					return
 				}
 				ProofOut <- ProofLogstar
 			}(j, Pj)
-			
+
 			wgj.Wait()
 			DeltaMtA := <-DeltaOut
 			ChiMtA := <-ChiOut
-			ProofLogstar := <- ProofOut
+			ProofLogstar := <-ProofOut
 
 			r2msg := NewPreSignRound2Message(Pj, round.PartyID(), BigGammaShare, DeltaMtA.Dji, DeltaMtA.Fji, ChiMtA.Dji, ChiMtA.Fji, DeltaMtA.Proofji, ChiMtA.Proofji, ProofLogstar)
 			round.out <- r2msg
@@ -127,7 +128,7 @@ func (round *presign2) Start() *tss.Error {
 			round.temp.ChiShareBetas[j] = ChiMtA.Beta
 
 			round.temp.DeltaMtAF = DeltaMtA.Fji // for identification 6
-			round.temp.ChiMtAF = ChiMtA.Fji // for identification 6
+			round.temp.ChiMtAF = ChiMtA.Fji     // for identification 6
 		}(j, Pj)
 	}
 	wg.Wait()
@@ -140,7 +141,7 @@ func (round *presign2) Start() *tss.Error {
 	// retire unused variables
 	round.temp.G = nil
 	round.temp.GNonce = nil
-	round.temp.r1msgProof = nil
+	round.temp.r1msgProof = make([]*zkpenc.ProofEnc, round.PartyCount()) // GF TODO
 
 	return nil
 }

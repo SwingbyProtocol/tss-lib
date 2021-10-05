@@ -130,10 +130,11 @@ func NewDGRound2Message2(
 	from *tss.PartyID,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
-		From:             from,
-		To:               to,
-		IsBroadcast:      true,
-		IsToOldCommittee: true,
+		From:                    from,
+		To:                      to,
+		IsBroadcast:             true,
+		IsToOldCommittee:        true,
+		IsToOldAndNewCommittees: false,
 	}
 	content := &DGRound2Message2{}
 	msg := tss.NewMessageWrapper(meta, content)

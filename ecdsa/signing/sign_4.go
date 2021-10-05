@@ -8,10 +8,12 @@ package signing
 
 import (
 	"errors"
+	"math/big"
 	"sync"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
+	zkplogstar "github.com/binance-chain/tss-lib/crypto/zkp/logstar"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -99,10 +101,10 @@ func (round *sign4) Start() *tss.Error {
 	round.temp.Rx = Rx
 	round.temp.SigmaShare = SigmaShare
 	// retire unused variables
-	round.temp.r1msgK = nil
-	round.temp.r3msgBigDeltaShare = nil
-	round.temp.r3msgDeltaShare = nil
-	round.temp.r3msgProofLogstar = nil
+	round.temp.r1msgK = make([]*big.Int, round.PartyCount())
+	round.temp.r3msgBigDeltaShare = make([]*crypto.ECPoint, round.PartyCount())
+	round.temp.r3msgDeltaShare = make([]*big.Int, round.PartyCount())
+	round.temp.r3msgProofLogstar = make([]*zkplogstar.ProofLogstar, round.PartyCount())
 	
 	return nil
 }
