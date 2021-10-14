@@ -668,3 +668,88 @@ keygen:
 		}
 	}
 }
+
+func sharedPartyUpdaterCheckPaillierPKSize(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
+	// do not send a message from this party back to itself
+	if party.PartyID() == msg.GetFrom() {
+		return
+	}
+	bz, _, err := msg.WireBytes()
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+	pMsg, err := tss.ParseWireMessage(bz, msg.GetFrom(), msg.IsBroadcast())
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+
+	// Intercepting a round 1 message
+	if msg.Type() == "KGRound1Message" && msg.IsBroadcast() {
+		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
+		r1msg := pMsg.Content().(*KGRound1Message)
+		pk := r1msg.UnmarshalPaillierPK()
+		pk.N = big.NewInt(0).Rsh(pk.N, 13)
+		// Tainting the message
+		r1msg.PaillierN = pk.N.Bytes()
+		meta := tss.MessageRouting{
+			From:        msg.GetFrom(),
+			To:          msg.GetTo(),
+			IsBroadcast: true,
+		}
+		// repackaging the message
+		pMsg = tss.NewMessage(meta, r1msg, tss.NewMessageWrapper(meta, r1msg))
+	}
+
+	if _, err := party.Update(pMsg); err != nil {
+		errCh <- err
+	}
+}
+
+// Test when a malicious player set the Paillier modulus (PK) too small.
+func TestMaliciousPaillierPK(t *testing.T) {
+	setUp("info")
+
+	threshold := testThreshold
+	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
+	if err != nil {
+		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...",
+			err)
+		pIDs = tss.GenerateTestPartyIDs(testParticipants)
+	}
+
+	p2pCtx := tss.NewPeerContext(pIDs)
+	parties := make([]*LocalParty, 0, len(pIDs))
+
+	errCh := make(chan *tss.Error, len(pIDs))
+	outCh := make(chan tss.Message, len(pIDs))
+	endCh := make(chan LocalPartySaveData, len(pIDs))
+
+	updater := sharedPartyUpdaterCheckPaillierPKSize
+
+	parties, errCh = initTheParties(pIDs, p2pCtx, threshold, fixtures, outCh, endCh, parties, errCh)
+
+	// PHASE: keygen
+keygen:
+	for {
+		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
+		select {
+		case err := <-errCh:
+			// We expect an error
+			assert.Error(t, err, "should have thrown an error")
+			msg := err.Cause().Error()
+			assert.Truef(t, strings.Contains(msg, "the Paillier PK bit length is too small"),
+				"the error detected should have contained a message related to the Paillier PK bit length")
+			break keygen
+
+		case msg := <-outCh:
+			if handleMessage(t, msg, parties, updater, errCh) {
+				return
+			}
+		case <-endCh:
+			assert.FailNow(t, "the end channel should not have returned")
+			break keygen
+		}
+	}
+}
