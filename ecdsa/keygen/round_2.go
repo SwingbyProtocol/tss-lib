@@ -49,6 +49,10 @@ func (round *round2) Start() *tss.Error {
 			r1msg.UnmarshalAuthEcdsaPK(),
 			r1msg.UnmarshalAuthPaillierSignature()
 
+		if paillierPKj.N.BitLen() < paillierModulusLen-12 {
+			return round.WrapError(errors.New("the Paillier PK bit length is too small. It may have been"+
+				" maliciously set by the other party"), msg.GetFrom())
+		}
 		if H1j.Cmp(H2j) == 0 {
 			return round.WrapError(errors.New("h1j and h2j were equal for this party"), msg.GetFrom())
 		}
