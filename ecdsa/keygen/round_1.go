@@ -50,8 +50,11 @@ func (round *round1) Start() *tss.Error {
 	}
 	xi := new(big.Int).Set(shares[i].Share)
 	Xi := crypto.ScalarBaseMult(round.EC(), xi)
-	Ai, τ, _ := zkpsch.NewProofCommitment(Xi, xi)
-
+	Ai, τ, err := zkpsch.NewProofCommitment(Xi, xi)
+	if err != nil {
+		return round.WrapError(err, Pi)
+	}
+	
 	// Fig 6. Round 1.
 	var preParams *LocalPreParams
 	if round.save.LocalPreParams.Validate() {
