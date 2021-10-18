@@ -41,16 +41,25 @@ type (
 
 	localTempData struct {
 		// temp data (thrown away after keygen)
-		ui            *big.Int // used for tests
-		shares        vss.Shares
-		vs                 vss.Vs
+		ui     *big.Int // used for tests
+		ridi   *big.Int // used for tests
+		rid    *big.Int
+		shares vss.Shares
+		vs     vss.Vs
+		Ai     *crypto.ECPoint
+		Xi     *crypto.ECPoint
+		τ      *big.Int
 
-		r1msgVHashs        []*big.Int
-		r2msgVss           [][]*crypto.ECPoint
-		r3msgxij           []*big.Int
-		r3msgpfmod         []*zkpmod.ProofMod
-		r3msgpfprm         []*zkpprm.ProofPrm
-		r4msgpf            []*zkpsch.ProofSch
+		r1msgVHashs []*big.Int
+		r2msgVss    [][]*crypto.ECPoint
+		r2msgAj     []*crypto.ECPoint
+		r2msgXj     []*crypto.ECPoint
+		r2msgRidj   []*big.Int
+		r3msgxij    []*big.Int
+		r3msgpfmod  []*zkpmod.ProofMod
+		r3msgpfprm  []*zkpprm.ProofPrm
+		r3msgpfsch  []*zkpsch.ProofSch
+		r4msgpf     []*zkpsch.ProofSch
 	}
 )
 
@@ -84,9 +93,13 @@ func NewLocalParty(
 	// msgs data init
 	p.temp.r1msgVHashs = make([]*big.Int, partyCount)
 	p.temp.r2msgVss = make([][]*crypto.ECPoint, partyCount)
+	p.temp.r2msgAj = make([]*crypto.ECPoint, partyCount)
+	p.temp.r2msgXj = make([]*crypto.ECPoint, partyCount)
+	p.temp.r2msgRidj = make([]*big.Int, partyCount)
 	p.temp.r3msgxij = make([]*big.Int, partyCount)
 	p.temp.r3msgpfmod = make([]*zkpmod.ProofMod, partyCount)
 	p.temp.r3msgpfprm = make([]*zkpprm.ProofPrm, partyCount)
+	p.temp.r3msgpfsch = make([]*zkpsch.ProofSch, partyCount)
 	p.temp.r4msgpf = make([]*zkpsch.ProofSch, partyCount)
 	return p
 }
@@ -145,6 +158,9 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		p.data.H1j[fromPIdx], p.data.H2j[fromPIdx] = r2msg.UnmarshalH1(), r2msg.UnmarshalH2()
 		var err error
 		p.temp.r2msgVss[fromPIdx], err = r2msg.UnmarshalVs(p.params.EC())
+		p.temp.r2msgAj[fromPIdx], err = r2msg.UnmarshalAi(p.params.EC())
+		p.temp.r2msgXj[fromPIdx], err = r2msg.UnmarshalXi(p.params.EC())
+		p.temp.r2msgRidj[fromPIdx] = r2msg.UnmarshalRidi()
 		if err != nil {
 			return false, p.WrapError(err)
 		}
@@ -174,6 +190,11 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		// }
 		p.temp.r3msgpfprm[fromPIdx] = proofPrm
 
+		proofSch, err := r3msg.UnmarshalProofSch(p.params.EC())
+		if err != nil {
+			return false, p.WrapError(err, p.params.Parties().IDs()[fromPIdx])
+		}
+		p.temp.r3msgpfsch[fromPIdx] = proofSch
 	case *KGRound4Message:
 		//p.temp.kgRound4Messages[fromPIdx] = msg
 		r4msg := msg.Content().(*KGRound4Message)

@@ -8,7 +8,9 @@ package keygen
 
 import (
 	"errors"
+	"math/big"
 
+	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -26,7 +28,10 @@ func (round *round2) Start() *tss.Error {
 
 	// Fig 5. Round 2. / Fig 6. Round 2.
 	{
-		msg := NewKGRound2Message(round.PartyID(), round.temp.vs, &round.save.PaillierSK.PublicKey, round.save.NTildei, round.save.H1i, round.save.H2i)
+		xi := new(big.Int).Set(round.temp.shares[i].Share)
+		Xi := crypto.ScalarBaseMult(round.EC(), xi)
+		msg := NewKGRound2Message(round.PartyID(), round.temp.vs, &round.save.PaillierSK.PublicKey, round.save.NTildei,
+			round.save.H1i, round.save.H2i, round.temp.ridi, round.temp.Ai, Xi)
 		round.out <- msg
 	}
 

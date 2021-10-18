@@ -65,7 +65,8 @@ func NewKGRound2Message(
 	from *tss.PartyID,
 	vs vss.Vs,
 	paillierPK *paillier.PublicKey,
-	nTildeI, h1I, h2I *big.Int,
+	nTildeI, h1I, h2I, ridi *big.Int,
+	Ai, Xi *crypto.ECPoint,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
@@ -73,15 +74,20 @@ func NewKGRound2Message(
 	}
 	vs_flat, _ := crypto.FlattenECPoints(vs)
 	vsbzs := make([][]byte, len(vs_flat))
-	for i, item := range(vs_flat) {
+	for i, item := range vs_flat {
 		vsbzs[i] = item.Bytes()
 	}
+	aiBytes := Ai.Bytes()
+	XiBytes := Xi.Bytes()
 	content := &KGRound2Message{
-		Vs:         vsbzs[:],
-		PaillierN:  paillierPK.N.Bytes(),
-		NTilde:     nTildeI.Bytes(),
-		H1:         h1I.Bytes(),
-		H2:         h2I.Bytes(),
+		Vs:        vsbzs[:],
+		PaillierN: paillierPK.N.Bytes(),
+		NTilde:    nTildeI.Bytes(),
+		H1:        h1I.Bytes(),
+		H2:        h2I.Bytes(),
+		Ridi:      ridi.Bytes(),
+		Ai:        aiBytes[:],
+		Xi:        XiBytes[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -92,13 +98,15 @@ func (m *KGRound2Message) ValidateBasic() bool {
 		common.NonEmptyBytes(m.GetPaillierN()) &&
 		common.NonEmptyBytes(m.GetNTilde()) &&
 		common.NonEmptyBytes(m.GetH1()) &&
-		common.NonEmptyBytes(m.GetH2())
+		common.NonEmptyBytes(m.GetH2()) &&
+		common.NonEmptyMultiBytes(m.GetAi()) &&
+		common.NonEmptyMultiBytes(m.GetXi())
 }
 
 func (m *KGRound2Message) UnmarshalVs(ec elliptic.Curve) ([]*crypto.ECPoint, error) {
 	bzs := m.GetVs()
 	vs_points := make([]*big.Int, len(bzs))
-	for i, item := range(m.GetVs()) {
+	for i, item := range m.GetVs() {
 		vs_points[i] = new(big.Int).SetBytes(item)
 	}
 	vs, err := crypto.UnFlattenECPoints(ec, vs_points)
@@ -124,6 +132,18 @@ func (m *KGRound2Message) UnmarshalH2() *big.Int {
 	return new(big.Int).SetBytes(m.GetH2())
 }
 
+func (m *KGRound2Message) UnmarshalAi(ec elliptic.Curve) (*crypto.ECPoint, error) {
+	return crypto.NewECPointFromBytes(ec, m.GetAi())
+}
+
+func (m *KGRound2Message) UnmarshalXi(ec elliptic.Curve) (*crypto.ECPoint, error) {
+	return crypto.NewECPointFromBytes(ec, m.GetXi())
+}
+
+func (m *KGRound2Message) UnmarshalRidi() *big.Int {
+	return new(big.Int).SetBytes(m.GetRidi())
+}
+
 // ----- //
 
 func NewKGRound3Message(
@@ -131,6 +151,7 @@ func NewKGRound3Message(
 	share *big.Int,
 	proofMod *zkpmod.ProofMod,
 	proofPrm *zkpprm.ProofPrm,
+	ψi *zkpsch.ProofSch,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
@@ -139,10 +160,12 @@ func NewKGRound3Message(
 	}
 	proofModBzs := proofMod.Bytes()
 	proofPrmBzs := proofPrm.Bytes()
+	proofPsiiBzs := ψi.Bytes()
 	content := &KGRound3Message{
-		Share: share.Bytes(),
-		ModProof: proofModBzs[:],
-		PrmProof: proofPrmBzs[:],
+		Share:     share.Bytes(),
+		ModProof:  proofModBzs[:],
+		PrmProof:  proofPrmBzs[:],
+		PsiiProof: proofPsiiBzs[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -152,7 +175,8 @@ func (m *KGRound3Message) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyBytes(m.GetShare()) &&
 		common.NonEmptyMultiBytes(m.GetModProof(), zkpmod.ProofModBytesParts) &&
-		common.NonEmptyMultiBytes(m.GetPrmProof(), zkpprm.ProofPrmBytesParts)
+		common.NonEmptyMultiBytes(m.GetPrmProof(), zkpprm.ProofPrmBytesParts) &&
+		common.NonEmptyMultiBytes(m.GetPsiiProof(), zkpsch.ProofSchBytesParts)
 }
 
 func (m *KGRound3Message) UnmarshalShare() *big.Int {
@@ -165,6 +189,10 @@ func (m *KGRound3Message) UnmarshalProofMod() (*zkpmod.ProofMod, error) {
 
 func (m *KGRound3Message) UnmarshalProofPrm() (*zkpprm.ProofPrm, error) {
 	return zkpprm.NewProofFromBytes(m.GetPrmProof())
+}
+
+func (m *KGRound3Message) UnmarshalProofSch(ec elliptic.Curve) (*zkpsch.ProofSch, error) {
+	return zkpsch.NewProofFromBytes(ec, m.GetPsiiProof())
 }
 
 // ----- //

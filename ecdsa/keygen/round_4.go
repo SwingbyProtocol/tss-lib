@@ -48,6 +48,14 @@ func (round *round4) Start() *tss.Error {
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
+			if ok := round.temp.r3msgpfsch[j].A.Equals(round.temp.r2msgAj[j]); !ok { // Verify A^j = Aj
+				errChs <- round.WrapError(errors.New(" A^j != Aj"), Pj)
+			}
+		}(j, Pj)
+
+		wg.Add(1)
+		go func(j int, Pj *tss.PartyID) {
+			defer wg.Done()
 			if ok := round.temp.r3msgpfprm[j].Verify(round.save.H1j[j], round.save.H2j[j], round.save.NTildej[j]); !ok {
 				errChs <- round.WrapError(errors.New("proofPrm verify failed"), Pj)
 			}
@@ -130,6 +138,20 @@ func (round *round4) Start() *tss.Error {
 		}
 		if len(culprits) > 0 {
 			return round.WrapError(errors.New("adding Vc[c].ScalarMult(z) to BigXj resulted in a point not on the curve"), culprits...)
+		}
+	}
+	{
+		culprits := make([]*tss.PartyID, 0)
+		for j, Pj := range round.Parties().IDs() {
+			if j == i {
+				continue
+			}
+			if ok := round.temp.r3msgpfsch[j].VerifyWithAux(round.temp.r2msgXj[j], round.temp.rid); !ok {
+				culprits = append(culprits, Pj)
+			}
+		}
+		if len(culprits) > 0 {
+			return round.WrapError(errors.New("schnorr verification failed"), culprits...)
 		}
 	}
 

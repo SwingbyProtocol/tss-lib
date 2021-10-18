@@ -13,6 +13,7 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -38,6 +39,7 @@ func (round *round1) Start() *tss.Error {
 	round.ok[i] = true
 
 	// Fig 5. Round 1. private key part
+	ridi := common.GetRandomPositiveInt(round.EC().Params().N)
 	ui := common.GetRandomPositiveInt(round.EC().Params().N)
 
 	// Fig 5. Round 1. pub key part, vss shares
@@ -46,6 +48,9 @@ func (round *round1) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
+	xi := new(big.Int).Set(shares[i].Share)
+	Xi := crypto.ScalarBaseMult(round.EC(), xi)
+	Ai, τ, _ := zkpsch.NewProofCommitment(Xi, xi)
 
 	// Fig 6. Round 1.
 	var preParams *LocalPreParams
@@ -62,7 +67,7 @@ func (round *round1) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
-	listToHash = append(listToHash, preParams.PaillierSK.PublicKey.N, preParams.NTildei, preParams.H1i, preParams.H2i)
+	listToHash = append(listToHash, preParams.PaillierSK.PublicKey.N, ridi, Xi.X(), Xi.Y(), Ai.X(), Ai.Y(), preParams.NTildei, preParams.H1i, preParams.H2i)
 	VHash := common.SHA512_256i(listToHash...)
 	{
 		msg := NewKGRound1Message(round.PartyID(), VHash)
@@ -70,7 +75,10 @@ func (round *round1) Start() *tss.Error {
 	}
 
 	round.temp.vs = vs
+	round.temp.ridi = ridi
 	round.temp.ui = ui
+	round.temp.Ai = Ai
+	round.temp.τ = τ
 	round.save.Ks = ids
 	round.save.LocalPreParams = *preParams
 	round.save.NTildej[i] = preParams.NTildei

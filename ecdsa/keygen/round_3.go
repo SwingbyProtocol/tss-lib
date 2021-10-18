@@ -13,6 +13,7 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
+	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
 
 	zkpmod "github.com/binance-chain/tss-lib/crypto/zkp/mod"
@@ -38,11 +39,13 @@ func (round *round3) Start() *tss.Error {
 	// Fig 5. Round 3.1 / Fig 6. Round 3.1
 	toCmp := new(big.Int).Lsh(big.NewInt(1), 1024)
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*3)
+	rid := round.temp.ridi
 	wg := sync.WaitGroup{}
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue
 		}
+		rid = new(big.Int).Xor(rid, round.temp.r2msgRidj[j])
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
@@ -60,7 +63,10 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(err, Pj)
 				return
 			}
-			listToHash = append(listToHash, round.save.PaillierPKs[j].N, round.save.NTildej[j], round.save.H1j[j], round.save.H2j[j])
+			listToHash = append(listToHash, round.save.PaillierPKs[j].N, round.temp.r2msgRidj[j],
+				round.temp.r2msgXj[j].X(), round.temp.r2msgXj[j].Y(),
+				round.temp.r2msgAj[j].X(), round.temp.r2msgAj[j].Y(), round.save.NTildej[j], round.save.H1j[j],
+				round.save.H2j[j])
 			VjHash := common.SHA512_256i(listToHash...)
 			if VjHash.Cmp(round.temp.r1msgVHashs[j]) != 0 {
 				errChs <- round.WrapError(errors.New("verify hash failed"), Pj)
@@ -68,6 +74,7 @@ func (round *round3) Start() *tss.Error {
 			}
 		}(j, Pj)
 	}
+	round.temp.rid = rid
 	wg.Wait()
 	close(errChs)
 	culprits := make([]*tss.PartyID, 0)
@@ -88,6 +95,12 @@ func (round *round3) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(errors.New("create proofPrm failed"))
 	}
+	xi := new(big.Int).Set(round.temp.shares[i].Share)
+	Xi := crypto.ScalarBaseMult(round.EC(), xi)
+	ψi, err := zkpsch.NewProofWithAlpha(Xi, xi, round.temp.τ, rid)
+	if err != nil {
+		return round.WrapError(errors.New("create proofSch failed"))
+	}
 
 	errChs = make(chan *tss.Error, len(round.Parties().IDs())-1)
 	wg = sync.WaitGroup{}
@@ -104,8 +117,8 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(errors.New("encrypt error"), Pi)
 				return
 			}
-			
-			r3msg := NewKGRound3Message(Pj, round.PartyID(), Cij, proofMod, proofPrm)
+
+			r3msg := NewKGRound3Message(Pj, round.PartyID(), Cij, proofMod, proofPrm, ψi)
 			round.out <- r3msg
 		}(j, Pj)
 	}

@@ -24,6 +24,9 @@ message KGRound2Message {
     bytes n_tilde = 3;
     bytes h1 = 4;
     bytes h2 = 5;
+    bytes ridi = 6;
+    repeated bytes Ai = 7;
+    repeated bytes Xi = 8;
 }
 
 /*
@@ -33,6 +36,7 @@ message KGRound3Message {
     bytes share = 1;
     repeated bytes mod_proof = 2;
     repeated bytes prm_proof = 3;
+    repeated bytes psii_proof = 4;
 }
 
 /*
