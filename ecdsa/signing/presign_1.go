@@ -61,13 +61,11 @@ func (round *presign1) Start() *tss.Error {
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
-
 			proof, err := zkpenc.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, K, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], KShare, KNonce)
 			if err != nil {
-				errChs <- round.WrapError(fmt.Errorf("ProofEnc failed: %v", err))
+				errChs <- round.WrapError(fmt.Errorf("ProofEnc failed: %v", err), Pj)
 				return
 			}
-
 			r1msg := NewPreSignRound1Message(Pj, round.PartyID(), K, G, proof)
 			round.out <- r1msg
 		}(j, Pj)
@@ -91,16 +89,6 @@ func (round *presign1) Start() *tss.Error {
 }
 
 func (round *presign1) Update() (bool, *tss.Error) {
-	// for j, msg := range round.temp.presignRound1Messages {
-	// 	if round.ok[j] {
-	// 		continue
-	// 	}
-	// 	if msg == nil || !round.CanAccept(msg) {
-	// 		return false, nil
-	// 	}
-	// 	round.ok[j] = true
-	// }
-	// return true, nil
 	for j, msg := range round.temp.r1msgK {
 		if round.ok[j] {
 			continue

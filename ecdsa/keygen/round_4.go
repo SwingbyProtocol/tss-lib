@@ -64,7 +64,6 @@ func (round *round4) Start() *tss.Error {
 			if ok := share.Verify(round.EC(), round.Threshold(), round.temp.r2msgVss[j]); !ok {
 				errChs <- round.WrapError(errors.New("vss verify failed"), Pj)
 			}
-
 		}(j, Pj)
 	}
 	wg.Wait()

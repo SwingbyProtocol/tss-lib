@@ -50,7 +50,6 @@ func (round *presign2) Start() *tss.Error {
 			ok := proof.Verify(round.EC(), round.key.PaillierPKs[j], round.key.NTildei, round.key.H1i, round.key.H2i, Kj)
 			if !ok {
 				errChs <- round.WrapError(errors.New("round2: proofenc verify failed"), Pj)
-				return
 			}
 		}(j, Pj)
 	}
@@ -88,7 +87,7 @@ func (round *presign2) Start() *tss.Error {
 				defer wgj.Done()
 				DeltaMtA, err := NewMtA(round.EC(), Kj, round.temp.GammaShare, BigGammaShare, round.key.PaillierPKs[j], &round.key.PaillierSK.PublicKey, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j])
 				if err != nil {
-					errChs <- round.WrapError(errors.New("MtADelta failed"))
+					errChs <- round.WrapError(errors.New("MtADelta failed"), Pj)
 					return
 				}
 				DeltaOut <- DeltaMtA
@@ -99,7 +98,7 @@ func (round *presign2) Start() *tss.Error {
 				defer wgj.Done()
 				ChiMtA, err := NewMtA(round.EC(), Kj, round.temp.w, round.temp.BigWs[i], round.key.PaillierPKs[j], &round.key.PaillierSK.PublicKey, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j])
 				if err != nil {
-					errChs <- round.WrapError(errors.New("MtAChi failed"))
+					errChs <- round.WrapError(errors.New("MtAChi failed"), Pj)
 					return
 				}
 				ChiOut <- ChiMtA
@@ -110,7 +109,7 @@ func (round *presign2) Start() *tss.Error {
 				defer wgj.Done()
 				ProofLogstar, err := zkplogstar.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.G, BigGammaShare, g, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.GammaShare, round.temp.GNonce)
 				if err != nil {
-					errChs <- round.WrapError(errors.New("prooflogstar failed"))
+					errChs <- round.WrapError(errors.New("prooflogstar failed"), Pj)
 					return
 				}
 				ProofOut <- ProofLogstar
