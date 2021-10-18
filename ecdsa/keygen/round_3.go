@@ -19,6 +19,10 @@ import (
 	zkpprm "github.com/binance-chain/tss-lib/crypto/zkp/prm"
 )
 
+const (
+	paillierModulusLen = 2048
+)
+
 func (round *round3) Start() *tss.Error {
 	if round.started {
 		return round.WrapError(errors.New("round already started"))
@@ -43,17 +47,24 @@ func (round *round3) Start() *tss.Error {
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
 
+			if round.save.PaillierPKs[j].N.BitLen() < paillierModulusLen {
+				errChs <- round.WrapError(errors.New("paillier modulus too small"), Pj)
+				return
+			}
 			if round.save.NTildej[j].Cmp(toCmp) < 0 {
 				errChs <- round.WrapError(errors.New("paillier-blum modulus too small"), Pj)
+				return
 			}
 			listToHash, err := crypto.FlattenECPoints(round.temp.r2msgVss[j])
 			if err != nil {
 				errChs <- round.WrapError(err, Pj)
+				return
 			}
 			listToHash = append(listToHash, round.save.PaillierPKs[j].N, round.save.NTildej[j], round.save.H1j[j], round.save.H2j[j])
 			VjHash := common.SHA512_256i(listToHash...)
 			if VjHash.Cmp(round.temp.r1msgVHashs[j]) != 0 {
 				errChs <- round.WrapError(errors.New("verify hash failed"), Pj)
+				return
 			}
 		}(j, Pj)
 	}
@@ -91,6 +102,7 @@ func (round *round3) Start() *tss.Error {
 			Cij, err := round.save.PaillierPKs[j].Encrypt(round.temp.shares[j].Share)
 			if err != nil {
 				errChs <- round.WrapError(errors.New("encrypt error"), Pi)
+				return
 			}
 			
 			r3msg := NewKGRound3Message(Pj, round.PartyID(), Cij, proofMod, proofPrm)
