@@ -43,7 +43,7 @@ func (round *presign3) Start() *tss.Error {
 		if j == i {
 			continue
 		}
-		BigGammaSharej := round.temp.r2msgBigGammaShare[j]
+		Γj := round.temp.r2msgBigGammaShare[j]
 
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
@@ -51,7 +51,7 @@ func (round *presign3) Start() *tss.Error {
 			DeltaD := round.temp.r2msgDeltaD[j]
 			DeltaF := round.temp.r2msgDeltaF[j]
 			proofAffgDelta := round.temp.r2msgDeltaProof[j]
-			ok := proofAffgDelta.Verify(round.EC(), &round.key.PaillierSK.PublicKey, round.key.PaillierPKs[j], round.key.NTildei, round.key.H1i, round.key.H2i, round.temp.K, DeltaD, DeltaF, BigGammaSharej)
+			ok := proofAffgDelta.Verify(round.EC(), &round.key.PaillierSK.PublicKey, round.key.PaillierPKs[j], round.key.NTildei, round.key.H1i, round.key.H2i, round.temp.K, DeltaD, DeltaF, Γj)
 			if !ok {
 				errChs <- round.WrapError(errors.New("failed to verify affg delta"))
 				return
@@ -86,9 +86,9 @@ func (round *presign3) Start() *tss.Error {
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
-			proofLogstar := round.temp.r2msgProofLogstar[j]
+			ψPrimeij := round.temp.r2msgProofLogstar[j]
 			Gj := round.temp.r1msgG[j]
-			ok := proofLogstar.Verify(round.EC(), round.key.PaillierPKs[j], Gj, BigGammaSharej, g, round.key.NTildei, round.key.H1i, round.key.H2i)
+			ok := ψPrimeij.Verify(round.EC(), round.key.PaillierPKs[j], Gj, Γj, g, round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
 				errChs <- round.WrapError(errors.New("failed to verify logstar"))
 				return
@@ -106,32 +106,32 @@ func (round *presign3) Start() *tss.Error {
 	}
 
 	// Fig 7. Round 3.2 accumulate results from MtA
-	BigGamma := round.temp.BigGammaShare
+	Γ := round.temp.Γi
 	for j := range round.Parties().IDs() {
 		if j == i {
 			continue
 		}
 		BigGammaShare := round.temp.r2msgBigGammaShare[j]
 		var err error
-		BigGamma, err = BigGamma.Add(BigGammaShare)
+		Γ, err = Γ.Add(BigGammaShare)
 		if err != nil {
-			return round.WrapError(errors.New("round3: failed to collect BigGamma"))
+			return round.WrapError(errors.New("round3: failed to collect Γ"))
 		}
 	}
-	BigDeltaShare := BigGamma.ScalarMult(round.temp.KShare)
+	Δi := Γ.ScalarMult(round.temp.ki)
 
 	modN := common.ModInt(round.EC().Params().N)
-	DeltaShare := modN.Mul(round.temp.KShare, round.temp.GammaShare)
-	ChiShare := modN.Mul(round.temp.KShare, round.temp.w)
+	𝛿i := modN.Mul(round.temp.ki, round.temp.𝛾i)
+	𝜒i := modN.Mul(round.temp.ki, round.temp.w)
 	for j := range round.Parties().IDs() {
 		if j == i {
 			continue
 		}
-		DeltaShare = modN.Add(DeltaShare, round.temp.DeltaShareAlphas[j])
-		DeltaShare = modN.Add(DeltaShare, round.temp.DeltaShareBetas[j])
+		𝛿i = modN.Add(𝛿i, round.temp.DeltaShareAlphas[j])
+		𝛿i = modN.Add(𝛿i, round.temp.DeltaShareBetas[j])
 
-		ChiShare = modN.Add(ChiShare, round.temp.ChiShareAlphas[j])
-		ChiShare = modN.Add(ChiShare, round.temp.ChiShareBetas[j])
+		𝜒i = modN.Add(𝜒i, round.temp.ChiShareAlphas[j])
+		𝜒i = modN.Add(𝜒i, round.temp.ChiShareBetas[j])
 	}
 
 	errChs = make(chan *tss.Error, len(round.Parties().IDs())-1)
@@ -144,15 +144,15 @@ func (round *presign3) Start() *tss.Error {
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
-			ProofLogstar, err := zkplogstar.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.K, BigDeltaShare, BigGamma, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.KShare, round.temp.KNonce)
+			ψDoublePrimeji, err := zkplogstar.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.K, Δi, Γ, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.ki, round.temp.𝜌i)
 			if err != nil {
 				errChs <- round.WrapError(errors.New("proof generation failed"))
 			}
-			ProofOut <- ProofLogstar
+			ProofOut <- ψDoublePrimeji
 		}(j, Pj)
 
-		ProofLogstar := <-ProofOut
-		r3msg := NewPreSignRound3Message(Pj, round.PartyID(), DeltaShare, BigDeltaShare, ProofLogstar)
+		ψDoublePrimeji := <-ProofOut
+		r3msg := NewPreSignRound3Message(Pj, round.PartyID(), 𝛿i, Δi, ψDoublePrimeji)
 		round.out <- r3msg
 	}
 	wg.Wait()
@@ -161,17 +161,17 @@ func (round *presign3) Start() *tss.Error {
 		return err
 	}
 
-	round.temp.DeltaShare = DeltaShare
-	round.temp.ChiShare = ChiShare
-	round.temp.BigDeltaShare = BigDeltaShare
-	round.temp.BigGamma = BigGamma
+	round.temp.𝛿i = 𝛿i
+	round.temp.𝜒i = 𝜒i
+	round.temp.Δi = Δi
+	round.temp.Γ = Γ
 	// retire unused variables
 	round.temp.w = nil
 	round.temp.BigWs = nil
-	round.temp.GammaShare = nil
-	round.temp.BigGammaShare = nil
+	round.temp.𝛾i = nil
+	round.temp.Γi = nil
 	round.temp.K = nil
-	round.temp.KNonce = nil
+	round.temp.𝜌i = nil
 	round.temp.DeltaShareBetas = nil
 	round.temp.ChiShareBetas = nil
 	round.temp.DeltaShareAlphas = nil

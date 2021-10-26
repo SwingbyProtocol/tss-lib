@@ -40,13 +40,13 @@ func (round *presign1) Start() *tss.Error {
 	round.ok[i] = true
 
 	// Fig 7. Round 1. sample k and gamma
-	KShare := common.GetRandomPositiveInt(round.EC().Params().N)
-	GammaShare := common.GetRandomPositiveInt(round.EC().Params().N)
-	K, KNonce, err := round.key.PaillierSK.EncryptAndReturnRandomness(KShare)
+	ki := common.GetRandomPositiveInt(round.EC().Params().N)
+	𝛾i := common.GetRandomPositiveInt(round.EC().Params().N)
+	Ki, 𝜌i, err := round.key.PaillierSK.EncryptAndReturnRandomness(ki)
 	if err != nil {
 		return round.WrapError(fmt.Errorf("paillier encryption failed"))
 	}
-	G, GNonce, err := round.key.PaillierSK.EncryptAndReturnRandomness(GammaShare)
+	Gi, 𝜈i, err := round.key.PaillierSK.EncryptAndReturnRandomness(𝛾i)
 	if err != nil {
 		return round.WrapError(fmt.Errorf("paillier encryption failed"))
 	}
@@ -61,12 +61,12 @@ func (round *presign1) Start() *tss.Error {
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
-			proof, err := zkpenc.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, K, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], KShare, KNonce)
+			proof, err := zkpenc.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, Ki, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], ki, 𝜌i)
 			if err != nil {
 				errChs <- round.WrapError(fmt.Errorf("ProofEnc failed: %v", err), Pj)
 				return
 			}
-			r1msg := NewPreSignRound1Message(Pj, round.PartyID(), K, G, proof)
+			r1msg := NewPreSignRound1Message(Pj, round.PartyID(), Ki, Gi, proof)
 			round.out <- r1msg
 		}(j, Pj)
 	}
@@ -76,15 +76,15 @@ func (round *presign1) Start() *tss.Error {
 		return err
 	}
 
-	round.temp.KShare = KShare
-	round.temp.GammaShare = GammaShare
-	round.temp.G = G
-	round.temp.K = K
-	round.temp.KNonce = KNonce
-	round.temp.GNonce = GNonce
+	round.temp.ki = ki
+	round.temp.𝛾i = 𝛾i
+	round.temp.G = Gi
+	round.temp.K = Ki
+	round.temp.𝜌i = 𝜌i
+	round.temp.𝜈i = 𝜈i
 	// retire unused variables
 	round.temp.keyDerivationDelta = nil
-	
+
 	return nil
 }
 

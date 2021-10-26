@@ -41,18 +41,18 @@ func NewPreSignRound1Message(
 	to, from *tss.PartyID,
 	K *big.Int,
 	G *big.Int,
-	EncProof *zkpenc.ProofEnc,
+	𝜓0ji *zkpenc.ProofEnc,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
 	}
-	pfBz := EncProof.Bytes()
+	pfBz := 𝜓0ji.Bytes()
 	content := &PreSignRound1Message{
-		K:				 K.Bytes(),
-		G:               G.Bytes(),
-		EncProof: 		 pfBz[:],
+		K:        K.Bytes(),
+		G:        G.Bytes(),
+		EncProof: pfBz[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -73,7 +73,7 @@ func (m *PreSignRound1Message) UnmarshalG() *big.Int {
 	return new(big.Int).SetBytes(m.GetG())
 }
 
-func (m *PreSignRound1Message) UnmarshalEncProof() (*zkpenc.ProofEnc, error) {
+func (m *PreSignRound1Message) Unmarshal𝜓0ij() (*zkpenc.ProofEnc, error) {
 	return zkpenc.NewProofFromBytes(m.GetEncProof())
 }
 
@@ -81,26 +81,26 @@ func (m *PreSignRound1Message) UnmarshalEncProof() (*zkpenc.ProofEnc, error) {
 
 func NewPreSignRound2Message(
 	to, from *tss.PartyID,
-	BigGammaShare *crypto.ECPoint,
+	Γi *crypto.ECPoint,
 	DjiDelta *big.Int,
 	FjiDelta *big.Int,
 	DjiChi *big.Int,
 	FjiChi *big.Int,
 	AffgProofDelta *zkpaffg.ProofAffg,
 	AffgProofChi *zkpaffg.ProofAffg,
-	LogstarProof *zkplogstar.ProofLogstar,
+	ψPrimeji *zkplogstar.ProofLogstar,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
 	}
-	BigGammaBytes := BigGammaShare.Bytes()
+	BigGammaBytes := Γi.Bytes()
 	AffgDeltaBz := AffgProofDelta.Bytes()
 	AffgChiBz := AffgProofChi.Bytes()
-	LogstarBz := LogstarProof.Bytes()
+	LogstarBz := ψPrimeji.Bytes()
 	content := &PreSignRound2Message{
-		BigGammaShare: 	BigGammaBytes[:],
+		BigGammaShare:  BigGammaBytes[:],
 		DjiDelta:       DjiDelta.Bytes(),
 		FjiDelta:       FjiDelta.Bytes(),
 		DjiChi:         DjiChi.Bytes(),
@@ -173,9 +173,9 @@ func NewPreSignRound3Message(
 	BigDeltaShareBzs := BigDeltaShare.Bytes()
 	ProofBz := ProofLogstar.Bytes()
 	content := &PreSignRound3Message{
-		DeltaShare: DeltaShare.Bytes(),
+		DeltaShare:    DeltaShare.Bytes(),
 		BigDeltaShare: BigDeltaShareBzs[:],
-		ProofLogstar: ProofBz[:],
+		ProofLogstar:  ProofBz[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -275,7 +275,6 @@ func (m *IdentificationRound6Message) UnmarshalProofMul() (*zkpmul.ProofMul, err
 func (m *IdentificationRound6Message) UnmarshalProofDec() (*zkpdec.ProofDec, error) {
 	return zkpdec.NewProofFromBytes(m.GetDecProof())
 }
-
 
 // ----- //
 

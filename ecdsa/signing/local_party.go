@@ -37,8 +37,8 @@ type (
 		data common.SignatureData
 
 		// outbound messaging
-		out chan<- tss.Message
-		end chan<- common.SignatureData
+		out         chan<- tss.Message
+		end         chan<- common.SignatureData
 		startRndNum int
 	}
 
@@ -52,59 +52,59 @@ type (
 	localTempData struct {
 		// localMessageStore
 		// temp data (thrown away after sign) / round 1
-		w                   *big.Int
-		BigWs               []*crypto.ECPoint
-		KShare              *big.Int
-		
-		BigGammaShare       *crypto.ECPoint
-		K                   *big.Int
-		G                   *big.Int
-		KNonce              *big.Int
-		GNonce              *big.Int
-		keyDerivationDelta  *big.Int
+		w     *big.Int
+		BigWs []*crypto.ECPoint
+		ki    *big.Int
+
+		Γi                 *crypto.ECPoint
+		K                  *big.Int
+		G                  *big.Int
+		𝜌i                 *big.Int
+		𝜈i                 *big.Int
+		keyDerivationDelta *big.Int
 
 		// round 2
-		GammaShare          *big.Int
-		DeltaShareBetas     []*big.Int
-		ChiShareBetas       []*big.Int
-		DeltaMtAF           *big.Int
-		ChiMtAF             *big.Int
+		𝛾i              *big.Int
+		DeltaShareBetas []*big.Int
+		ChiShareBetas   []*big.Int
+		DeltaMtAF       *big.Int
+		ChiMtAF         *big.Int
 
 		// round 3
-		BigGamma            *crypto.ECPoint
-		DeltaShareAlphas    []*big.Int
-		ChiShareAlphas      []*big.Int
-		DeltaShare          *big.Int
-		ChiShare            *big.Int
-		BigDeltaShare       *crypto.ECPoint
+		Γ                *crypto.ECPoint
+		DeltaShareAlphas []*big.Int
+		ChiShareAlphas   []*big.Int
+		𝛿i               *big.Int
+		𝜒i               *big.Int
+		Δi               *crypto.ECPoint
 
 		// round 4
-		m                   *big.Int
-		BigR                *crypto.ECPoint
-		Rx                  *big.Int
-		SigmaShare          *big.Int
+		m          *big.Int
+		BigR       *crypto.ECPoint
+		Rx         *big.Int
+		SigmaShare *big.Int
 
 		// msg store
-		r1msgG              []*big.Int
-		r1msgK              []*big.Int
-		r1msgProof          []*zkpenc.ProofEnc
-		r2msgBigGammaShare  []*crypto.ECPoint
-		r2msgDeltaD         []*big.Int
-		r2msgDeltaF         []*big.Int
-		r2msgDeltaProof     []*zkpaffg.ProofAffg
-		r2msgChiD           []*big.Int
-		r2msgChiF           []*big.Int
-		r2msgChiProof       []*zkpaffg.ProofAffg
-		r2msgProofLogstar   []*zkplogstar.ProofLogstar
-		r3msgDeltaShare     []*big.Int
-		r3msgBigDeltaShare  []*crypto.ECPoint
-		r3msgProofLogstar   []*zkplogstar.ProofLogstar
-		r4msgSigmaShare     []*big.Int
+		r1msgG             []*big.Int
+		r1msgK             []*big.Int
+		r1msg𝜓0ij          []*zkpenc.ProofEnc
+		r2msgBigGammaShare []*crypto.ECPoint
+		r2msgDeltaD        []*big.Int
+		r2msgDeltaF        []*big.Int
+		r2msgDeltaProof    []*zkpaffg.ProofAffg
+		r2msgChiD          []*big.Int
+		r2msgChiF          []*big.Int
+		r2msgChiProof      []*zkpaffg.ProofAffg
+		r2msgProofLogstar  []*zkplogstar.ProofLogstar
+		r3msgDeltaShare    []*big.Int
+		r3msgBigDeltaShare []*crypto.ECPoint
+		r3msgProofLogstar  []*zkplogstar.ProofLogstar
+		r4msgSigmaShare    []*big.Int
 		// for identification
-		r6msgH              []*big.Int
-		r6msgProofMul       []*zkpmul.ProofMul
-		r6msgDeltaShareEnc  []*big.Int
-		r6msgProofDec       []*zkpdec.ProofDec
+		r6msgH             []*big.Int
+		r6msgProofMul      []*zkpmul.ProofMul
+		r6msgDeltaShareEnc []*big.Int
+		r6msgProofDec      []*zkpdec.ProofDec
 	}
 )
 
@@ -148,7 +148,7 @@ func NewLocalParty(
 	// temp message data init
 	p.temp.r1msgG = make([]*big.Int, partyCount)
 	p.temp.r1msgK = make([]*big.Int, partyCount)
-	p.temp.r1msgProof = make([]*zkpenc.ProofEnc, partyCount)
+	p.temp.r1msg𝜓0ij = make([]*zkpenc.ProofEnc, partyCount)
 	p.temp.r2msgBigGammaShare = make([]*crypto.ECPoint, partyCount)
 	p.temp.r2msgDeltaD = make([]*big.Int, partyCount)
 	p.temp.r2msgDeltaF = make([]*big.Int, partyCount)
@@ -233,11 +233,11 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		r1msg := msg.Content().(*PreSignRound1Message)
 		p.temp.r1msgG[fromPIdx] = r1msg.UnmarshalG()
 		p.temp.r1msgK[fromPIdx] = r1msg.UnmarshalK()
-		Proof, err := r1msg.UnmarshalEncProof()
+		𝜓0ij, err := r1msg.Unmarshal𝜓0ij()
 		if err != nil {
 			return false, p.WrapError(err, msg.GetFrom())
 		}
-		p.temp.r1msgProof[fromPIdx] = Proof
+		p.temp.r1msg𝜓0ij[fromPIdx] = 𝜓0ij
 	case *PreSignRound2Message:
 		r2msg := msg.Content().(*PreSignRound2Message)
 		BigGammaShare, err := r2msg.UnmarshalBigGammaShare(p.params.EC())

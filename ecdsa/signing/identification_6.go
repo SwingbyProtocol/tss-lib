@@ -33,8 +33,8 @@ func (round *identification6) Start() *tss.Error {
 	round.ok[i] = true
 
 	// Fig 7. Output.2
-	H, _ := round.key.PaillierSK.HomoMult(round.temp.KShare, round.temp.G)
-	proofH, _ := zkpmul.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.K, round.temp.G, H, round.temp.KShare, round.temp.KNonce)
+	H, _ := round.key.PaillierSK.HomoMult(round.temp.ki, round.temp.G)
+	proofH, _ := zkpmul.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.K, round.temp.G, H, round.temp.ki, round.temp.𝜌i)
 	DeltaShareEnc := H
 	for j := range round.Parties().IDs() {
 		if j == i {
@@ -48,8 +48,8 @@ func (round *identification6) Start() *tss.Error {
 		if j == i {
 			continue
 		}
-		proofDeltaShare, _ := zkpdec.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, DeltaShareEnc, round.temp.DeltaShare, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.DeltaShare, round.temp.GNonce)
-		
+		proofDeltaShare, _ := zkpdec.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, DeltaShareEnc, round.temp.𝛿i, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.𝛿i, round.temp.𝜈i)
+
 		r6msg := NewIdentificationRound6Message(Pj, round.PartyID(), H, proofH, DeltaShareEnc, proofDeltaShare)
 		round.out <- r6msg
 	}

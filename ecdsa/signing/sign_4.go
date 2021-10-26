@@ -46,9 +46,9 @@ func (round *sign4) Start() *tss.Error {
 			defer wg.Done()
 			Kj := round.temp.r1msgK[j]
 			BigDeltaSharej := round.temp.r3msgBigDeltaShare[j]
-			proofLogstar := round.temp.r3msgProofLogstar[j]
+			ψDoublePrimeij := round.temp.r3msgProofLogstar[j]
 
-			ok := proofLogstar.Verify(round.EC(), round.key.PaillierPKs[j], Kj, BigDeltaSharej, round.temp.BigGamma, round.key.NTildei, round.key.H1i, round.key.H2i)
+			ok := ψDoublePrimeij.Verify(round.EC(), round.key.PaillierPKs[j], Kj, BigDeltaSharej, round.temp.Γ, round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
 				errChs <- round.WrapError(errors.New("proof verify failed"), Pj)
 				return
@@ -67,45 +67,45 @@ func (round *sign4) Start() *tss.Error {
 
 	// Fig 7. Output.2 check equality
 	modN := common.ModInt(round.EC().Params().N)
-	Delta := round.temp.DeltaShare
-	BigDelta := round.temp.BigDeltaShare
+	𝛿 := round.temp.𝛿i
+	Δ := round.temp.Δi
 	for j := range round.Parties().IDs() {
 		if j == i {
 			continue
 		}
-		Delta = modN.Add(Delta, round.temp.r3msgDeltaShare[j])
+		𝛿 = modN.Add(𝛿, round.temp.r3msgDeltaShare[j])
 		BigDeltaShare := round.temp.r3msgBigDeltaShare[j]
 		var err error
-		BigDelta, err = BigDelta.Add(BigDeltaShare)
+		Δ, err = Δ.Add(BigDeltaShare)
 		if err != nil {
 			return round.WrapError(errors.New("round4: failed to collect BigDelta"))
 		}
 	}
 
-	DeltaPoint := crypto.ScalarBaseMult(round.EC(), Delta)
-	if !DeltaPoint.Equals(BigDelta) {
+	DeltaPoint := crypto.ScalarBaseMult(round.EC(), 𝛿)
+	if !DeltaPoint.Equals(Δ) {
 		return round.WrapError(errors.New("verify BigDelta failed"))
 	}
 	// compute the multiplicative inverse thelta mod q
-	deltaInverse := modN.ModInverse(Delta)
-	BigR := round.temp.BigGamma.ScalarMult(deltaInverse)
-	
-	// Fig 8. Round 1. compute signature share
-	Rx := BigR.X()
-	SigmaShare := modN.Add(modN.Mul(round.temp.KShare, round.temp.m), modN.Mul(Rx, round.temp.ChiShare))
+	𝛿Inverse := modN.ModInverse(𝛿)
+	BigR := round.temp.Γ.ScalarMult(𝛿Inverse)
 
-	r4msg := NewSignRound4Message(round.PartyID(), SigmaShare)
+	// Fig 8. Round 1. compute signature share
+	r := BigR.X()
+	𝜎i := modN.Add(modN.Mul(round.temp.ki, round.temp.m), modN.Mul(r, round.temp.𝜒i))
+
+	r4msg := NewSignRound4Message(round.PartyID(), 𝜎i)
 	round.out <- r4msg
 
 	round.temp.BigR = BigR
-	round.temp.Rx = Rx
-	round.temp.SigmaShare = SigmaShare
+	round.temp.Rx = r
+	round.temp.SigmaShare = 𝜎i
 	// retire unused variables
 	round.temp.r1msgK = make([]*big.Int, round.PartyCount())
 	round.temp.r3msgBigDeltaShare = make([]*crypto.ECPoint, round.PartyCount())
 	round.temp.r3msgDeltaShare = make([]*big.Int, round.PartyCount())
 	round.temp.r3msgProofLogstar = make([]*zkplogstar.ProofLogstar, round.PartyCount())
-	
+
 	return nil
 }
 

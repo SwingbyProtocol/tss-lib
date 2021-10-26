@@ -46,8 +46,8 @@ func (round *presign2) Start() *tss.Error {
 			defer wg.Done()
 
 			Kj := round.temp.r1msgK[j]
-			proof := round.temp.r1msgProof[j]
-			ok := proof.Verify(round.EC(), round.key.PaillierPKs[j], round.key.NTildei, round.key.H1i, round.key.H2i, Kj)
+			𝜓ij := round.temp.r1msg𝜓0ij[j]
+			ok := 𝜓ij.Verify(round.EC(), round.key.PaillierPKs[j], round.key.NTildei, round.key.H1i, round.key.H2i, Kj)
 			if !ok {
 				errChs <- round.WrapError(errors.New("round2: proofenc verify failed"), Pj)
 			}
@@ -64,7 +64,7 @@ func (round *presign2) Start() *tss.Error {
 	}
 
 	// Fig 7. Round 2.2 compute MtA and generate proofs
-	BigGammaShare := crypto.ScalarBaseMult(round.Params().EC(), round.temp.GammaShare)
+	Γi := crypto.ScalarBaseMult(round.Params().EC(), round.temp.𝛾i)
 	g := crypto.NewECPointNoCurveCheck(round.EC(), round.EC().Params().Gx, round.EC().Params().Gy)
 	errChs = make(chan *tss.Error, (len(round.Parties().IDs())-1)*3)
 	wg = sync.WaitGroup{}
@@ -85,7 +85,7 @@ func (round *presign2) Start() *tss.Error {
 			wgj.Add(1)
 			go func(j int, Pj *tss.PartyID) {
 				defer wgj.Done()
-				DeltaMtA, err := NewMtA(round.EC(), Kj, round.temp.GammaShare, BigGammaShare, round.key.PaillierPKs[j], &round.key.PaillierSK.PublicKey, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j])
+				DeltaMtA, err := NewMtA(round.EC(), Kj, round.temp.𝛾i, Γi, round.key.PaillierPKs[j], &round.key.PaillierSK.PublicKey, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j])
 				if err != nil {
 					errChs <- round.WrapError(errors.New("MtADelta failed"), Pj)
 					return
@@ -107,7 +107,7 @@ func (round *presign2) Start() *tss.Error {
 			wgj.Add(1)
 			go func(j int, Pj *tss.PartyID) {
 				defer wgj.Done()
-				ProofLogstar, err := zkplogstar.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.G, BigGammaShare, g, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.GammaShare, round.temp.GNonce)
+				ProofLogstar, err := zkplogstar.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.G, Γi, g, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.𝛾i, round.temp.𝜈i)
 				if err != nil {
 					errChs <- round.WrapError(errors.New("prooflogstar failed"), Pj)
 					return
@@ -120,7 +120,7 @@ func (round *presign2) Start() *tss.Error {
 			ChiMtA := <-ChiOut
 			ProofLogstar := <-ProofOut
 
-			r2msg := NewPreSignRound2Message(Pj, round.PartyID(), BigGammaShare, DeltaMtA.Dji, DeltaMtA.Fji, ChiMtA.Dji, ChiMtA.Fji, DeltaMtA.Proofji, ChiMtA.Proofji, ProofLogstar)
+			r2msg := NewPreSignRound2Message(Pj, round.PartyID(), Γi, DeltaMtA.Dji, DeltaMtA.Fji, ChiMtA.Dji, ChiMtA.Fji, DeltaMtA.Proofji, ChiMtA.Proofji, ProofLogstar)
 			round.out <- r2msg
 
 			round.temp.DeltaShareBetas[j] = DeltaMtA.Beta
@@ -136,11 +136,11 @@ func (round *presign2) Start() *tss.Error {
 		return err
 	}
 
-	round.temp.BigGammaShare = BigGammaShare
+	round.temp.Γi = Γi
 	// retire unused variables
 	round.temp.G = nil
-	round.temp.GNonce = nil
-	round.temp.r1msgProof = make([]*zkpenc.ProofEnc, round.PartyCount()) // GF TODO
+	round.temp.𝜈i = nil
+	round.temp.r1msg𝜓0ij = make([]*zkpenc.ProofEnc, round.PartyCount()) // GF TODO
 
 	return nil
 }
