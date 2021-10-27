@@ -46,6 +46,8 @@ message PreSignRound3Message {
 message SignRound4Message {
     bytes SigmaShare = 1;
 }
+message SignRound4AbortingMessage {
+}
 
 message IdentificationRound6Message {
     bytes H = 1;

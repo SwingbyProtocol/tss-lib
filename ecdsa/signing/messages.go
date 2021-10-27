@@ -161,8 +161,8 @@ func (m *PreSignRound2Message) UnmarshalLogstarProof(ec elliptic.Curve) (*zkplog
 
 func NewPreSignRound3Message(
 	to, from *tss.PartyID,
-	DeltaShare *big.Int,
-	BigDeltaShare *crypto.ECPoint,
+	𝛿i *big.Int,
+	Δi *crypto.ECPoint,
 	ProofLogstar *zkplogstar.ProofLogstar,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
@@ -170,10 +170,10 @@ func NewPreSignRound3Message(
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
 	}
-	BigDeltaShareBzs := BigDeltaShare.Bytes()
+	BigDeltaShareBzs := Δi.Bytes()
 	ProofBz := ProofLogstar.Bytes()
 	content := &PreSignRound3Message{
-		DeltaShare:    DeltaShare.Bytes(),
+		DeltaShare:    𝛿i.Bytes(),
 		BigDeltaShare: BigDeltaShareBzs[:],
 		ProofLogstar:  ProofBz[:],
 	}
@@ -201,6 +201,22 @@ func (m *PreSignRound3Message) UnmarshalProofLogstar(ec elliptic.Curve) (*zkplog
 }
 
 // ----- //
+
+func NewSignRound4AbortingMessage(
+	from *tss.PartyID,
+) tss.ParsedMessage {
+	meta := tss.MessageRouting{
+		From:        from,
+		IsBroadcast: true,
+	}
+	content := &SignRound4AbortingMessage{}
+	msg := tss.NewMessageWrapper(meta, content)
+	return tss.NewMessage(meta, content, msg)
+}
+
+func (m *SignRound4AbortingMessage) ValidateBasic() bool {
+	return m != nil
+}
 
 func NewSignRound4Message(
 	from *tss.PartyID,

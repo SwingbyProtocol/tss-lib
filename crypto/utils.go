@@ -25,3 +25,9 @@ func GenerateNTildei(safePrimes [2]*big.Int) (NTildei, h1i, h2i *big.Int, err er
 	h2 := common.GetRandomGeneratorOfTheQuadraticResidue(NTildei)
 	return NTildei, h1, h2, nil
 }
+
+func FormatECPoint(p *ECPoint) string {
+	x := common.FormatBigInt(p.X())
+	y := common.FormatBigInt(p.Y())
+	return "(" + x + "," + y + ")"
+}

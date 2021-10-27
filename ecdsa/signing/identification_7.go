@@ -16,8 +16,8 @@ import (
 )
 
 func newRound7(params *tss.Parameters, key *keygen.LocalPartySaveData, data *common.SignatureData, temp *localTempData, out chan<- tss.Message, end chan<- common.SignatureData) tss.Round {
-	return &identification7{&identification6{&sign4{&presign3{&presign2{&presign1{
-		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 3}}}}}}}
+	return &identification7{&identification6{&identificationPrep{&sign4{&presign3{&presign2{&presign1{
+		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 3}}}}, false}}}}
 }
 
 func (round *identification7) Start() *tss.Error {
@@ -50,7 +50,7 @@ func (round *identification7) Start() *tss.Error {
 			}
 
 			proofDec := round.temp.r6msgProofDec[j]
-			ok = proofDec.Verify(round.EC(), round.key.PaillierPKs[j], round.temp.r6msgDeltaShareEnc[j], round.temp.r3msgDeltaShare[j], round.key.NTildei, round.key.H1i, round.key.H2i)
+			ok = proofDec.Verify(round.EC(), round.key.PaillierPKs[j], round.temp.r6msgDeltaShareEnc[j], round.temp.r3msg𝛿j[j], round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
 				errChs <- round.WrapError(errors.New("round7: proofdec verify failed"), Pj)
 				return

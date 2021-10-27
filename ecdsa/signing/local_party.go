@@ -40,6 +40,7 @@ type (
 		out         chan<- tss.Message
 		end         chan<- common.SignatureData
 		startRndNum int
+		Aborting    bool
 	}
 
 	// localMessageStore struct {
@@ -96,10 +97,11 @@ type (
 		r2msgChiF          []*big.Int
 		r2msgChiProof      []*zkpaffg.ProofAffg
 		r2msgProofLogstar  []*zkplogstar.ProofLogstar
-		r3msgDeltaShare    []*big.Int
-		r3msgBigDeltaShare []*crypto.ECPoint
+		r3msg𝛿j            []*big.Int
+		r3msgΔj            []*crypto.ECPoint
 		r3msgProofLogstar  []*zkplogstar.ProofLogstar
-		r4msgSigmaShare    []*big.Int
+		r4msg𝜎j            []*big.Int
+		r4msgAborting      []bool
 		// for identification
 		r6msgH             []*big.Int
 		r6msgProofMul      []*zkpmul.ProofMul
@@ -157,10 +159,11 @@ func NewLocalParty(
 	p.temp.r2msgChiF = make([]*big.Int, partyCount)
 	p.temp.r2msgChiProof = make([]*zkpaffg.ProofAffg, partyCount)
 	p.temp.r2msgProofLogstar = make([]*zkplogstar.ProofLogstar, partyCount)
-	p.temp.r3msgDeltaShare = make([]*big.Int, partyCount)
-	p.temp.r3msgBigDeltaShare = make([]*crypto.ECPoint, partyCount)
+	p.temp.r3msg𝛿j = make([]*big.Int, partyCount)
+	p.temp.r3msgΔj = make([]*crypto.ECPoint, partyCount)
 	p.temp.r3msgProofLogstar = make([]*zkplogstar.ProofLogstar, partyCount)
-	p.temp.r4msgSigmaShare = make([]*big.Int, partyCount)
+	p.temp.r4msg𝜎j = make([]*big.Int, partyCount)
+	p.temp.r4msgAborting = make([]bool, partyCount)
 	// for identification
 	p.temp.r6msgH = make([]*big.Int, partyCount)
 	p.temp.r6msgProofMul = make([]*zkpmul.ProofMul, partyCount)
@@ -261,12 +264,12 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		p.temp.r2msgChiProof[fromPIdx] = proofChi
 	case *PreSignRound3Message:
 		r3msg := msg.Content().(*PreSignRound3Message)
-		p.temp.r3msgDeltaShare[fromPIdx] = r3msg.UnmarshalDeltaShare()
+		p.temp.r3msg𝛿j[fromPIdx] = r3msg.UnmarshalDeltaShare()
 		BigDeltaShare, err := r3msg.UnmarshalBigDeltaShare(p.params.EC())
 		if err != nil {
 			return false, p.WrapError(err, msg.GetFrom())
 		}
-		p.temp.r3msgBigDeltaShare[fromPIdx] = BigDeltaShare
+		p.temp.r3msgΔj[fromPIdx] = BigDeltaShare
 		proofLogStar, err := r3msg.UnmarshalProofLogstar(p.params.EC())
 		if err != nil {
 			return false, p.WrapError(err, msg.GetFrom())
@@ -274,7 +277,10 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		p.temp.r3msgProofLogstar[fromPIdx] = proofLogStar
 	case *SignRound4Message:
 		r4msg := msg.Content().(*SignRound4Message)
-		p.temp.r4msgSigmaShare[fromPIdx] = r4msg.UnmarshalSigmaShare()
+		p.temp.r4msg𝜎j[fromPIdx] = r4msg.UnmarshalSigmaShare()
+	case *SignRound4AbortingMessage:
+		p.temp.r4msgAborting[fromPIdx] = true
+		p.Aborting = true
 	case *IdentificationRound6Message:
 		r6msg := msg.Content().(*IdentificationRound6Message)
 		p.temp.r6msgH[fromPIdx] = r6msg.UnmarshalH()

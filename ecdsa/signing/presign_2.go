@@ -138,8 +138,7 @@ func (round *presign2) Start() *tss.Error {
 
 	round.temp.Γi = Γi
 	// retire unused variables
-	round.temp.G = nil
-	round.temp.𝜈i = nil
+
 	round.temp.r1msg𝜓0ij = make([]*zkpenc.ProofEnc, round.PartyCount()) // GF TODO
 
 	return nil

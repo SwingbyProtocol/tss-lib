@@ -11,9 +11,12 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/binance-chain/tss-lib/crypto"
+	zkplogstar "github.com/binance-chain/tss-lib/crypto/zkp/logstar"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
@@ -27,6 +30,8 @@ import (
 const (
 	testParticipants = test.TestParticipants
 	testThreshold    = test.TestThreshold
+	maliciousPartySimulatingAbort = 2
+	innocentPartySimulatingAbort = 1
 )
 
 func setUp(level string) {
@@ -244,6 +249,134 @@ signing:
 
 				break signing
 			}
+		}
+	}
+}
+
+//
+func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalParty, errCh chan<- *tss.Error) {
+	// do not send a message from this party back to itself
+	if party.PartyID() == msg.GetFrom() {
+		return
+	}
+	bz, _, err := msg.WireBytes()
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+	pMsg, err := tss.ParseWireMessage(bz, msg.GetFrom(), msg.IsBroadcast())
+	if err != nil {
+		errCh <- party.WrapError(err)
+		return
+	}
+
+	// Intercepting a round 3 message to inject a bad zk-proof and trigger an abort
+	if strings.HasSuffix(msg.Type(),"PreSignRound3Message") && !msg.IsBroadcast() &&
+		msg.GetFrom().Index == maliciousPartySimulatingAbort &&
+		len(msg.GetTo()) > 0 && msg.GetTo()[0].Index==innocentPartySimulatingAbort {
+		meta := tss.MessageRouting{
+			From:        msg.GetFrom(),
+			To:          msg.GetTo(),
+			IsBroadcast: false,
+		}
+		i := msg.GetFrom().Index
+		j := msg.GetTo()[0].Index
+
+		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
+		round := party.Round().(*presign3)
+		otherRound := parties[i].Round().(*presign3)
+		ec := tss.EC()
+
+		common.Logger.Debugf(" test - fake proof - i:%v, j: %v, PK: %v, K(C): %v, Γ(g): %v, NTildej(NCap): %v, " +
+			"H1j(s): %v, H2j(t): %v, ki(x): %v, 𝜌i: %v",
+			i,j, common.FormatBigInt(round.key.PaillierPKs[i].N), common.FormatBigInt(round.temp.K),
+			 crypto.FormatECPoint(round.temp.Γ),
+			common.FormatBigInt(round.key.NTildej[j]), common.FormatBigInt(round.key.H1j[j]), common.FormatBigInt(round.key.H2j[j]),
+			common.FormatBigInt(otherRound.temp.ki), common.FormatBigInt(otherRound.temp.𝜌i))
+
+		proof, errP := zkplogstar.NewProof(ec, round.key.PaillierPKs[i], round.temp.K, &crypto.ECPoint{}, round.temp.Γ, round.key.NTildej[j],
+			round.key.H1j[j], round.key.H2j[j], otherRound.temp.ki, otherRound.temp.𝜌i)
+		if errP!=nil {
+			common.Logger.Errorf("error changing message %s from %s", msg.Type(), msg.GetFrom())
+		}
+		otherRound.temp.Δi = crypto.ScalarBaseMult(ec, big.NewInt(1)) // trigger inequality for Δ in sign_4
+
+		r3msg := NewPreSignRound3Message(msg.GetTo()[0], msg.GetFrom(), otherRound.temp.𝛿i, otherRound.temp.Δi, proof)
+		// repackaging the malicious message
+		pMsg = tss.NewMessage(meta, r3msg.Content(), tss.NewMessageWrapper(meta, r3msg.Content()))
+	}
+
+	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
+		if errUpdate.Culprits()!= nil && len(errUpdate.Culprits())>0 {
+			errCh <- errUpdate
+		}
+	}
+}
+
+func TestAbortIdentification(t *testing.T) {
+	setUp("debug")
+	threshold := testThreshold
+
+	// PHASE: load keygen fixtures
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	assert.NoError(t, err, "should load keygen fixtures")
+	assert.Equal(t, testThreshold+1, len(keys))
+	assert.Equal(t, testThreshold+1, len(signPIDs))
+
+	// PHASE: signing
+	// use a shuffled selection of the list of parties for this test
+	p2pCtx := tss.NewPeerContext(signPIDs)
+	parties := make([]*LocalParty, 0, len(signPIDs))
+
+	errCh := make(chan *tss.Error, len(signPIDs))
+	outCh := make(chan tss.Message, len(signPIDs))
+	endCh := make(chan common.SignatureData, len(signPIDs))
+
+	updater := identifiedAbortUpdater
+
+	// init the parties
+	for i := 0; i < len(signPIDs); i++ {
+		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+
+		keyDerivationDelta := big.NewInt(0)
+		P := NewLocalParty(big.NewInt(42), params, keys[i], keyDerivationDelta, outCh, endCh).(*LocalParty)
+		parties = append(parties, P)
+		go func(P *LocalParty) {
+			if err := P.Start(); err != nil {
+				errCh <- err
+			}
+		}(P)
+	}
+
+signing:
+	for {
+		select {
+		case errS := <-errCh:
+			assert.NotNil(t, errS, "there should have been an error")
+			assert.EqualValues(t, len(errS.Culprits()), 1, "there should have been one culprit")
+			assert.EqualValues(t, errS.Culprits()[0].Index, maliciousPartySimulatingAbort, "error in test in identification of the malicious party")
+			break signing
+
+		case msg := <-outCh:
+			dest := msg.GetTo()
+			if dest == nil {
+				for _, P := range parties {
+					if P.PartyID().Index == msg.GetFrom().Index {
+						continue
+					}
+					go updater(P, msg, parties, errCh)
+				}
+			} else {
+				if dest[0].Index == msg.GetFrom().Index {
+					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
+				}
+				go updater(parties[dest[0].Index], msg, parties, errCh)
+			}
+
+		case sigData := <-endCh:
+			common.Logger.Debugf("sigData: %v", sigData)
+			assert.FailNow(t, "signing should not succeed in this test")
+			break signing
 		}
 	}
 }

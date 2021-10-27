@@ -32,7 +32,7 @@ type Party interface {
 
 	// Private lifecycle methods
 	setRound(Round) *Error
-	round() Round
+	Round() Round
 	advance()
 	lock()
 	unlock()
@@ -79,7 +79,7 @@ func (p *BaseParty) ValidateMessage(msg ParsedMessage) (bool, *Error) {
 }
 
 func (p *BaseParty) String() string {
-	return fmt.Sprintf("round: %d", p.round().RoundNumber())
+	return fmt.Sprintf("round: %d", p.Round().RoundNumber())
 }
 
 // -----
@@ -93,7 +93,7 @@ func (p *BaseParty) setRound(round Round) *Error {
 	return nil
 }
 
-func (p *BaseParty) round() Round {
+func (p *BaseParty) Round() Round {
 	return p.rnd
 }
 
@@ -117,7 +117,7 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
 	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
 		return p.WrapError(fmt.Errorf("could not start. this party has an invalid PartyID: %+v", p.PartyID()))
 	}
-	if p.round() != nil {
+	if p.Round() != nil {
 		return p.WrapError(errors.New("could not start. this party is in an unexpected state. use the constructor and Start()"))
 	}
 	round := p.FirstRound()
@@ -132,11 +132,11 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
 			return err
 		}
 	}
-	common.Logger.Infof("party %s: %s round %d starting", p.round().Params().PartyID(), task, 1)
+	common.Logger.Infof("party %s: %s round %d starting", p.Round().Params().PartyID(), task, 1)
 	defer func() {
-		common.Logger.Debugf("party %s: %s round %d finished", p.round().Params().PartyID(), task, 1)
+		common.Logger.Debugf("party %s: %s round %d finished", p.Round().Params().PartyID(), task, 1)
 	}()
-	return p.round().Start()
+	return p.Round().Start()
 }
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
@@ -152,24 +152,24 @@ func BaseUpdate2(p Party, msg ParsedMessage, task string) (ok bool, err *Error) 
 	}
 	p.lock() // data is written to P state below
 	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
-	if p.round() != nil {
-		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(), msg.String())
+	if p.Round() != nil {
+		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.Round().RoundNumber(), msg.String())
 	}
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return r(false, err)
 	}
-	if p.round() != nil {
-		common.Logger.Debugf("party %s: %s round %d update", p.round().Params().PartyID(), task, p.round().RoundNumber())
-		if _, err := p.round().Update(); err != nil {
+	if p.Round() != nil {
+		common.Logger.Debugf("party %s: %s round %d update", p.Round().Params().PartyID(), task, p.Round().RoundNumber())
+		if _, err := p.Round().Update(); err != nil {
 			return r(false, err)
 		}
-		if p.round().CanProceed() {
-			if p.advance(); p.round() != nil {
-				if err := p.round().Start(); err != nil {
+		if p.Round().CanProceed() {
+			if p.advance(); p.Round() != nil {
+				if err := p.Round().Start(); err != nil {
 					return r(false, err)
 				}
-				rndNum := p.round().RoundNumber()
-				common.Logger.Infof("party %s: %s round %d started", p.round().Params().PartyID(), task, rndNum)
+				rndNum := p.Round().RoundNumber()
+				common.Logger.Infof("party %s: %s round %d started", p.Round().Params().PartyID(), task, rndNum)
 			} else {
 				// finished! the round implementation will have sent the data through the `end` channel.
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
@@ -195,24 +195,24 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 	}
 	p.lock() // data is written to P state below
 	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
-	if p.round() != nil {
-		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(), msg.String())
+	if p.Round() != nil {
+		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.Round().RoundNumber(), msg.String())
 	}
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return r(false, err)
 	}
-	if p.round() != nil {
-		common.Logger.Debugf("party %s: %s round %d update", p.round().Params().PartyID(), task, p.round().RoundNumber())
-		if _, err := p.round().Update(); err != nil {
+	if p.Round() != nil {
+		common.Logger.Debugf("party %s: %s round %d update", p.Round().Params().PartyID(), task, p.Round().RoundNumber())
+		if _, err := p.Round().Update(); err != nil {
 			return r(false, err)
 		}
-		if p.round().CanProceed() {
-			if p.advance(); p.round() != nil {
-				if err := p.round().Start(); err != nil {
+		if p.Round().CanProceed() {
+			if p.advance(); p.Round() != nil {
+				if err := p.Round().Start(); err != nil {
 					return r(false, err)
 				}
-				rndNum := p.round().RoundNumber()
-				common.Logger.Infof("party %s: %s round %d started", p.round().Params().PartyID(), task, rndNum)
+				rndNum := p.Round().RoundNumber()
+				common.Logger.Infof("party %s: %s round %d started", p.Round().Params().PartyID(), task, rndNum)
 			} else {
 				// finished! the round implementation will have sent the data through the `end` channel.
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)

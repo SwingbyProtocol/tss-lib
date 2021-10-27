@@ -39,6 +39,10 @@ type (
 	}
 	sign4 struct {
 		*presign3
+		AbortingSigning bool
+	}
+	identificationPrep struct {
+		*sign4
 	}
 	signout struct {
 		*sign4
@@ -46,7 +50,7 @@ type (
 
 	// identification rounds
 	identification6 struct {
-		*sign4
+		*identificationPrep
 	}
 	identification7 struct {
 		*identification6
@@ -112,7 +116,14 @@ func (round *base) resetOK() {
 	}
 }
 
+func (round *base) setOK() {
+	for j := range round.ok {
+		round.ok[j] = true
+	}
+}
+
 func (round *base) Dump(dumpCh chan tss.ParsedMessage) {
 	DumpMsg := NewTempDataDumpMessage(round.PartyID(), *round.temp, round.number)
 	dumpCh <- DumpMsg
 }
+

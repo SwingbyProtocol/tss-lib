@@ -136,6 +136,11 @@ func (round *presign3) Start() *tss.Error {
 
 	errChs = make(chan *tss.Error, len(round.Parties().IDs())-1)
 	wg = sync.WaitGroup{}
+	round.temp.𝛿i = 𝛿i
+	round.temp.𝜒i = 𝜒i
+	round.temp.Δi = Δi
+	round.temp.Γ = Γ
+
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue
@@ -161,17 +166,12 @@ func (round *presign3) Start() *tss.Error {
 		return err
 	}
 
-	round.temp.𝛿i = 𝛿i
-	round.temp.𝜒i = 𝜒i
-	round.temp.Δi = Δi
-	round.temp.Γ = Γ
 	// retire unused variables
 	round.temp.w = nil
 	round.temp.BigWs = nil
 	round.temp.𝛾i = nil
 	round.temp.Γi = nil
-	round.temp.K = nil
-	round.temp.𝜌i = nil
+
 	round.temp.DeltaShareBetas = nil
 	round.temp.ChiShareBetas = nil
 	round.temp.DeltaShareAlphas = nil
@@ -189,7 +189,7 @@ func (round *presign3) Start() *tss.Error {
 }
 
 func (round *presign3) Update() (bool, *tss.Error) {
-	for j, msg := range round.temp.r3msgDeltaShare {
+	for j, msg := range round.temp.r3msg𝛿j {
 		if round.ok[j] {
 			continue
 		}
@@ -210,5 +210,5 @@ func (round *presign3) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *presign3) NextRound() tss.Round {
 	round.started = false
-	return &sign4{round}
+	return &sign4{round, false}
 }

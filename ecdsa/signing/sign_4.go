@@ -20,7 +20,7 @@ import (
 
 func newRound4(params *tss.Parameters, key *keygen.LocalPartySaveData, data *common.SignatureData, temp *localTempData, out chan<- tss.Message, end chan<- common.SignatureData) tss.Round {
 	return &sign4{&presign3{&presign2{&presign1{
-		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 4}}}}}
+		&base{params, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 4}}}}, false}
 }
 
 func (round *sign4) Start() *tss.Error {
@@ -30,6 +30,7 @@ func (round *sign4) Start() *tss.Error {
 	round.number = 4
 	round.started = true
 	round.resetOK()
+	round.resetAborting()
 
 	i := round.PartyID().Index
 	round.ok[i] = true
@@ -45,10 +46,10 @@ func (round *sign4) Start() *tss.Error {
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
 			Kj := round.temp.r1msgK[j]
-			BigDeltaSharej := round.temp.r3msgBigDeltaShare[j]
+			Δj := round.temp.r3msgΔj[j]
 			ψDoublePrimeij := round.temp.r3msgProofLogstar[j]
 
-			ok := ψDoublePrimeij.Verify(round.EC(), round.key.PaillierPKs[j], Kj, BigDeltaSharej, round.temp.Γ, round.key.NTildei, round.key.H1i, round.key.H2i)
+			ok := ψDoublePrimeij.Verify(round.EC(), round.key.PaillierPKs[j], Kj, Δj, round.temp.Γ, round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
 				errChs <- round.WrapError(errors.New("proof verify failed"), Pj)
 				return
@@ -73,18 +74,21 @@ func (round *sign4) Start() *tss.Error {
 		if j == i {
 			continue
 		}
-		𝛿 = modN.Add(𝛿, round.temp.r3msgDeltaShare[j])
-		BigDeltaShare := round.temp.r3msgBigDeltaShare[j]
+		𝛿 = modN.Add(𝛿, round.temp.r3msg𝛿j[j])
+		Δj := round.temp.r3msgΔj[j]
 		var err error
-		Δ, err = Δ.Add(BigDeltaShare)
+		Δ, err = Δ.Add(Δj)
 		if err != nil {
 			return round.WrapError(errors.New("round4: failed to collect BigDelta"))
 		}
 	}
 
-	DeltaPoint := crypto.ScalarBaseMult(round.EC(), 𝛿)
-	if !DeltaPoint.Equals(Δ) {
-		return round.WrapError(errors.New("verify BigDelta failed"))
+	if !crypto.ScalarBaseMult(round.EC(), 𝛿).Equals(Δ) {
+		common.Logger.Errorf("part %v: verify BigDelta failed", round.PartyID())
+		round.AbortingSigning = true
+		round.setOK()
+		round.out <- NewSignRound4AbortingMessage(round.PartyID())
+		return nil
 	}
 	// compute the multiplicative inverse thelta mod q
 	𝛿Inverse := modN.ModInverse(𝛿)
@@ -101,25 +105,37 @@ func (round *sign4) Start() *tss.Error {
 	round.temp.Rx = r
 	round.temp.SigmaShare = 𝜎i
 	// retire unused variables
+	round.temp.𝜌i = nil
+	round.temp.K = nil
 	round.temp.r1msgK = make([]*big.Int, round.PartyCount())
-	round.temp.r3msgBigDeltaShare = make([]*crypto.ECPoint, round.PartyCount())
-	round.temp.r3msgDeltaShare = make([]*big.Int, round.PartyCount())
+	round.temp.r3msgΔj = make([]*crypto.ECPoint, round.PartyCount())
+	round.temp.r3msg𝛿j = make([]*big.Int, round.PartyCount())
 	round.temp.r3msgProofLogstar = make([]*zkplogstar.ProofLogstar, round.PartyCount())
 
 	return nil
 }
 
 func (round *sign4) Update() (bool, *tss.Error) {
-	for j, msg := range round.temp.r4msgSigmaShare {
+	for j, msg := range round.temp.r4msg𝜎j {
 		if round.ok[j] {
 			continue
 		}
-		if msg == nil {
-			return false, nil
+		if msg == nil && !round.temp.r4msgAborting[j] {
+			if round.temp.r4msgAborting[j] {
+				round.AbortingSigning = true
+			} else {
+				return false, nil
+			}
 		}
 		round.ok[j] = true
 	}
 	return true, nil
+}
+
+func (round *sign4) resetAborting() {
+	for j := range round.temp.r4msgAborting {
+		round.temp.r4msgAborting[j] = false
+	}
 }
 
 func (round *sign4) CanAccept(msg tss.ParsedMessage) bool {
@@ -131,5 +147,15 @@ func (round *sign4) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *sign4) NextRound() tss.Round {
 	round.started = false
+	otherPartyAborted := false
+	for _, abortingMsg := range round.temp.r4msgAborting {
+		if abortingMsg {
+			otherPartyAborted = true
+			break
+		}
+	}
+	if round.AbortingSigning || otherPartyAborted {
+		return &identificationPrep{round}
+	}
 	return &signout{round}
 }
