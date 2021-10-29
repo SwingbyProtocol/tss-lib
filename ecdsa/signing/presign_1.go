@@ -98,7 +98,6 @@ func (round *presign1) Update() (bool, *tss.Error) {
 		}
 		round.ok[j] = true
 	}
-	fmt.Println("presign1: update success")
 	return true, nil
 }
 
