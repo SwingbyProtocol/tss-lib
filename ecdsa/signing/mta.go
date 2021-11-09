@@ -22,6 +22,7 @@ type MtAOut struct {
     Sij *big.Int
     Rij *big.Int
     Beta *big.Int
+    BetaNeg *big.Int
     Proofji *zkpaffg.ProofAffg
 }
 
@@ -64,6 +65,7 @@ func NewMtA(ec elliptic.Curve, Kj *big.Int, gammai *big.Int, BigGammai *crypto.E
         Sij:    sij,
         Rij:    rij,
         Beta:   beta,
+        BetaNeg:   betaNeg,
         Proofji:  Psiji,
     }, nil
 }

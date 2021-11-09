@@ -50,8 +50,8 @@ func TestDec(test *testing.T) {
 func TestDecWithCompositions(test *testing.T) {
     ec := tss.EC()
     q := ec.Params().N
-    q3 := new(big.Int).Mul(q, q)
-    q3 = new(big.Int).Mul(q, q3)
+    q3 := new(big.Int).Mul(q, new(big.Int).Mul(q, q))
+    // modQ3 := common.ModInt(q3)
     modN := common.ModInt(q)
     zero := big.NewInt(0)
 
@@ -59,21 +59,21 @@ func TestDecWithCompositions(test *testing.T) {
     NCap, s, t, err := crypto.GenerateNTildei(primes)
     assert.NoError(test, err)
 
-    sk, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
+    _, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
     assert.NoError(test, err)
     N2 := pk.NSquare()
 
-    // Ki
+    // Ki = enc(ki,𝜌i)
     𝛾i := common.GetRandomPositiveInt(q)
     ki := common.GetRandomPositiveInt(q)
-    Ki, 𝜌i, err := sk.EncryptAndReturnRandomness(ki)
+    Ki, 𝜌i, err := pk.EncryptAndReturnRandomness(ki)
 
     proof1, err := NewProof(ec, pk, Ki, modN.Add(zero,ki), NCap, s, t, ki, 𝜌i)
     assert.NoError(test, err)
     ok1 := proof1.Verify(ec, pk, Ki, modN.Add(zero,ki), NCap, s, t)
     assert.True(test, ok1, "proof must verify")
 
-    // 𝛾K
+    // 𝛾K = (𝛾i ⊗ Ki)
     𝛾K, err := pk.HomoMult(𝛾i, Ki)
     𝜌ʹ := big.NewInt(1).Exp(𝜌i, 𝛾i, N2)
     yʹ := q3.Mul(𝛾i, ki)
@@ -82,19 +82,19 @@ func TestDecWithCompositions(test *testing.T) {
     ok2 := proof2.Verify(ec, pk, 𝛾K, modN.Add(zero,yʹ), NCap, s, t)
     assert.True(test, ok2, "proof must verify")
 
-    // Dji
+    // Di = (𝛾i ⊗ Ki) ⊕ enc(-𝛽,si)
     x := common.GetRandomPositiveInt(q)
-    y := new(big.Int).Add(x, q)
-    Dji, sij, err := sk.EncryptAndReturnRandomness(y)
+    𝛽ʹ := new(big.Int).Add(x, q)
+    T, si, err := pk.EncryptAndReturnRandomness(𝛽ʹ)
     assert.NoError(test, err)
-    Dji, err = pk.HomoAdd(𝛾K, Dji)
+    Di, err := pk.HomoAdd(𝛾K, T)
 
-    𝜌ʺ := N2.Mul(𝜌ʹ,sij)
-    yʺ := q3.Add(y, yʹ)
-    proof3, err := NewProof(ec, pk, Dji, modN.Add(zero, yʺ), NCap, s, t, yʺ, 𝜌ʺ)
+    𝜌ʺ := N2.Mul(big.NewInt(1).Exp(𝜌i, 𝛾i, N2),si)
+    yʺ := q3.Add(𝛽ʹ, q3.Mul(𝛾i, ki))
+    proof3, err := NewProof(ec, pk, Di, modN.Add(zero, yʺ), NCap, s, t, yʺ, 𝜌ʺ)
     assert.NoError(test, err)
 
-    ok3 := proof3.Verify(ec, pk, Dji, modN.Add(zero, yʺ), NCap, s, t)
+    ok3 := proof3.Verify(ec, pk, Di, modN.Add(zero, yʺ), NCap, s, t)
     assert.True(test, ok3, "proof must verify")
 
 }
