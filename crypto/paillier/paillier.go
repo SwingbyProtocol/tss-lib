@@ -107,6 +107,48 @@ func GenerateKeyPair(modulusBitLen int, timeout time.Duration, optionalConcurren
 	return
 }
 
+// len is the length of the modulus (each prime = len / 2)
+func GenerateKeyPairAndPQ(modulusBitLen int, timeout time.Duration, optionalConcurrency ...int) (privateKey *PrivateKey, publicKey *PublicKey, P, Q *big.Int, err error) {
+	var concurrency int
+	if 0 < len(optionalConcurrency) {
+		if 1 < len(optionalConcurrency) {
+			panic(errors.New("GeneratePreParams: expected 0 or 1 item in `optionalConcurrency`"))
+		}
+		concurrency = optionalConcurrency[0]
+	} else {
+		concurrency = runtime.NumCPU()
+	}
+
+	// KS-BTL-F-03: use two safe primes for P, Q
+	var N *big.Int
+	{
+		tmp := new(big.Int)
+		for {
+			sgps, err := common.GetRandomSafePrimesConcurrent(modulusBitLen/2, 2, timeout, concurrency)
+			if err != nil {
+				return nil, nil, nil, nil, err
+			}
+			P, Q = sgps[0].SafePrime(), sgps[1].SafePrime()
+			// KS-BTL-F-03: check that p-q is also very large in order to avoid square-root attacks
+			if tmp.Sub(P, Q).BitLen() >= (modulusBitLen/2)-pQBitLenDifference {
+				break
+			}
+		}
+		N = tmp.Mul(P, Q)
+	}
+
+	// phiN = P-1 * Q-1
+	PMinus1, QMinus1 := new(big.Int).Sub(P, one), new(big.Int).Sub(Q, one)
+	phiN := new(big.Int).Mul(PMinus1, QMinus1)
+
+	// lambdaN = lcm(P−1, Q−1)
+	gcd := new(big.Int).GCD(nil, nil, PMinus1, QMinus1)
+	lambdaN := new(big.Int).Div(phiN, gcd)
+
+	publicKey = &PublicKey{N: N}
+	privateKey = &PrivateKey{PublicKey: *publicKey, LambdaN: lambdaN, PhiN: phiN}
+	return
+}
 // ----- //
 
 func (publicKey *PublicKey) EncryptAndReturnRandomness(m *big.Int) (c *big.Int, x *big.Int, err error) {
