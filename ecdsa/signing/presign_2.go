@@ -121,12 +121,14 @@ func (round *presign2) Start() *tss.Error {
 			ProofLogstar := <-ProofOut
 
 			r2msg := NewPreSignRound2Message(Pj, round.PartyID(), Γi, DeltaMtA.Dji, DeltaMtA.Fji, ChiMtA.Dji, ChiMtA.Fji, DeltaMtA.Proofji, ChiMtA.Proofji, ProofLogstar)
+			common.Logger.Debugf("party %v, r2, Pj: %v NewPreSignRound2Message going out", round.PartyID(), Pj)
 			round.out <- r2msg
 
 			round.temp.DeltaShareBetas[j] = DeltaMtA.Beta
+			round.temp.Dji[j] = DeltaMtA.Dji
 			round.temp.ChiShareBetas[j] = ChiMtA.Beta
 
-			round.temp.DeltaMtAF = DeltaMtA.Fji // for identification 6
+			round.temp.DeltaMtAF = DeltaMtA.Dji // for identification 6 TODO GF
 			round.temp.ChiMtAF = ChiMtA.Fji     // for identification 6
 		}(j, Pj)
 	}

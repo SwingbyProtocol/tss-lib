@@ -8,6 +8,7 @@ package signing
 
 import (
 	"errors"
+	"math/big"
 	sync "sync"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -50,10 +51,24 @@ func (round *identification7) Start() *tss.Error {
 			}
 
 			proofDec := round.temp.r6msgProofDec[j]
+
 			ok = proofDec.Verify(round.EC(), round.key.PaillierPKs[j], round.temp.r6msgDeltaShareEnc[j], round.temp.r3msg𝛿j[j], round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
+				common.Logger.Debugf("party: %v r7 Verify FAIL j: %v, PK: %v, DeltaShareEnc(C): %v, 𝛿j(x): %v, NTildei(NCap): %v, " +
+					"H1j(s): %v, H2j(t): %v",
+					round.PartyID(), j, common.FormatBigInt(round.key.PaillierPKs[j].N),
+					common.FormatBigInt(round.temp.r6msgDeltaShareEnc[j]),
+					common.FormatBigInt(round.temp.r3msg𝛿j[j]),
+					common.FormatBigInt(round.key.NTildei), common.FormatBigInt(round.key.H1i), common.FormatBigInt(round.key.H2i))
 				errChs <- round.WrapError(errors.New("round7: proofdec verify failed"), Pj)
 				return
+			} else { // TODO
+				common.Logger.Debugf("party: %v r7 Verify OK j: %v, PK: %v, DeltaShareEnc(C): %v, 𝛿j(x): %v, NTildei(NCap): %v, " +
+					"H1j(s): %v, H2j(t): %v",
+					round.PartyID(), j, common.FormatBigInt(round.key.PaillierPKs[j].N),
+					common.FormatBigInt(round.temp.r6msgDeltaShareEnc[j]),
+					common.FormatBigInt(round.temp.r3msg𝛿j[j]),
+					common.FormatBigInt(round.key.NTildei), common.FormatBigInt(round.key.H1i), common.FormatBigInt(round.key.H2i))
 			}
 		}(j, Pj)
 	}
@@ -67,6 +82,10 @@ func (round *identification7) Start() *tss.Error {
 		return round.WrapError(errors.New("round7: identification verify failed"), culprits...)
 	}
 
+	// retire unused variables
+	round.temp.r1msgG = make([]*big.Int, round.PartyCount())
+	round.temp.r1msgK = make([]*big.Int, round.PartyCount())
+	round.temp.r3msg𝛿j = make([]*big.Int, round.PartyCount())
 	return nil
 }
 

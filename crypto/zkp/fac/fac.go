@@ -5,6 +5,7 @@ package zkpfac
 import (
 	"crypto/elliptic"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -70,10 +71,26 @@ func NewProof(ec elliptic.Curve, pk *paillier.PublicKey, NCap, s, t, p, q *big.I
     return &ProofFac{P: P, Q: Q, A: A, B: B, T: T, Sigma: 𝜎, Z1: z1, Z2: z2, W1: w1, W2: w2, V: v}, nil
 }
 
-/*
-func NewProofFromBytes(bzs [][]byte) (*ProofFac, error) ...
 
- */
+func NewProofFromBytes(bzs [][]byte) (*ProofFac, error) {
+	if !common.NonEmptyMultiBytes(bzs) {
+		return nil, fmt.Errorf("expected non-empty multy bytes to construct ProofFac")
+	}
+	return &ProofFac{
+		P:    new(big.Int).SetBytes(bzs[0]),
+		Q:    new(big.Int).SetBytes(bzs[1]),
+		A:    new(big.Int).SetBytes(bzs[2]),
+		B:   new(big.Int).SetBytes(bzs[3]),
+		T: 	  new(big.Int).SetBytes(bzs[4]),
+		Sigma:    new(big.Int).SetBytes(bzs[5]),
+		Z1:   new(big.Int).SetBytes(bzs[6]),
+		Z2:   new(big.Int).SetBytes(bzs[7]),
+		W1:   new(big.Int).SetBytes(bzs[8]),
+		W2:   new(big.Int).SetBytes(bzs[9]),
+		V:    new(big.Int).SetBytes(bzs[10]),
+	}, nil
+}
+
 
 func (pf *ProofFac) ValidateBasic() bool {
 	return pf.P != nil &&

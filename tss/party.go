@@ -175,7 +175,7 @@ func BaseUpdate2(p Party, msg ParsedMessage, task string) (ok bool, err *Error) 
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
 			}
 			p.unlock()                      // recursive so can't defer after return
-			return BaseUpdate(p, msg, task) // re-run round update or finish)
+			return BaseUpdate2(p, msg, task) // re-run round update or finish)
 		}
 		return r(true, nil)
 	}
@@ -183,7 +183,7 @@ func BaseUpdate2(p Party, msg ParsedMessage, task string) (ok bool, err *Error) 
 }
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
-func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
+func BaseUpdate(p Party, msg ParsedMessage, task string, level int) (ok bool, err *Error) {
 	// fast-fail on an invalid message; do not lock the mutex yet
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
@@ -194,9 +194,9 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 		return ok, err
 	}
 	p.lock() // data is written to P state below
-	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
+	common.Logger.Debugf("party %s BaseUpdate received message: %s, level: %v", p.PartyID(), msg.String(), level)
 	if p.Round() != nil {
-		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.Round().RoundNumber(), msg.String())
+		common.Logger.Debugf("party %s BaseUpdate round %d update: %s", p.PartyID(), p.Round().RoundNumber(), msg.String())
 	}
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return r(false, err)
@@ -208,6 +208,7 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 		}
 		if p.Round().CanProceed() {
 			if p.advance(); p.Round() != nil {
+				common.Logger.Infof("party %s: %s round %d WILL start", p.Round().Params().PartyID(), task, p.Round().RoundNumber()+1)
 				if err := p.Round().Start(); err != nil {
 					return r(false, err)
 				}
@@ -218,7 +219,9 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
 			}
 			p.unlock()                      // recursive so can't defer after return
-			return BaseUpdate(p, msg, task) // re-run round update or finish)
+			return BaseUpdate(p, msg, task, level + 1) // re-run round update or finish)
+		} else { // TODO
+			common.Logger.Infof("party %s: %s round %d cannot proceed yet", p.Round().Params().PartyID(), task, p.Round().RoundNumber())
 		}
 		return r(true, nil)
 	}

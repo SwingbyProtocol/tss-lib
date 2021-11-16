@@ -67,6 +67,7 @@ type (
 		// round 2
 		𝛾i              *big.Int
 		DeltaShareBetas []*big.Int
+		Dji []*big.Int
 		ChiShareBetas   []*big.Int
 		DeltaMtAF       *big.Int
 		ChiMtAF         *big.Int
@@ -144,6 +145,7 @@ func NewLocalParty(
 	p.temp.m = msg
 	p.temp.BigWs = make([]*crypto.ECPoint, partyCount)
 	p.temp.DeltaShareBetas = make([]*big.Int, partyCount)
+	p.temp.Dji = make([]*big.Int, partyCount)
 	p.temp.ChiShareBetas = make([]*big.Int, partyCount)
 	p.temp.DeltaShareAlphas = make([]*big.Int, partyCount)
 	p.temp.ChiShareAlphas = make([]*big.Int, partyCount)
@@ -174,7 +176,7 @@ func NewLocalParty(
 }
 
 func (p *LocalParty) FirstRound() tss.Round {
-	newRound := []interface{}{newRound1, newRound2, newRound3, newRound4, newRound5}
+	newRound := []interface{}{newRound1, newRound2, newRound3, newRound4, newRound5, newRound6, newRound7}
 	return newRound[p.startRndNum-1].(func(*tss.Parameters, *keygen.LocalPartySaveData, *common.SignatureData, *localTempData, chan<- tss.Message, chan<- common.SignatureData) tss.Round)(p.params, &p.keys, &p.data, &p.temp, p.out, p.end)
 }
 
@@ -199,7 +201,7 @@ func (p *LocalParty) Start() *tss.Error {
 }
 
 func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
-	return tss.BaseUpdate(p, msg, TaskName)
+	return tss.BaseUpdate(p, msg, TaskName, 0)
 }
 
 func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroadcast bool) (bool, *tss.Error) {

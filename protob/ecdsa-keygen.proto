@@ -27,6 +27,7 @@ message KGRound2Message {
     bytes ridi = 6;
     repeated bytes Ai = 7;
     repeated bytes Xi = 8;
+    repeated bytes PrmProof = 9;
 }
 
 /*
@@ -35,7 +36,7 @@ message KGRound2Message {
 message KGRound3Message {
     bytes share = 1;
     repeated bytes mod_proof = 2;
-    repeated bytes prm_proof = 3;
+    repeated bytes fac_proof = 3;
     repeated bytes psii_proof = 4;
 }
 

@@ -13,6 +13,8 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
+	zkpfac "github.com/binance-chain/tss-lib/crypto/zkp/fac"
+
 	// cmt "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
 	zkpmod "github.com/binance-chain/tss-lib/crypto/zkp/mod"
@@ -49,15 +51,17 @@ type (
 		Ai     *crypto.ECPoint
 		Xi     *crypto.ECPoint
 		τ      *big.Int
+		𝜓i     *zkpprm.ProofPrm
 
 		r1msgVHashs []*big.Int
 		r2msgVss    [][]*crypto.ECPoint
 		r2msgAj     []*crypto.ECPoint
 		r2msgXj     []*crypto.ECPoint
 		r2msgRidj   []*big.Int
+		r2msg𝜓j   []*zkpprm.ProofPrm
 		r3msgxij    []*big.Int
 		r3msgpfmod  []*zkpmod.ProofMod
-		r3msgpfprm  []*zkpprm.ProofPrm
+		r3msgpffac  []*zkpfac.ProofFac
 		r3msgpfsch  []*zkpsch.ProofSch
 		r4msgpf     []*zkpsch.ProofSch
 	}
@@ -96,9 +100,10 @@ func NewLocalParty(
 	p.temp.r2msgAj = make([]*crypto.ECPoint, partyCount)
 	p.temp.r2msgXj = make([]*crypto.ECPoint, partyCount)
 	p.temp.r2msgRidj = make([]*big.Int, partyCount)
+    p.temp.r2msg𝜓j = make([]*zkpprm.ProofPrm, partyCount)
 	p.temp.r3msgxij = make([]*big.Int, partyCount)
 	p.temp.r3msgpfmod = make([]*zkpmod.ProofMod, partyCount)
-	p.temp.r3msgpfprm = make([]*zkpprm.ProofPrm, partyCount)
+	p.temp.r3msgpffac = make([]*zkpfac.ProofFac, partyCount)
 	p.temp.r3msgpfsch = make([]*zkpsch.ProofSch, partyCount)
 	p.temp.r4msgpf = make([]*zkpsch.ProofSch, partyCount)
 	return p
@@ -113,7 +118,7 @@ func (p *LocalParty) Start() *tss.Error {
 }
 
 func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
-	return tss.BaseUpdate(p, msg, TaskName)
+	return tss.BaseUpdate(p, msg, TaskName, 0)
 }
 
 func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroadcast bool) (bool, *tss.Error) {
@@ -160,7 +165,11 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		p.temp.r2msgVss[fromPIdx], err = r2msg.UnmarshalVs(p.params.EC())
 		p.temp.r2msgAj[fromPIdx], err = r2msg.UnmarshalAi(p.params.EC())
 		p.temp.r2msgXj[fromPIdx], err = r2msg.UnmarshalXi(p.params.EC())
+		if err != nil {
+			return false, p.WrapError(err)
+		}
 		p.temp.r2msgRidj[fromPIdx] = r2msg.UnmarshalRidi()
+		p.temp.r2msg𝜓j[fromPIdx], err = r2msg.UnmarshalProofPrm()
 		if err != nil {
 			return false, p.WrapError(err)
 		}
@@ -181,14 +190,14 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		// 	return false, p.WrapError(errors.New("proofMod verify failed"), p.params.Parties().IDs()[fromPIdx])
 		// }
 
-		proofPrm, err := r3msg.UnmarshalProofPrm()
+		proofFac, err := r3msg.UnmarshalProofFac()
 		if err != nil {
 			return false, p.WrapError(err, p.params.Parties().IDs()[fromPIdx])
 		}
 		// if ok := proofPrm.Verify(p.data.H1j[fromPIdx], p.data.H2j[fromPIdx], p.data.NTildej[fromPIdx]); !ok {
 		// 	return false, p.WrapError(errors.New("proofPrm verify failed"), p.params.Parties().IDs()[fromPIdx])
 		// }
-		p.temp.r3msgpfprm[fromPIdx] = proofPrm
+		p.temp.r3msgpffac[fromPIdx] = proofFac
 
 		proofSch, err := r3msg.UnmarshalProofSch(p.params.EC())
 		if err != nil {

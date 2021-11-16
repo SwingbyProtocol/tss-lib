@@ -14,6 +14,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	zkpfac "github.com/binance-chain/tss-lib/crypto/zkp/fac"
 	zkpmod "github.com/binance-chain/tss-lib/crypto/zkp/mod"
 	zkpprm "github.com/binance-chain/tss-lib/crypto/zkp/prm"
 	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
@@ -67,6 +68,7 @@ func NewKGRound2Message(
 	paillierPK *paillier.PublicKey,
 	nTildeI, h1I, h2I, ridi *big.Int,
 	Ai, Xi *crypto.ECPoint,
+	𝜓i *zkpprm.ProofPrm,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
@@ -79,6 +81,7 @@ func NewKGRound2Message(
 	}
 	aiBytes := Ai.Bytes()
 	XiBytes := Xi.Bytes()
+	𝜓iBytes := 𝜓i.Bytes()
 	content := &KGRound2Message{
 		Vs:        vsbzs[:],
 		PaillierN: paillierPK.N.Bytes(),
@@ -88,6 +91,7 @@ func NewKGRound2Message(
 		Ridi:      ridi.Bytes(),
 		Ai:        aiBytes[:],
 		Xi:        XiBytes[:],
+		PrmProof: 𝜓iBytes[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -144,27 +148,31 @@ func (m *KGRound2Message) UnmarshalRidi() *big.Int {
 	return new(big.Int).SetBytes(m.GetRidi())
 }
 
+func (m *KGRound2Message) UnmarshalProofPrm() (*zkpprm.ProofPrm, error) {
+	return  zkpprm.NewProofFromBytes(m.PrmProof)
+}
+
 // ----- //
 
 func NewKGRound3Message(
 	to, from *tss.PartyID,
 	share *big.Int,
-	proofMod *zkpmod.ProofMod,
-	proofPrm *zkpprm.ProofPrm,
-	ψi *zkpsch.ProofSch,
+	𝜓i *zkpmod.ProofMod,
+	𝜙ji *zkpfac.ProofFac,
+	𝜓ij *zkpsch.ProofSch,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
 	}
-	proofModBzs := proofMod.Bytes()
-	proofPrmBzs := proofPrm.Bytes()
-	proofPsiiBzs := ψi.Bytes()
+	proofModBzs := 𝜓i.Bytes()
+	proofFacBzs := 𝜙ji.Bytes()
+	proofPsiiBzs := 𝜓ij.Bytes()
 	content := &KGRound3Message{
 		Share:     share.Bytes(),
 		ModProof:  proofModBzs[:],
-		PrmProof:  proofPrmBzs[:],
+		FacProof:  proofFacBzs[:],
 		PsiiProof: proofPsiiBzs[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
@@ -175,7 +183,7 @@ func (m *KGRound3Message) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyBytes(m.GetShare()) &&
 		common.NonEmptyMultiBytes(m.GetModProof(), zkpmod.ProofModBytesParts) &&
-		common.NonEmptyMultiBytes(m.GetPrmProof(), zkpprm.ProofPrmBytesParts) &&
+		common.NonEmptyMultiBytes(m.GetFacProof()) &&
 		common.NonEmptyMultiBytes(m.GetPsiiProof(), zkpsch.ProofSchBytesParts)
 }
 
@@ -187,8 +195,8 @@ func (m *KGRound3Message) UnmarshalProofMod() (*zkpmod.ProofMod, error) {
 	return zkpmod.NewProofFromBytes(m.GetModProof())
 }
 
-func (m *KGRound3Message) UnmarshalProofPrm() (*zkpprm.ProofPrm, error) {
-	return zkpprm.NewProofFromBytes(m.GetPrmProof())
+func (m *KGRound3Message) UnmarshalProofFac() (*zkpfac.ProofFac, error) {
+	return zkpfac.NewProofFromBytes(m.GetFacProof())
 }
 
 func (m *KGRound3Message) UnmarshalProofSch(ec elliptic.Curve) (*zkpsch.ProofSch, error) {

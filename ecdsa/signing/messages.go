@@ -88,7 +88,7 @@ func NewPreSignRound2Message(
 	FjiChi *big.Int,
 	AffgProofDelta *zkpaffg.ProofAffg,
 	AffgProofChi *zkpaffg.ProofAffg,
-	ψPrimeji *zkplogstar.ProofLogstar,
+	ψʹji *zkplogstar.ProofLogstar,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
@@ -98,7 +98,7 @@ func NewPreSignRound2Message(
 	BigGammaBytes := Γi.Bytes()
 	AffgDeltaBz := AffgProofDelta.Bytes()
 	AffgChiBz := AffgProofChi.Bytes()
-	LogstarBz := ψPrimeji.Bytes()
+	LogstarBz := ψʹji.Bytes()
 	content := &PreSignRound2Message{
 		BigGammaShare:  BigGammaBytes[:],
 		DjiDelta:       DjiDelta.Bytes(),

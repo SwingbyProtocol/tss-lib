@@ -13,6 +13,7 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	zkpprm "github.com/binance-chain/tss-lib/crypto/zkp/prm"
 	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -66,17 +67,27 @@ func (round *round1) Start() *tss.Error {
 		}
 	}
 
+	P2, Q2 := new(big.Int).Lsh(preParams.P, 1), new(big.Int).Lsh(preParams.Q, 1)
+	𝜑 := new(big.Int).Mul(P2, Q2)
+	𝜓i, err := zkpprm.NewProof(preParams.H1i, preParams.H2i, preParams.NTildei, 𝜑, preParams.Beta)
 	listToHash, err := crypto.FlattenECPoints(vs)
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
 	listToHash = append(listToHash, preParams.PaillierSK.PublicKey.N, ridi, Xi.X(), Xi.Y(), Ai.X(), Ai.Y(), preParams.NTildei, preParams.H1i, preParams.H2i)
+	for _, a := range 𝜓i.A {
+		listToHash = append(listToHash, a)
+	}
+	for _, z := range 𝜓i.Z {
+		listToHash = append(listToHash, z)
+	}
 	VHash := common.SHA512_256i(listToHash...)
 	{
 		msg := NewKGRound1Message(round.PartyID(), VHash)
 		round.out <- msg
 	}
 
+	round.temp.𝜓i = 𝜓i
 	round.temp.vs = vs
 	round.temp.ridi = ridi
 	round.temp.ui = ui

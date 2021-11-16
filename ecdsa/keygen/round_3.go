@@ -13,11 +13,11 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
+	zkpfac "github.com/binance-chain/tss-lib/crypto/zkp/fac"
 	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
 
 	zkpmod "github.com/binance-chain/tss-lib/crypto/zkp/mod"
-	zkpprm "github.com/binance-chain/tss-lib/crypto/zkp/prm"
 )
 
 const (
@@ -58,6 +58,11 @@ func (round *round3) Start() *tss.Error {
 				errChs <- round.WrapError(errors.New("paillier-blum modulus too small"), Pj)
 				return
 			}
+			𝜓j := round.temp.r2msg𝜓j[j]
+			if verifyOk := 𝜓j.Verify(round.save.H1j[j], round.save.H2j[j], round.save.NTildej[j]); !verifyOk {
+				errChs <- round.WrapError(errors.New("error in prm proof verification"), Pj)
+				return
+			}
 			listToHash, err := crypto.FlattenECPoints(round.temp.r2msgVss[j])
 			if err != nil {
 				errChs <- round.WrapError(err, Pj)
@@ -67,6 +72,13 @@ func (round *round3) Start() *tss.Error {
 				round.temp.r2msgXj[j].X(), round.temp.r2msgXj[j].Y(),
 				round.temp.r2msgAj[j].X(), round.temp.r2msgAj[j].Y(), round.save.NTildej[j], round.save.H1j[j],
 				round.save.H2j[j])
+
+			for _, a := range 𝜓j.A {
+				listToHash = append(listToHash, a)
+			}
+			for _, z := range 𝜓j.Z {
+				listToHash = append(listToHash, z)
+			}
 			VjHash := common.SHA512_256i(listToHash...)
 			if VjHash.Cmp(round.temp.r1msgVHashs[j]) != 0 {
 				errChs <- round.WrapError(errors.New("verify hash failed"), Pj)
@@ -86,18 +98,18 @@ func (round *round3) Start() *tss.Error {
 	}
 
 	// Fig 5. Round 3.2 / Fig 6. Round 3.2
-	proofMod, err := zkpmod.NewProof(round.save.NTildei, common.PrimeToSafePrime(round.save.P), common.PrimeToSafePrime(round.save.Q))
+	𝜓i, err := zkpmod.NewProof(round.save.NTildei, common.PrimeToSafePrime(round.save.P), common.PrimeToSafePrime(round.save.Q))
 	if err != nil {
 		return round.WrapError(errors.New("create proofmod failed"))
 	}
-	Phi := new(big.Int).Mul(new(big.Int).Lsh(round.save.P, 1), new(big.Int).Lsh(round.save.Q, 1))
-	proofPrm, err := zkpprm.NewProof(round.save.H1i, round.save.H2i, round.save.NTildei, Phi, round.save.Beta)
+	𝜙ji, err := zkpfac.NewProof(round.EC(), &round.save.PaillierSK.PublicKey, round.save.NTildei,
+		round.save.H1i, round.save.H2i, common.PrimeToSafePrime(round.save.P), common.PrimeToSafePrime(round.save.Q))
 	if err != nil {
 		return round.WrapError(errors.New("create proofPrm failed"))
 	}
 	xi := new(big.Int).Set(round.temp.shares[i].Share)
 	Xi := crypto.ScalarBaseMult(round.EC(), xi)
-	ψi, err := zkpsch.NewProofWithAlpha(Xi, xi, round.temp.τ, rid)
+	𝜓ij, err := zkpsch.NewProofWithAlpha(Xi, xi, round.temp.τ, rid)
 	if err != nil {
 		return round.WrapError(errors.New("create proofSch failed"))
 	}
@@ -118,7 +130,7 @@ func (round *round3) Start() *tss.Error {
 				return
 			}
 
-			r3msg := NewKGRound3Message(Pj, round.PartyID(), Cij, proofMod, proofPrm, ψi)
+			r3msg := NewKGRound3Message(Pj, round.PartyID(), Cij, 𝜓i, 𝜙ji, 𝜓ij)
 			round.out <- r3msg
 		}(j, Pj)
 	}

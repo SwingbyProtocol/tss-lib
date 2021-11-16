@@ -8,7 +8,6 @@ package signing
 
 import (
 	"errors"
-	"math/big"
 	"sync"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -47,10 +46,14 @@ func (round *sign4) Start() *tss.Error {
 			defer wg.Done()
 			Kj := round.temp.r1msgK[j]
 			Δj := round.temp.r3msgΔj[j]
-			ψDoublePrimeij := round.temp.r3msgProofLogstar[j]
+			ψʺij := round.temp.r3msgProofLogstar[j]
 
-			ok := ψDoublePrimeij.Verify(round.EC(), round.key.PaillierPKs[j], Kj, Δj, round.temp.Γ, round.key.NTildei, round.key.H1i, round.key.H2i)
+			ok := ψʺij.Verify(round.EC(), round.key.PaillierPKs[j], Kj, Δj, round.temp.Γ, round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
+				common.Logger.Debugf(" r4 proof verify failed - i: %v, Pj: %v, PKj: %v, Kj(C): %v, Δj(X): %v, Γ(g): %v, NTildei(NCap): %v, H1i(s): %v, H2i(t): %v",
+					i, Pj, common.FormatBigInt(round.key.PaillierPKs[j].N), common.FormatBigInt(Kj),
+					crypto.FormatECPoint(Δj), crypto.FormatECPoint(round.temp.Γ), common.FormatBigInt(round.key.NTildei),
+					common.FormatBigInt(round.key.H1i), common.FormatBigInt(round.key.H2i))
 				errChs <- round.WrapError(errors.New("proof verify failed"), Pj)
 				return
 			}
@@ -105,11 +108,10 @@ func (round *sign4) Start() *tss.Error {
 	round.temp.Rx = r
 	round.temp.SigmaShare = 𝜎i
 	// retire unused variables
-	round.temp.𝜌i = nil
-	round.temp.K = nil
-	round.temp.r1msgK = make([]*big.Int, round.PartyCount())
+	// round.temp.𝜌i = nil
+
 	round.temp.r3msgΔj = make([]*crypto.ECPoint, round.PartyCount())
-	round.temp.r3msg𝛿j = make([]*big.Int, round.PartyCount())
+
 	round.temp.r3msgProofLogstar = make([]*zkplogstar.ProofLogstar, round.PartyCount())
 
 	return nil
@@ -147,15 +149,17 @@ func (round *sign4) CanAccept(msg tss.ParsedMessage) bool {
 
 func (round *sign4) NextRound() tss.Round {
 	round.started = false
-	otherPartyAborted := false
+
 	for _, abortingMsg := range round.temp.r4msgAborting {
 		if abortingMsg {
-			otherPartyAborted = true
+			round.AbortingSigning = true
 			break
 		}
 	}
-	if round.AbortingSigning || otherPartyAborted {
+	if round.AbortingSigning {
+		common.Logger.Debugf("party %v, r4 - next round is id prep", round.PartyID())
 		return &identificationPrep{round}
 	}
+	common.Logger.Debugf("party %v, r4 - next round is signout(5)", round.PartyID())
 	return &signout{round}
 }

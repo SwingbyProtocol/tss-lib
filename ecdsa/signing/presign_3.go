@@ -86,9 +86,9 @@ func (round *presign3) Start() *tss.Error {
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
-			ψPrimeij := round.temp.r2msgProofLogstar[j]
+			ψʹij := round.temp.r2msgProofLogstar[j]
 			Gj := round.temp.r1msgG[j]
-			ok := ψPrimeij.Verify(round.EC(), round.key.PaillierPKs[j], Gj, Γj, g, round.key.NTildei, round.key.H1i, round.key.H2i)
+			ok := ψʹij.Verify(round.EC(), round.key.PaillierPKs[j], Gj, Γj, g, round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
 				errChs <- round.WrapError(errors.New("failed to verify logstar"))
 				return
@@ -158,6 +158,7 @@ func (round *presign3) Start() *tss.Error {
 
 		ψDoublePrimeji := <-ProofOut
 		r3msg := NewPreSignRound3Message(Pj, round.PartyID(), 𝛿i, Δi, ψDoublePrimeji)
+		common.Logger.Debugf("party %v r3, NewPreSignRound3Message is going out to Pj %v", round.PartyID(), Pj)
 		round.out <- r3msg
 	}
 	wg.Wait()
@@ -169,16 +170,13 @@ func (round *presign3) Start() *tss.Error {
 	// retire unused variables
 	round.temp.w = nil
 	round.temp.BigWs = nil
-	round.temp.𝛾i = nil
 	round.temp.Γi = nil
 
 	round.temp.DeltaShareBetas = nil
 	round.temp.ChiShareBetas = nil
 	round.temp.DeltaShareAlphas = nil
 	round.temp.ChiShareAlphas = nil
-	round.temp.r1msgG = make([]*big.Int, round.PartyCount())
-	round.temp.r2msgDeltaD = make([]*big.Int, round.PartyCount())
-	round.temp.r2msgDeltaF = make([]*big.Int, round.PartyCount())
+	//
 	round.temp.r2msgChiD = make([]*big.Int, round.PartyCount())
 	round.temp.r2msgChiF = make([]*big.Int, round.PartyCount())
 	round.temp.r2msgDeltaProof = make([]*zkpaffg.ProofAffg, round.PartyCount())

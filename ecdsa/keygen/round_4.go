@@ -56,7 +56,7 @@ func (round *round4) Start() *tss.Error {
 		wg.Add(1)
 		go func(j int, Pj *tss.PartyID) {
 			defer wg.Done()
-			if ok := round.temp.r3msgpfprm[j].Verify(round.save.H1j[j], round.save.H2j[j], round.save.NTildej[j]); !ok {
+			if ok := round.temp.r3msgpffac[j].Verify(round.EC(), round.save.PaillierPKs[j], round.save.NTildej[j], round.save.H1j[j], round.save.H2j[j]); !ok {
 				errChs <- round.WrapError(errors.New("proofPrm verify failed"), Pj)
 			}
 		}(j, Pj)
