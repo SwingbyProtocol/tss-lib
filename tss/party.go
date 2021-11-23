@@ -220,8 +220,6 @@ func BaseUpdate(p Party, msg ParsedMessage, task string, level int) (ok bool, er
 			}
 			p.unlock()                      // recursive so can't defer after return
 			return BaseUpdate(p, msg, task, level + 1) // re-run round update or finish)
-		} else { // TODO
-			common.Logger.Infof("party %s: %s round %d cannot proceed yet", p.Round().Params().PartyID(), task, p.Round().RoundNumber())
 		}
 		return r(true, nil)
 	}

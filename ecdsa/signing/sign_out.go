@@ -43,7 +43,6 @@ func (round *signout) Start() *tss.Error {
 	round.started = true
 	round.resetOK()
 
-	common.Logger.Debugf("party %v, r5, AbortingSigning? %v", round.PartyID(), round.AbortingSigning)
 	// Fig 8. Output. combine signature shares verify and output
 	Sigma := round.temp.SigmaShare
 	modN := common.ModInt(round.Params().EC().Params().N)

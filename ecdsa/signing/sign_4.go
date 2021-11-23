@@ -50,10 +50,7 @@ func (round *sign4) Start() *tss.Error {
 
 			ok := ψʺij.Verify(round.EC(), round.key.PaillierPKs[j], Kj, Δj, round.temp.Γ, round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
-				common.Logger.Debugf(" r4 proof verify failed - i: %v, Pj: %v, PKj: %v, Kj(C): %v, Δj(X): %v, Γ(g): %v, NTildei(NCap): %v, H1i(s): %v, H2i(t): %v",
-					i, Pj, common.FormatBigInt(round.key.PaillierPKs[j].N), common.FormatBigInt(Kj),
-					crypto.FormatECPoint(Δj), crypto.FormatECPoint(round.temp.Γ), common.FormatBigInt(round.key.NTildei),
-					common.FormatBigInt(round.key.H1i), common.FormatBigInt(round.key.H2i))
+				common.Logger.Debugf(" zkplogstar proof verify failed - i: %v, Pj: %v", i, Pj)
 				errChs <- round.WrapError(errors.New("proof verify failed"), Pj)
 				return
 			}
@@ -157,9 +154,7 @@ func (round *sign4) NextRound() tss.Round {
 		}
 	}
 	if round.AbortingSigning {
-		common.Logger.Debugf("party %v, r4 - next round is id prep", round.PartyID())
 		return &identificationPrep{round}
 	}
-	common.Logger.Debugf("party %v, r4 - next round is signout(5)", round.PartyID())
 	return &signout{round}
 }
