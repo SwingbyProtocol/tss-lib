@@ -11,13 +11,14 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	zkpdec "github.com/binance-chain/tss-lib/crypto/zkp/dec"
+	zkplogstar "github.com/binance-chain/tss-lib/crypto/zkp/logstar"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +32,7 @@ import (
 const (
 	testParticipants = test.TestParticipants
 	testThreshold    = test.TestThreshold
-	maliciousPartySimulatingAbort = 3
+	maliciousPartySimulatingAbort = 2
 	innocentPartySimulatingAbort = 1
 )
 
@@ -254,7 +255,6 @@ signing:
 	}
 }
 
-/* TODO
 //
 func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalParty, errCh chan<- *tss.Error) {
 	// do not send a message from this party back to itself
@@ -292,9 +292,7 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 		sk, pk := otherRound.key.PaillierSK, &otherRound.key.PaillierSK.PublicKey
 
 		fakeki := common.GetRandomPositiveInt(q)
-		// g := crypto.ScalarBaseMult(ec, big.NewInt(1))
 		fakeKi, fake𝜌i, _ := sk.EncryptAndReturnRandomness(fakeki)
-		// X := crypto.ScalarBaseMult(ec, fakeki)
 		fakeΔi := round.temp.Γ.ScalarMult(fakeki)
 		modN := common.ModInt(round.EC().Params().N)
 		fake𝛿i := modN.Mul(fakeki, round.temp.𝛾i)
@@ -366,11 +364,22 @@ signing:
 	for {
 		select {
 		case errS := <-errCh:
-			assert.NotNil(t, errS, "there should have been an error")
-			assert.NotNil(t, errS.Culprits(), "here should have been one culprit")
-			assert.EqualValues(t, len(errS.Culprits()), 1, "there should have been one culprit")
-			assert.NotNil(t, errS.Culprits()[0], "there should have been one culprit")
-			assert.EqualValues(t, errS.Culprits()[0].Index, maliciousPartySimulatingAbort, "error in test in identification of the malicious party")
+			ok := true
+			if ok = assert.NotNil(t, errS, "there should have been an error"); !ok {
+				t.FailNow()
+			}
+			if ok = assert.NotNil(t, errS.Culprits(), "here should have been one culprit"); !ok {
+				t.FailNow()
+			}
+			if ok = assert.EqualValues(t, 1, len(errS.Culprits()),  "there should have been one culprit"); !ok {
+				t.FailNow()
+			}
+			if ok = assert.NotNil(t, errS.Culprits()[0], "there should have been one culprit"); !ok {
+				t.FailNow()
+			}
+			if ok = assert.EqualValues(t, maliciousPartySimulatingAbort, errS.Culprits()[0].Index,  "error in test in identification of the malicious party"); !ok {
+				t.FailNow()
+			}
 			break signing
 
 		case msg := <-outCh:
@@ -396,9 +405,11 @@ signing:
 		}
 	}
 }
-*/
+
+
 
 func TestIdAbortSimulateRound7(test *testing.T) {
+	setUp("debug")
     var err error
 	ec := tss.S256()
 	q := ec.Params().N
@@ -423,36 +434,57 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 	k := make([]*big.Int, n)
 	𝜌 := make([]*big.Int, n)
 	𝛾 := make([]*big.Int, n)
-	// x := make([]*big.Int, n)
 	Γ := make([]*crypto.ECPoint, n)
 	sk := make([]*paillier.PrivateKey, n)
 	pk := make([]*paillier.PublicKey, n)
 	NCap := make([]*big.Int, n)
 	s := make([]*big.Int, n)
 	t := make([]*big.Int, n)
+	D := make([][]*MtAOut, n)
+	𝛽 := make([][]*big.Int, n)
+	𝛽ʹ := make([][]*big.Int, n)
 
-	for i=0; i<n; i++ {
-		sk[i], pk[i], err = paillier.GenerateKeyPair(1024*2, time.Minute*10)
-		if err!= nil {
-			test.Errorf("error %v", err)
-			test.FailNow()
-		}
-		primes := [2]*big.Int{common.GetRandomPrimeInt(1024), common.GetRandomPrimeInt(1024)}
-		NCap[i], s[i], t[i], err = crypto.GenerateNTildei(primes)
-		if err!= nil {
-			test.Errorf("error %v", err)
-			test.FailNow()
-		}
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	if err!= nil {
+		test.Errorf("error %v", err)
+		test.FailNow()
+	}
+
+	for i=0; i < len(signPIDs); i++ {
+		sk[i], pk[i] = keys[i].PaillierSK, &keys[i].PaillierSK.PublicKey
+
+		NCap[i], s[i], t[i] = keys[i].NTildei, keys[i].H1i, keys[i].H2i
 		k[i] = common.GetRandomPositiveInt(ec.Params().N)
 		K[i], 𝜌[i], err = sk[i].EncryptAndReturnRandomness(k[i])
 		𝛾[i] = common.GetRandomPositiveInt(q)
 		Γ[i] = crypto.ScalarBaseMult(ec, 𝛾[i])
+
+		D[i] = make([]*MtAOut, n)
+		𝛽[i] = make([]*big.Int, n)
+		𝛽ʹ[i] = make([]*big.Int, n)
 		if err!= nil {
 			test.Errorf("error %v", err)
 			test.FailNow()
 		}
 	}
-	for i=0; i<n/2; i++ {
+	for i=0; i< len(signPIDs); i++ {
+		for j=0; j<len(signPIDs); j++ {
+			if j == i {
+				continue
+			}
+
+			DeltaMtAij, errMta := NewMtA(ec, K[j], 𝛾[i], Γ[i], pk[j], pk[i], NCap[j], s[j], t[j])
+			if errMta != nil {
+				test.Errorf("error %v", errMta)
+				test.FailNow()
+			}
+			D[j][i] = DeltaMtAij
+			𝛽ʹ[i][j] = DeltaMtAij.BetaNeg
+			𝛽[i][j] = DeltaMtAij.Beta
+		}
+	}
+
+	for i=0; i< len(signPIDs); i++ {
 		Gi, 𝜈i, _ := sk[i].EncryptAndReturnRandomness(𝛾[i])
 
 		// Fig 7. Output.2
@@ -466,55 +498,69 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 		secretProduct := big.NewInt(1).Exp(𝜈i, k[i], pk[i].NSquare())
 		encryptedValueSum := modQ3Mul(k[i],𝛾[i])
 
-		proof1, err := zkpdec.NewProof(ec, pk[i], Hi, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i], encryptedValueSum, secretProduct)
-		ok1 := proof1.Verify(ec, pk[i], Hi, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i]) // TODO
-		assert.True(test, ok1, "proof must verify")
+		{
+			proof, _ := zkpdec.NewProof(ec, pk[i], Hi, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i], encryptedValueSum, secretProduct)
+			ok := proof.Verify(ec, pk[i], Hi, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i])
+			assert.True(test, ok, "zkpdec proof must verify")
+		}
 
-		for j=0; j<n; j++ {
+		for j=0; j<len(signPIDs); j++ {
 			if j == i {
 				continue
 			}
 
-			DeltaMtAij, errMta := NewMtA(ec, K[i], 𝛾[j], Γ[j], pk[i], pk[j], NCap[i], s[i], t[i])
-			if errMta!= nil {
-				test.Errorf("error %v", errMta)
-				test.FailNow()
+			𝜌𝛾s := modMul(pk[i].NSquare(), big.NewInt(1).Exp(𝜌[i], 𝛾[j], pk[i].NSquare()), D[i][j].Sij)
+			𝛾k𝛽ʹ := q3Add(𝛽ʹ[j][i], modQ3Mul(𝛾[j],k[i]))
+
+			 common.Logger.Debugf("ut NewMtAHardcoded D(i%v,j:%v): %v, 𝛽ji: %v, 𝛽ʹji: %v, sij:%v, 𝛾k𝛽ʹ:%v, 𝜌𝛾s: %v, 𝛾j:%v", i, j, common.FormatBigInt(D[i][j].Dji),
+				common.FormatBigInt(𝛽[j][i]), common.FormatBigInt(𝛽ʹ[j][i]), common.FormatBigInt(D[i][j].Sij), common.FormatBigInt(𝛾k𝛽ʹ),
+				common.FormatBigInt(𝜌𝛾s), common.FormatBigInt(𝛾[j]))
+			{
+				proofD, err1 := zkpdec.NewProof(ec, pk[i], D[i][j].Dji, modN.Add(zero,𝛾k𝛽ʹ), NCap[i], s[i], t[i], 𝛾k𝛽ʹ, 𝜌𝛾s)
+				assert.NoError(test, err1)
+				okD := proofD.Verify(ec, pk[i], D[i][j].Dji, modN.Add(zero,𝛾k𝛽ʹ), NCap[i], s[i], t[i])
+				assert.True(test, okD, "proof must verify")
 			}
-
-			𝜌𝛾s := modMul(pk[i].NSquare(), big.NewInt(1).Exp(𝜌[i], 𝛾[j], pk[i].NSquare()), DeltaMtAij.Sij)
-			𝛾k𝛽ʹ := q3Add(DeltaMtAij.BetaNeg, modQ3Mul(𝛾[j],k[i]))
-
-			proofD, err1 := zkpdec.NewProof(ec, pk[i], DeltaMtAij.Dji, modN.Add(zero,𝛾k𝛽ʹ), NCap[i], s[i], t[i], 𝛾k𝛽ʹ, 𝜌𝛾s)
-			assert.NoError(test, err1)
-			okD := proofD.Verify(ec, pk[i], DeltaMtAij.Dji, modN.Add(zero,𝛾k𝛽ʹ), NCap[i], s[i], t[i])
-			assert.True(test, okD, "proof must verify")
 
 			// F
-			Fji, rij, err2 := pk[i].EncryptAndReturnRandomness(DeltaMtAij.BetaNeg)
-			if err2!= nil {
-				test.Errorf("error %v", err2)
+			var Fji *big.Int
+			Fji, D[i][j].Rij, err = pk[i].EncryptAndReturnRandomness(𝛽[i][j])
+			if err!= nil {
+				test.Errorf("error %v", err)
 				test.FailNow()
 			}
 
+			common.Logger.Debugf("ut F(j:%v,i:%v): %v, 𝛽ij: %v, rij:%v", j, i, common.FormatBigInt(Fji),
+				common.FormatBigInt(𝛽[i][j]),common.FormatBigInt(D[i][j].Rij))
+
 			// DF
-			𝜌𝛾sr := modMul(pk[i].NSquare(), 𝜌𝛾s, rij)
-			𝛾k2𝛽ʹ := q3Add(𝛾k𝛽ʹ, DeltaMtAij.BetaNeg)
-			DF, err3 := pk[i].HomoAdd(DeltaMtAij.Dji, Fji)
+			𝜌𝛾sr := modMul(pk[i].NSquare(), 𝜌𝛾s, D[i][j].Rij)
+			𝛾k𝛽ʹ𝛽 := q3Add(𝛾k𝛽ʹ, 𝛽[i][j])
+			DF, err3 := pk[i].HomoAdd(D[i][j].Dji, Fji)
 			if err3!= nil {
 				test.Errorf("error %v", err3)
 				test.FailNow()
 			}
 
-			proof2, err4 := zkpdec.NewProof(ec, pk[i], DF, modN.Add(zero, 𝛾k2𝛽ʹ), NCap[i], s[i], t[i], 𝛾k2𝛽ʹ, 𝜌𝛾sr)
-			if err4!= nil {
-				test.Errorf("error %v", err4)
-				test.FailNow()
+			{
+				common.Logger.Debugf("ut zkpdecNewProof DF(i:%v,j:%v): %v, rij: %v, 𝛾k𝛽ʹ𝛽:%v, 𝛾k𝛽ʹ:%v, 𝛽ij:%v, 𝜌𝛾sr:%v", i, j, common.FormatBigInt(DF),
+					common.FormatBigInt(D[i][j].Rij), common.FormatBigInt(𝛾k𝛽ʹ𝛽),
+					common.FormatBigInt(𝛾k𝛽ʹ), common.FormatBigInt(𝛽[i][j]),
+					common.FormatBigInt(𝜌𝛾sr))
+
+				proof2, err4 := zkpdec.NewProof(ec, pk[i], DF, modN.Add(zero, 𝛾k𝛽ʹ𝛽), NCap[i], s[i], t[i], 𝛾k𝛽ʹ𝛽, 𝜌𝛾sr)
+				if err4!= nil {
+					test.Errorf("error %v", err4)
+					test.FailNow()
+				}
+				ok2 := proof2.Verify(ec, pk[i], DF, modN.Add(zero, 𝛾k𝛽ʹ𝛽), NCap[i], s[i], t[i])
+				if okA := assert.True(test, ok2, "proof must verify"); !okA {
+					test.FailNow()
+				}
 			}
-			ok2 := proof2.Verify(ec, pk[i], DF, modN.Add(zero, 𝛾k2𝛽ʹ), NCap[i], s[i], t[i])
-			assert.True(test, ok2, "proof must verify")
 
 			secretProduct = modMul(pk[i].NSquare(), 𝜌𝛾sr, secretProduct)
-			encryptedValueSum = q3Add(𝛾k2𝛽ʹ, encryptedValueSum)
+			encryptedValueSum = q3Add(𝛾k𝛽ʹ𝛽, encryptedValueSum)
 
 			DeltaShareEnc, err = pk[i].HomoAdd(DF, DeltaShareEnc)
 			if err!= nil {
@@ -523,16 +569,21 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 			}
 
 		}
-		proofDeltaShare, err6 := zkpdec.NewProof(ec, pk[i], DeltaShareEnc, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i], encryptedValueSum, secretProduct)
-		if err6!= nil {
-			test.Errorf("error %v", err6)
-			test.FailNow()
+		{
+			common.Logger.Debugf("ut zkpdecNewProof i:%v, j:%v, r6msgDeltaShareEnc[i:%v]: %v, encryptedValueSum: %v, secretProduct: %v", i, j, i,
+				common.FormatBigInt(DeltaShareEnc),
+				common.FormatBigInt(encryptedValueSum), common.FormatBigInt(secretProduct))
+
+			proofDeltaShare, err6 := zkpdec.NewProof(ec, pk[i], DeltaShareEnc, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i], encryptedValueSum, secretProduct)
+			if err6!= nil {
+				test.Errorf("error %v", err6)
+				test.FailNow()
+			}
+			ok6 := proofDeltaShare.Verify(ec, pk[i], DeltaShareEnc, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i])
+			assert.True(test, ok6, "proof must verify")
 		}
-		ok6 := proofDeltaShare.Verify(ec, pk[i], DeltaShareEnc, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i])
-		assert.True(test, ok6, "proof must verify")
 	}
 }
-
 
 func TestFillTo32BytesInPlace(t *testing.T) {
 	s := big.NewInt(123456789)

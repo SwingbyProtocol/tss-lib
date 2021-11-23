@@ -47,78 +47,119 @@ func (round *identification6) Start() *tss.Error {
 		m := common.ModInt(round.EC().Params().N)
 		return m.Add(zero, a)
 	}
-	/* var q3Add = func(a, b *big.Int) * big.Int {
+	var modMul = func(N, a, b *big.Int) * big.Int {
+		_N := common.ModInt(big.NewInt(0).Set(N))
+		return _N.Mul(a, b)
+	}
+	var q3Add = func(a, b *big.Int) * big.Int {
 		q3 := new(big.Int).Mul(q, new(big.Int).Mul(q, q))
 		return q3.Add(a, b)
-	} */
+	}
 
 	// Fig 7. Output.2
-	H, _ := round.key.PaillierSK.HomoMult(round.temp.ki, round.temp.G)
-	proofH, errM := zkpmul.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.K, round.temp.G, H, round.temp.ki, round.temp.𝜌i)
+	Hi, _ := round.key.PaillierSK.HomoMult(round.temp.ki, round.temp.G)
+	proofHMul, errM := zkpmul.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.K, round.temp.G, Hi, round.temp.ki, round.temp.𝜌i)
 	if errM != nil {
 		return round.WrapError(fmt.Errorf("error creating zkp"))
 	}
-	if !proofH.Verify(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.K, round.temp.G, H) {
+	if !proofHMul.Verify(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.K, round.temp.G, Hi) {
 		return round.WrapError(fmt.Errorf("error in zkp verification"))
 	}
-	DeltaShareEnc := H
+	DeltaShareEnc := Hi
 	secretProduct := big.NewInt(1).Exp(round.temp.𝜈i, round.temp.ki, round.key.PaillierSK.PublicKey.NSquare())
 	encryptedValueSum := modQ3Mul(round.temp.ki,round.temp.𝛾i)
 
-	proof1, errD := zkpdec.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, H, modN(encryptedValueSum), round.key.NTildei, round.key.H1i, round.key.H2i, encryptedValueSum, secretProduct)
-	if errD != nil {
+	proofHDec, errHDec := zkpdec.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, Hi, modN(encryptedValueSum),
+		round.key.NTildei, round.key.H1i, round.key.H2i, encryptedValueSum, secretProduct)
+	if errHDec != nil {
 		return round.WrapError(fmt.Errorf("error creating zkp"))
 	}
-	okD := proof1.Verify(round.EC(), &round.key.PaillierSK.PublicKey, H, modN(encryptedValueSum), round.key.NTildei, round.key.H1i, round.key.H2i)
-    common.Logger.Debugf("party r6, okD? %v", round.PartyID(), okD)
-
-	var errH1, errH2 error
-	for j := range round.Parties().IDs() {
-		if j == i {
-			continue
-		}
-
-		DeltaShareEnc, errH1 = round.key.PaillierSK.HomoAdd(DeltaShareEnc, round.temp.r2msgDeltaD[j])
-		if errH1 != nil {
-			return round.WrapError(fmt.Errorf("error with addition"))
-		}
-		DeltaShareEnc, errH2 = round.key.PaillierSK.HomoAdd(DeltaShareEnc, round.temp.Dji[j])
-		if errH2 != nil {
-			return round.WrapError(fmt.Errorf("error with addition"))
-		}
+	okHDec := proofHDec.Verify(round.EC(), &round.key.PaillierSK.PublicKey, Hi, modN(encryptedValueSum), round.key.NTildei, round.key.H1i, round.key.H2i)
+	if !okHDec {
+		return round.WrapError(errors.New("error in zkp verification"))
 	}
-
+	pkiNSquare := round.key.PaillierSK.PublicKey.NSquare()
+	var errDSE error
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue
 		}
-		common.Logger.Debugf("party: %v, r6 NewProof j: %v, PK: %v, DeltaShareEnc(C): %v, 𝛿i(x): %v, NTildej(NCap): %v, " +
-			"H1j(s): %v, H2j(t): %v, 𝛿i(y): %v, 𝜈i: %v",
-			round.PartyID(), j, common.FormatBigInt(round.key.PaillierSK.PublicKey.N),
-			common.FormatBigInt(DeltaShareEnc),
-			common.FormatBigInt(round.temp.𝛿i),
-			common.FormatBigInt(round.key.NTildej[j]), common.FormatBigInt(round.key.H1j[j]), common.FormatBigInt(round.key.H2j[j]),
-			common.FormatBigInt(round.temp.𝛿i), common.FormatBigInt(round.temp.𝜈i))
-		proofDeltaShare, errD := zkpdec.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, DeltaShareEnc, round.temp.𝛿i, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.temp.𝛿i, round.temp.𝜈i)
-		if errD != nil {
-			return round.WrapError(fmt.Errorf("error with proof"))
+
+		DF, errDF := round.key.PaillierSK.PublicKey.HomoAdd(round.temp.r2msgDeltaD[j], round.temp.DeltaMtAFji[j])
+		if errDF != nil {
+			return round.WrapError(fmt.Errorf("error with addition"))
 		}
-		ok := proofDeltaShare.Verify(round.EC(), &round.key.PaillierSK.PublicKey, DeltaShareEnc, round.temp.𝛿i, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j]) // TODO
-		if !ok { // gf TODO
-			common.Logger.Errorf("party %v, j: %v, error in verify ***", round.PartyID(), j)
-		} else {
-			common.Logger.Errorf("party %v, j: %v,  verify ok! ***", round.PartyID(), j)
+
+		{
+			𝛾j := round.temp.r5msg𝛾j[j]
+			𝜌𝛾s := modMul(pkiNSquare, big.NewInt(1).Exp(round.temp.𝜌i, 𝛾j, pkiNSquare), round.temp.r5msgsji[j])
+			𝛽ʹ := round.temp.r5msg𝛽ʹji[j]
+			𝛽ij := round.temp.DeltaShareBetas[j]
+			𝛾k𝛽ʹ := q3Add(𝛽ʹ, modQ3Mul(𝛾j, round.temp.ki))
+			{
+				proofD, errD := zkpdec.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.r2msgDeltaD[j],
+					modN(𝛾k𝛽ʹ), round.key.NTildei, round.key.H1i, round.key.H2i, 𝛾k𝛽ʹ, 𝜌𝛾s)
+				/* common.Logger.Debugf("r6 zkpdecNewProof D(i%v,j:%v): %v, 𝛽ji: %v, DeltaShareBetas[j]: %v, 𝛽ʹji:%v, sji:%v, 𝛾k𝛽ʹ:%v, 𝜌𝛾s: %v, 𝛾j:%v", i, j, common.FormatBigInt(round.temp.r2msgDeltaD[j]),
+					common.FormatBigInt(𝛽ji), common.FormatBigInt(round.temp.DeltaShareBetas[j]), common.FormatBigInt(𝛽ʹ), common.FormatBigInt(round.temp.r5msgsji[j]),
+					common.FormatBigInt(𝛾k𝛽ʹ) , common.FormatBigInt(𝜌𝛾s), common.FormatBigInt(𝛾j)) */
+				if errD != nil {
+					return round.WrapError(fmt.Errorf("error creating zkp"))
+				}
+				okD := proofD.Verify(round.EC(), &round.key.PaillierSK.PublicKey, round.temp.r2msgDeltaD[j],
+					modN(𝛾k𝛽ʹ), round.key.NTildei, round.key.H1i, round.key.H2i)
+				if !okD {
+					return round.WrapError(errors.New(fmt.Sprintf("error in zkp verification - current party(i):%v, other party(j):%v",
+						round.PartyID(), Pj)))
+				}
+			}
+
+			/* common.Logger.Debugf("r6 F(j%v,i%v): %v, 𝛽ʹij: %v, rij:%v", j, i, common.FormatBigInt(round.temp.DeltaMtAFji[j]),
+				common.FormatBigInt(𝛽ʹ), common.FormatBigInt(round.temp.DeltaMtARij[j])) */
+
+			𝜌𝛾sr := modMul(pkiNSquare, 𝜌𝛾s, round.temp.DeltaMtARij[j])
+			𝛾k𝛽ʹ𝛽 := q3Add(𝛾k𝛽ʹ, 𝛽ij)
+
+			/* common.Logger.Debugf("r6 zkpdecNewProof DF(i:%v,j:%v): %v, rij: %v, 𝛾k𝛽ʹ𝛽:%v, 𝛾k𝛽ʹ:%v, 𝛽ji:%v, 𝜌𝛾sr:%v", i, j, common.FormatBigInt(DF),
+				common.FormatBigInt(round.temp.DeltaMtARij[j]), common.FormatBigInt(𝛾k𝛽ʹ𝛽),
+				common.FormatBigInt(𝛾k𝛽ʹ), common.FormatBigInt(𝛽ij),
+				common.FormatBigInt(𝜌𝛾sr)) */
+
+			proof, errP := zkpdec.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, DF,
+				common.ModInt(round.EC().Params().N).Add(zero, 𝛾k𝛽ʹ𝛽), round.key.NTildei, round.key.H1i, round.key.H2i, 𝛾k𝛽ʹ𝛽, 𝜌𝛾sr)
+			if errP!= nil {
+				return round.WrapError(fmt.Errorf("identification of aborts - error with zk proof"), Pj)
+			}
+			if ok := proof.Verify(round.EC(), &round.key.PaillierSK.PublicKey, DF,
+				common.ModInt(round.EC().Params().N).Add(zero, 𝛾k𝛽ʹ𝛽), round.key.NTildei, round.key.H1i, round.key.H2i); !ok {
+				return round.WrapError(fmt.Errorf("identification of aborts - error with zk proof"), Pj)
+			}
+
+			secretProduct = modMul(round.key.PaillierSK.PublicKey.NSquare(), 𝜌𝛾sr, secretProduct)
+			encryptedValueSum = q3Add(𝛾k𝛽ʹ𝛽, encryptedValueSum)
 		}
-		r6msg := NewIdentificationRound6Message(Pj, round.PartyID(), H, proofH, DeltaShareEnc, proofDeltaShare)
-		common.Logger.Debugf("party %v, r6, Pj: %v NewIdentificationRound6Message going out", round.PartyID(), Pj)
-		round.out <- r6msg
+
+		DeltaShareEnc, errDSE = round.key.PaillierSK.PublicKey.HomoAdd(DF, DeltaShareEnc)
+		if errDSE != nil {
+			return round.WrapError(fmt.Errorf("identification of aborts - error with addition"), Pj)
+		}
 	}
+	/* common.Logger.Debugf("r6 zkpdecNewProof i:%v, DeltaShareEnc: %v, encryptedValueSum: %v, secretProduct: %v", i,
+		common.FormatBigInt(DeltaShareEnc), common.FormatBigInt(encryptedValueSum), common.FormatBigInt(secretProduct)) */
+
+	proofDeltaShare, errS := zkpdec.NewProof(round.EC(), &round.key.PaillierSK.PublicKey, DeltaShareEnc,
+		modN(encryptedValueSum), round.key.NTildei, round.key.H1i, round.key.H2i, encryptedValueSum, secretProduct)
+	if errS != nil {
+		return round.WrapError(fmt.Errorf("error in zkpdec"))
+	}
+
+	r6msg := NewIdentificationRound6Message(round.PartyID(), Hi, proofHMul, DeltaShareEnc, encryptedValueSum, proofDeltaShare)
+	round.out <- r6msg
 
 	// retire unused variables
 	round.temp.K = nil
-	round.temp.𝛾i = nil
 	round.temp.r2msgDeltaD = make([]*big.Int, round.PartyCount())
 	round.temp.r2msgDeltaF = make([]*big.Int, round.PartyCount())
+	round.temp.r2msgDeltaFjiPki = make([]*big.Int, round.PartyCount())
 	return nil
 }
 

@@ -17,7 +17,18 @@ func (round *identificationPrep) Start() *tss.Error {
 	common.Logger.Debugf("party %v, identificationPrep Start", round.PartyID())
 	round.started = true
 	round.AbortingSigning = true
-	round.setOK()
+	round.resetOK()
+	i := round.PartyID().Index
+	round.ok[i] = true
+	for j, Pj := range round.Parties().IDs() {
+		if j == i {
+			continue
+		}
+		r5msg := NewIdentificationPrepRound5Message(Pj, round.PartyID(), round.temp.𝛾i, round.temp.DeltaMtASij[j], round.temp.DeltaShareBetaNegs[j])
+		round.out <- r5msg
+
+	}
+
 	return nil
 }
 
@@ -27,6 +38,15 @@ func (round *identificationPrep) NextRound() tss.Round {
 }
 
 func (round *identificationPrep) Update() (bool, *tss.Error) {
+	for j, msg := range round.temp.r5msg𝛾j {
+		if round.ok[j] {
+			continue
+		}
+		if msg == nil {
+			return false, nil
+		}
+		round.ok[j] = true
+	}
 	return true, nil
 }
 

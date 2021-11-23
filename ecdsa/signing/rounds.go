@@ -63,6 +63,7 @@ var (
 	_ tss.Round = (*presign3)(nil)
 	_ tss.Round = (*sign4)(nil)
 	_ tss.Round = (*signout)(nil)
+	_ tss.Round = (*identificationPrep)(nil)
 	_ tss.Round = (*identification6)(nil)
 	_ tss.Round = (*identification7)(nil)
 )

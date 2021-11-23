@@ -67,9 +67,12 @@ type (
 		// round 2
 		𝛾i              *big.Int
 		DeltaShareBetas []*big.Int
+		DeltaShareBetaNegs []*big.Int
+		DeltaMtASij []*big.Int
+		DeltaMtARij []*big.Int
 		Dji []*big.Int
 		ChiShareBetas   []*big.Int
-		DeltaMtAF       *big.Int
+		DeltaMtAFji     []*big.Int
 		ChiMtAF         *big.Int
 
 		// round 3
@@ -91,9 +94,10 @@ type (
 		r1msgK             []*big.Int
 		r1msg𝜓0ij          []*zkpenc.ProofEnc
 		r2msgBigGammaShare []*crypto.ECPoint
-		r2msgDeltaD        []*big.Int
-		r2msgDeltaF        []*big.Int
-		r2msgDeltaProof    []*zkpaffg.ProofAffg
+		r2msgDeltaD     []*big.Int
+		r2msgDeltaF      []*big.Int
+		r2msgDeltaFjiPki []*big.Int
+		r2msgDeltaProof  []*zkpaffg.ProofAffg
 		r2msgChiD          []*big.Int
 		r2msgChiF          []*big.Int
 		r2msgChiProof      []*zkpaffg.ProofAffg
@@ -104,10 +108,15 @@ type (
 		r4msg𝜎j            []*big.Int
 		r4msgAborting      []bool
 		// for identification
+		r5msg𝛾j           []*big.Int
+		r5msgsji   []*big.Int
+		r5msg𝛽ʹji []*big.Int
+
 		r6msgH             []*big.Int
 		r6msgProofMul      []*zkpmul.ProofMul
+		r6msgProofDec     []*zkpdec.ProofDec
 		r6msgDeltaShareEnc []*big.Int
-		r6msgProofDec      []*zkpdec.ProofDec
+		r6msgEncryptedValueSum []*big.Int
 	}
 )
 
@@ -145,8 +154,12 @@ func NewLocalParty(
 	p.temp.m = msg
 	p.temp.BigWs = make([]*crypto.ECPoint, partyCount)
 	p.temp.DeltaShareBetas = make([]*big.Int, partyCount)
+	p.temp.DeltaShareBetaNegs = make([]*big.Int, partyCount)
+	p.temp.DeltaMtASij = make([]*big.Int, partyCount)
+	p.temp.DeltaMtARij = make([]*big.Int, partyCount)
 	p.temp.Dji = make([]*big.Int, partyCount)
 	p.temp.ChiShareBetas = make([]*big.Int, partyCount)
+	p.temp.DeltaMtAFji = make([]*big.Int, partyCount)
 	p.temp.DeltaShareAlphas = make([]*big.Int, partyCount)
 	p.temp.ChiShareAlphas = make([]*big.Int, partyCount)
 	// temp message data init
@@ -156,6 +169,7 @@ func NewLocalParty(
 	p.temp.r2msgBigGammaShare = make([]*crypto.ECPoint, partyCount)
 	p.temp.r2msgDeltaD = make([]*big.Int, partyCount)
 	p.temp.r2msgDeltaF = make([]*big.Int, partyCount)
+	p.temp.r2msgDeltaFjiPki = make([]*big.Int, partyCount)
 	p.temp.r2msgDeltaProof = make([]*zkpaffg.ProofAffg, partyCount)
 	p.temp.r2msgChiD = make([]*big.Int, partyCount)
 	p.temp.r2msgChiF = make([]*big.Int, partyCount)
@@ -169,8 +183,12 @@ func NewLocalParty(
 	// for identification
 	p.temp.r6msgH = make([]*big.Int, partyCount)
 	p.temp.r6msgProofMul = make([]*zkpmul.ProofMul, partyCount)
-	p.temp.r6msgDeltaShareEnc = make([]*big.Int, partyCount)
 	p.temp.r6msgProofDec = make([]*zkpdec.ProofDec, partyCount)
+	p.temp.r6msgDeltaShareEnc = make([]*big.Int, partyCount)
+	p.temp.r6msgEncryptedValueSum = make([]*big.Int, partyCount)
+	p.temp.r5msg𝛾j = make([]*big.Int, partyCount)
+	p.temp.r5msgsji = make([]*big.Int, partyCount)
+	p.temp.r5msg𝛽ʹji = make([]*big.Int, partyCount)
 
 	return p
 }
@@ -283,18 +301,25 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	case *SignRound4AbortingMessage:
 		p.temp.r4msgAborting[fromPIdx] = true
 		p.Aborting = true
+	case *IdentificationPrepRound5Message:
+		r5msg := msg.Content().(*IdentificationPrepRound5Message)
+		p.temp.r5msg𝛾j[fromPIdx] = r5msg.UnmarshalGamma()
+		p.temp.r5msgsji[fromPIdx] = r5msg.UnmarshalSji()
+		p.temp.r5msg𝛽ʹji[fromPIdx] = r5msg.UnmarshalBetaNegji()
+		p.Aborting = true
 	case *IdentificationRound6Message:
 		r6msg := msg.Content().(*IdentificationRound6Message)
 		p.temp.r6msgH[fromPIdx] = r6msg.UnmarshalH()
 		p.temp.r6msgDeltaShareEnc[fromPIdx] = r6msg.UnmarshalDeltaShareEnc()
+		p.temp.r6msgEncryptedValueSum[fromPIdx] = r6msg.UnmarshalEncryptedValueSum()
 		proofMul, err := r6msg.UnmarshalProofMul()
 		if err != nil {
 			return false, p.WrapError(err, msg.GetFrom())
 		}
 		p.temp.r6msgProofMul[fromPIdx] = proofMul
-		proofDec, err := r6msg.UnmarshalProofDec()
-		if err != nil {
-			return false, p.WrapError(err, msg.GetFrom())
+		proofDec, errD := r6msg.UnmarshalProofDec()
+		if errD != nil {
+			return false, p.WrapError(errD, msg.GetFrom())
 		}
 		p.temp.r6msgProofDec[fromPIdx] = proofDec
 	default: // unrecognised message, just ignore!

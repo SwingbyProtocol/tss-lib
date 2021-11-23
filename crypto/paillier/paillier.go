@@ -166,6 +166,24 @@ func (publicKey *PublicKey) EncryptAndReturnRandomness(m *big.Int) (c *big.Int, 
 	return
 }
 
+func (pk *PublicKey) EncryptWithGivenRandomness(m, x *big.Int) (c *big.Int, err error) {
+	if x == nil || x.Cmp(zero) == 0 {
+		return nil, errors.New("EncryptWithGivenRandomness() requires non-zero randomness")
+	}
+	if m.Cmp(zero) == -1 || m.Cmp(pk.N) != -1 { // m < 0 || m >= N ?
+		return nil, ErrMessageTooLong
+	}
+	// https://docs.rs/paillier/0.2.0/src/paillier/core.rs.html#236
+	modNSq := common.ModInt(pk.NSquare())
+	// 1. gamma^m mod N2
+	Gm := modNSq.Exp(pk.Gamma(), m)
+	// 2. x^N mod N2
+	xN := modNSq.Exp(x, pk.N)
+	// 3. (1) * (2) mod N2
+	c = modNSq.Mul(Gm, xN)
+	return
+}
+
 func (publicKey *PublicKey) Encrypt(m *big.Int) (c *big.Int, err error) {
 	c, _, err = publicKey.EncryptAndReturnRandomness(m)
 	return

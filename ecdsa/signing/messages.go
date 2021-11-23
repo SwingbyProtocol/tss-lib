@@ -242,27 +242,66 @@ func (m *SignRound4Message) UnmarshalSigmaShare() *big.Int {
 	return new(big.Int).SetBytes(m.GetSigmaShare())
 }
 
-// ----- //
-
-func NewIdentificationRound6Message(
+func NewIdentificationPrepRound5Message(
 	to, from *tss.PartyID,
-	H *big.Int,
-	MulProof *zkpmul.ProofMul,
-	DeltaShareEnc *big.Int,
-	DecProof *zkpdec.ProofDec,
+	𝛾i *big.Int,
+	sji *big.Int,
+	𝛽ʹji *big.Int,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
 	}
+	content := &IdentificationPrepRound5Message{
+		Gamma:      𝛾i.Bytes(),
+		Sji: sji.Bytes(),
+		BetaNegji: 𝛽ʹji.Bytes(),
+	}
+	msg := tss.NewMessageWrapper(meta, content)
+	return tss.NewMessage(meta, content, msg)
+}
+
+func (m *IdentificationPrepRound5Message) ValidateBasic() bool {
+	return m != nil &&
+		common.NonEmptyBytes(m.Gamma) &&
+		common.NonEmptyBytes(m.Sji) &&
+		common.NonEmptyBytes(m.BetaNegji)
+}
+
+func (m *IdentificationPrepRound5Message) UnmarshalGamma() *big.Int {
+	return new(big.Int).SetBytes(m.GetGamma())
+}
+
+func (m *IdentificationPrepRound5Message) UnmarshalSji() *big.Int {
+	return new(big.Int).SetBytes(m.GetSji())
+}
+
+func (m *IdentificationPrepRound5Message) UnmarshalBetaNegji() *big.Int {
+	return new(big.Int).SetBytes(m.GetBetaNegji())
+}
+
+// ----- //
+
+func NewIdentificationRound6Message(
+	from *tss.PartyID,
+	H *big.Int,
+	MulProof *zkpmul.ProofMul,
+	deltaShareEnc, encryptedValueSum *big.Int,
+	proofDeltaShare *zkpdec.ProofDec,
+) tss.ParsedMessage {
+	meta := tss.MessageRouting{
+		From:        from,
+		IsBroadcast: true,
+	}
 	MulProofBzs := MulProof.Bytes()
-	DecProofBzs := DecProof.Bytes()
+	proofDeltaShareBzs := proofDeltaShare.Bytes()
 	content := &IdentificationRound6Message{
 		H:             H.Bytes(),
 		MulProof:      MulProofBzs[:],
-		DeltaShareEnc: DeltaShareEnc.Bytes(),
-		DecProof:      DecProofBzs[:],
+		DeltaShareEnc: deltaShareEnc.Bytes(),
+		EncryptedValueSum: encryptedValueSum.Bytes(),
+		DecProof: proofDeltaShareBzs[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -272,6 +311,7 @@ func (m *IdentificationRound6Message) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyBytes(m.H) &&
 		common.NonEmptyBytes(m.DeltaShareEnc) &&
+		common.NonEmptyBytes(m.EncryptedValueSum) &&
 		common.NonEmptyMultiBytes(m.MulProof, zkpmul.ProofMulBytesParts) &&
 		common.NonEmptyMultiBytes(m.DecProof, zkpdec.ProofDecBytesParts)
 }
@@ -282,6 +322,10 @@ func (m *IdentificationRound6Message) UnmarshalH() *big.Int {
 
 func (m *IdentificationRound6Message) UnmarshalDeltaShareEnc() *big.Int {
 	return new(big.Int).SetBytes(m.GetDeltaShareEnc())
+}
+
+func (m *IdentificationRound6Message) UnmarshalEncryptedValueSum() *big.Int {
+	return new(big.Int).SetBytes(m.GetEncryptedValueSum())
 }
 
 func (m *IdentificationRound6Message) UnmarshalProofMul() (*zkpmul.ProofMul, error) {

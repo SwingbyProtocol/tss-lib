@@ -172,7 +172,6 @@ func (round *presign3) Start() *tss.Error {
 	round.temp.BigWs = nil
 	round.temp.Γi = nil
 
-	round.temp.DeltaShareBetas = nil
 	round.temp.ChiShareBetas = nil
 	round.temp.DeltaShareAlphas = nil
 	round.temp.ChiShareAlphas = nil

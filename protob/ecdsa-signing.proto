@@ -46,14 +46,22 @@ message PreSignRound3Message {
 message SignRound4Message {
     bytes SigmaShare = 1;
 }
+
 message SignRound4AbortingMessage {
+}
+
+message IdentificationPrepRound5Message {
+    bytes Gamma = 1;
+    bytes Sji = 2;
+    bytes BetaNegji = 3;
 }
 
 message IdentificationRound6Message {
     bytes H = 1;
     repeated bytes MulProof = 2;
     bytes DeltaShareEnc = 3;
-    repeated bytes DecProof = 4;
+    bytes EncryptedValueSum = 4;
+    repeated bytes DecProof = 5;
 }
 
 message TempDataDumpMessage {
