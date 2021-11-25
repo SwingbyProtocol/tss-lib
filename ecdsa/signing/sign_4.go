@@ -28,6 +28,7 @@ func (round *sign4) Start() *tss.Error {
 	}
 	round.number = 4
 	round.started = true
+	common.Logger.Debugf("party %v sign4 Start", round.PartyID())
 	round.resetOK()
 	round.resetAborting()
 
@@ -87,6 +88,7 @@ func (round *sign4) Start() *tss.Error {
 		common.Logger.Errorf("part %v: verify BigDelta failed", round.PartyID())
 		round.AbortingSigning = true
 		round.setOK()
+		common.Logger.Debugf("party %v, aborting and NewSignRound4AbortingMessage going out (broadcast)", round.PartyID())
 		round.out <- NewSignRound4AbortingMessage(round.PartyID())
 		return nil
 	}
@@ -98,6 +100,7 @@ func (round *sign4) Start() *tss.Error {
 	r := BigR.X()
 	𝜎i := modN.Add(modN.Mul(round.temp.ki, round.temp.m), modN.Mul(r, round.temp.𝜒i))
 
+	common.Logger.Debugf("party %v, NewSignRound4Message going out (broadcast)", round.PartyID())
 	r4msg := NewSignRound4Message(round.PartyID(), 𝜎i)
 	round.out <- r4msg
 
@@ -117,16 +120,27 @@ func (round *sign4) Start() *tss.Error {
 func (round *sign4) Update() (bool, *tss.Error) {
 	for j, msg := range round.temp.r4msg𝜎j {
 		if round.ok[j] {
+			common.Logger.Debugf("party %v, sign4 Update, j: %v already ok (𝜎)", round.PartyID(), j)
 			continue
 		}
-		if msg == nil && !round.temp.r4msgAborting[j] {
-			if round.temp.r4msgAborting[j] {
-				round.AbortingSigning = true
-			} else {
-				return false, nil
-			}
+		if msg == nil {
+			common.Logger.Debugf("party %v, sign4 Update, no 𝜎 message received yet from j: %v (𝜎)", round.PartyID(), j)
+			continue
 		}
 		round.ok[j] = true
+		common.Logger.Debugf("party %v, sign4 Update, j: %v set to ok", round.PartyID(), j)
+	}
+	for j, aborting := range round.temp.r4msgAborting {
+		if round.ok[j] {
+			common.Logger.Debugf("party %v, sign4 Update, j: %v already ok (abort msg)", round.PartyID(), j)
+			continue
+		}
+		if aborting {
+			common.Logger.Debugf("party %v, sign4 Update, party j: %v sent abort msg", round.PartyID(), j)
+			round.ok[j] = true
+		} else {
+			common.Logger.Debugf("party %v, sign4 Update, j: %v did not send abort msg yet", round.PartyID(), j)
+		}
 	}
 	return true, nil
 }
@@ -139,6 +153,9 @@ func (round *sign4) resetAborting() {
 
 func (round *sign4) CanAccept(msg tss.ParsedMessage) bool {
 	if _, ok := msg.Content().(*SignRound4Message); ok {
+		return msg.IsBroadcast()
+	}
+	if _, ok := msg.Content().(*SignRound4AbortingMessage); ok {
 		return msg.IsBroadcast()
 	}
 	return false

@@ -428,7 +428,9 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 		return q3.Add(a, b)
 	}
 	var i,j int
-	n := 4
+
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	n := len(signPIDs)
 
 	K := make([]*big.Int, n)
 	k := make([]*big.Int, n)
@@ -444,7 +446,6 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 	𝛽 := make([][]*big.Int, n)
 	𝛽ʹ := make([][]*big.Int, n)
 
-	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
 	if err!= nil {
 		test.Errorf("error %v", err)
 		test.FailNow()

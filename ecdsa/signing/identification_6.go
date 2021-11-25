@@ -178,7 +178,7 @@ func (round *identification6) Update() (bool, *tss.Error) {
 
 func (round *identification6) CanAccept(msg tss.ParsedMessage) bool {
 	if _, ok := msg.Content().(*IdentificationRound6Message); ok {
-		return !msg.IsBroadcast()
+		return msg.IsBroadcast()
 	}
 	return false
 }

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/binance-chain/tss-lib/common"
 )
@@ -183,7 +184,7 @@ func BaseUpdate2(p Party, msg ParsedMessage, task string) (ok bool, err *Error) 
 }
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
-func BaseUpdate(p Party, msg ParsedMessage, task string, level int) (ok bool, err *Error) {
+func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 	// fast-fail on an invalid message; do not lock the mutex yet
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
@@ -194,9 +195,15 @@ func BaseUpdate(p Party, msg ParsedMessage, task string, level int) (ok bool, er
 		return ok, err
 	}
 	p.lock() // data is written to P state below
-	common.Logger.Debugf("party %s BaseUpdate received message: %s, level: %v", p.PartyID(), msg.String(), level)
 	if p.Round() != nil {
-		common.Logger.Debugf("party %s BaseUpdate round %d update: %s", p.PartyID(), p.Round().RoundNumber(), msg.String())
+		common.Logger.Debugf("party %s BaseUpdate round %d update. msg: %s", p.PartyID(), p.Round().RoundNumber(), msg.String())
+		for !p.Round().CanAccept(msg) {
+			common.Logger.Debugf("party %s BaseUpdate round %d -- cannot accept message %v. The party will sleep.", p.PartyID(), p.Round().RoundNumber(), msg.String())
+			p.unlock()
+			const sleepForMessage = 1000
+			time.Sleep(sleepForMessage * time.Millisecond)
+			p.lock()
+		}
 	}
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return r(false, err)
@@ -218,8 +225,8 @@ func BaseUpdate(p Party, msg ParsedMessage, task string, level int) (ok bool, er
 				// finished! the round implementation will have sent the data through the `end` channel.
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
 			}
-			p.unlock()                      // recursive so can't defer after return
-			return BaseUpdate(p, msg, task, level + 1) // re-run round update or finish)
+		} else {
+			common.Logger.Debugf("party %s: %s round %d update CANNOT proceed yet", p.Round().Params().PartyID(), task, p.Round().RoundNumber())
 		}
 		return r(true, nil)
 	}

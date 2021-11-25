@@ -32,6 +32,13 @@ func (round *identificationPrep) Start() *tss.Error {
 	return nil
 }
 
+func (round *identificationPrep) CanAccept(msg tss.ParsedMessage) bool {
+	if _, ok := msg.Content().(*IdentificationPrepRound5Message); ok {
+		return !msg.IsBroadcast()
+	}
+	return false
+}
+
 func (round *identificationPrep) NextRound() tss.Round {
 	round.started = false
 	return &identification6{round}
