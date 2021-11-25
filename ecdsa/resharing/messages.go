@@ -44,6 +44,7 @@ func NewDGRound1Message(
 		To:               to,
 		IsBroadcast:      true,
 		IsToOldCommittee: false,
+		IsToOldAndNewCommittees: false,
 	}
 	content := &DGRound1Message{
 		EcdsaPubX:   ecdsaPub.X().Bytes(),

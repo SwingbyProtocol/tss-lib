@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/binance-chain/tss-lib/common"
 )
@@ -197,13 +196,6 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 	p.lock() // data is written to P state below
 	if p.Round() != nil {
 		common.Logger.Debugf("party %s BaseUpdate round %d update. msg: %s", p.PartyID(), p.Round().RoundNumber(), msg.String())
-		for !p.Round().CanAccept(msg) {
-			common.Logger.Debugf("party %s BaseUpdate round %d -- cannot accept message %v. The party will sleep.", p.PartyID(), p.Round().RoundNumber(), msg.String())
-			p.unlock()
-			const sleepForMessage = 1000
-			time.Sleep(sleepForMessage * time.Millisecond)
-			p.lock()
-		}
 	}
 	if ok, err := p.StoreMessage(msg); err != nil || !ok {
 		return r(false, err)
@@ -215,18 +207,18 @@ func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
 		}
 		if p.Round().CanProceed() {
 			if p.advance(); p.Round() != nil {
-				common.Logger.Infof("party %s: %s round %d WILL start", p.Round().Params().PartyID(), task, p.Round().RoundNumber()+1)
+				rndNum := p.Round().RoundNumber()
+				common.Logger.Infof("party %s: %s round %d WILL start", p.Round().Params().PartyID(), task, rndNum+1)
 				if err := p.Round().Start(); err != nil {
 					return r(false, err)
 				}
-				rndNum := p.Round().RoundNumber()
-				common.Logger.Infof("party %s: %s round %d started", p.Round().Params().PartyID(), task, rndNum)
+				common.Logger.Infof("party %s: %s round %d started", p.Round().Params().PartyID(), task, rndNum+1)
 			} else {
 				// finished! the round implementation will have sent the data through the `end` channel.
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
 			}
-		} else {
-			common.Logger.Debugf("party %s: %s round %d update CANNOT proceed yet", p.Round().Params().PartyID(), task, p.Round().RoundNumber())
+			p.unlock()                      // recursive so can't defer after return
+			return BaseUpdate(p, msg, task) // re-run round update or finish)
 		}
 		return r(true, nil)
 	}
