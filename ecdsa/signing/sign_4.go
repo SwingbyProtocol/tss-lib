@@ -51,7 +51,7 @@ func (round *sign4) Start() *tss.Error {
 
 			ok := ψʺij.Verify(round.EC(), round.key.PaillierPKs[j], Kj, Δj, round.temp.Γ, round.key.NTildei, round.key.H1i, round.key.H2i)
 			if !ok {
-				common.Logger.Debugf(" zkplogstar proof verify failed - i: %v, Pj: %v", i, Pj)
+				common.Logger.Errorf("zkplogstar proof verify failed - this party(i): %v, culprit(Pj): %v", i, Pj)
 				errChs <- round.WrapError(errors.New("proof verify failed"), Pj)
 				return
 			}
@@ -108,7 +108,6 @@ func (round *sign4) Start() *tss.Error {
 	round.temp.Rx = r
 	round.temp.SigmaShare = 𝜎i
 	// retire unused variables
-	// round.temp.𝜌i = nil
 
 	round.temp.r3msgΔj = make([]*crypto.ECPoint, round.PartyCount())
 

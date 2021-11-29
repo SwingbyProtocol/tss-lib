@@ -281,11 +281,13 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 			To:          msg.GetTo(),
 			IsBroadcast: false,
 		}
-		i := msg.GetFrom().Index
-		j := msg.GetTo()[0].Index
+		i := msg.GetFrom().Index // culprit
+		j := msg.GetTo()[0].Index // victim
 
-		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
-		round := party.Round().(*presign3)
+		victimParty := party
+		common.Logger.Debugf("intercepting and changing message %s from %s (culprit) to party: %v (victim)",
+			msg.Type(), msg.GetFrom(), victimParty)
+		round := victimParty.Round().(*presign3)
 		var otherRound *presign3
 		ok := false
 		if otherRound, ok = parties[i].Round().(*presign3); !ok {
@@ -317,8 +319,6 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 
 		verified := proof.Verify(ec, pk, fakeKi, fakeΔi, round.temp.Γ, round.key.NTildej[j],round.key.H1j[j],round.key.H2j[j])
 		common.Logger.Debugf(" i: %v, j: %v, verified? %v", parties[i], parties[j], verified)
-		round.temp.Δi = fakeΔi
-		round.temp.r1msgK[i] = fakeKi
 		r3msg := NewPreSignRound3Message(msg.GetTo()[0], msg.GetFrom(), fake𝛿i, fakeΔi, proof)
 		// repackaging the malicious message
 		pMsg = tss.NewMessage(meta, r3msg.Content(), tss.NewMessageWrapper(meta, r3msg.Content()))
