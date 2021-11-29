@@ -286,7 +286,12 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 
 		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
 		round := party.Round().(*presign3)
-		otherRound := parties[i].Round().(*presign3)
+		var otherRound *presign3
+		ok := false
+		if otherRound, ok = parties[i].Round().(*presign3); !ok {
+			r4 := parties[i].Round().(*sign4)
+			otherRound = r4.presign3
+		}
 		ec := tss.EC()
 		q := ec.Params().N
 		sk, pk := otherRound.key.PaillierSK, &otherRound.key.PaillierSK.PublicKey
