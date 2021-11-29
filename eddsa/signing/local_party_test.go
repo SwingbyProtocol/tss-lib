@@ -119,7 +119,7 @@ signing:
 				fmt.Printf("R: %s\n", R.String())
 				// END check s correctness
 
-				// BEGIN EDDSA verify
+				// BEGIN EdDSA verify
 				pkX, pkY := keys[0].EDDSAPub.X(), keys[0].EDDSAPub.Y()
 				pk := edwards.PublicKey{
 					Curve: tss.Edwards(),
@@ -134,8 +134,8 @@ signing:
 
 				ok := edwards.Verify(&pk, msg, newSig.R, newSig.S)
 				assert.True(t, ok, "eddsa verify must pass")
-				t.Log("EDDSA signing test done.")
-				// END EDDSA verify
+				t.Log("EdDSA signing test done.")
+				// END EdDSA verify
 
 				break signing
 			}

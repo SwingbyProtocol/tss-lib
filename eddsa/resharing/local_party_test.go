@@ -44,7 +44,7 @@ func TestE2EConcurrent(t *testing.T) {
 	threshold, newThreshold := testThreshold, testThreshold
 
 	// PHASE: load keygen fixtures
-	firstPartyIdx, extraParties := 5, 1 // // extra can be 0 to N-first
+	firstPartyIdx, extraParties := 0, 1 // // extra can be 0 to N-first
 	oldKeys, oldPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold+1+extraParties+firstPartyIdx, firstPartyIdx)
 	assert.NoError(t, err, "should load keygen fixtures")
 
@@ -203,7 +203,7 @@ signing:
 			if atomic.LoadInt32(&signEnded) == int32(len(signPIDs)) {
 				t.Logf("Signing done. Received sign data from %d participants", signEnded)
 
-				// BEGIN EDDSA verify
+				// BEGIN EdDSA verify
 				pkX, pkY := signKeys[0].EDDSAPub.X(), signKeys[0].EDDSAPub.Y()
 				pk := edwards.PublicKey{
 					Curve: tss.Edwards(),
@@ -220,8 +220,8 @@ signing:
 					newSig.R, newSig.S)
 
 				assert.True(t, ok, "eddsa verify must pass")
-				t.Log("EDDSA signing test done.")
-				// END EDDSA verify
+				t.Log("EdDSA signing test done.")
+				// END EdDSA verify
 
 				return
 			}

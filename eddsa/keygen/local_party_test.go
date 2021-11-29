@@ -183,7 +183,7 @@ keygen:
 				assert.Equal(t, pkY, ourPkY, "pkY should match expected pk derived from u")
 				t.Log("Public key tests done.")
 
-				// make sure everyone has the same EDDSA public key
+				// make sure everyone has the same EdDSA public key
 				for _, Pj := range parties {
 					assert.Equal(t, pkX, Pj.data.EDDSAPub.X())
 					assert.Equal(t, pkY, Pj.data.EDDSAPub.Y())
@@ -199,7 +199,7 @@ keygen:
 				assert.NoError(t, err, "sign should not throw an error")
 				ok := edwards.Verify(&pk, data, r, s)
 				assert.True(t, ok, "signature should be ok")
-				t.Log("EDDSA signing test done.")
+				t.Log("EdDSA signing test done.")
 
 				t.Logf("Start goroutines: %d, End goroutines: %d", startGR, runtime.NumGoroutine())
 
