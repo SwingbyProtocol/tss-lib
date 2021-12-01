@@ -127,7 +127,6 @@ func TestFinishAndSaveH1H2(t *testing.T) {
 }
 
 func TestBadMessageCulprits(t *testing.T) {
-	t.Skip() // TODO: fix up
 	setUp("debug")
 
 	pIDs := tss.GenerateTestPartyIDs(2)

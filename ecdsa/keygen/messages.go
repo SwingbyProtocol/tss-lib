@@ -182,7 +182,7 @@ func NewKGRound3Message(
 func (m *KGRound3Message) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyBytes(m.GetShare()) &&
-		common.NonEmptyMultiBytes(m.GetModProof(), zkpmod.ProofModBytesParts) &&
+		common.AnyNonEmptyMultiByte(m.GetModProof(), zkpmod.ProofModBytesParts) &&
 		common.NonEmptyMultiBytes(m.GetFacProof()) &&
 		common.NonEmptyMultiBytes(m.GetPsiiProof(), zkpsch.ProofSchBytesParts)
 }

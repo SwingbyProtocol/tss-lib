@@ -85,7 +85,7 @@ func NewProof(N, P, Q *big.Int) (*ProofMod, error) {
 }
 
 func NewProofFromBytes(bzs [][]byte) (*ProofMod, error) {
-    if !common.NonEmptyMultiBytes(bzs, ProofModBytesParts) {
+    if !common.AnyNonEmptyMultiByte(bzs, ProofModBytesParts) {
         return nil, fmt.Errorf("expected %d byte parts to construct ProofMod", ProofModBytesParts)
     }
 	bis := make([]*big.Int, len(bzs))
