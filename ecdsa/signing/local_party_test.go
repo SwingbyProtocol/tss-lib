@@ -30,10 +30,10 @@ import (
 )
 
 const (
-	testParticipants = test.TestParticipants
-	testThreshold    = test.TestThreshold
+	testParticipants              = test.TestParticipants
+	testThreshold                 = test.TestThreshold
 	maliciousPartySimulatingAbort = 2
-	innocentPartySimulatingAbort = 1
+	innocentPartySimulatingAbort  = 1
 )
 
 func setUp(level string) {
@@ -103,7 +103,7 @@ signing:
 				}
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
-		
+
 		case dtemp := <-dumpCh:
 			fmt.Println("got from dump")
 			fmt.Println(dtemp)
@@ -184,7 +184,7 @@ func TestE2EWithHDKeyDerivation(t *testing.T) {
 	// init the parties
 	for i := 0; i < len(signPIDs); i++ {
 		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
-		
+
 		P := NewLocalParty(big.NewInt(42), params, keys[i], keyDerivationDelta, outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
@@ -273,15 +273,15 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 	}
 
 	// Intercepting a round 3 message to inject a bad zk-proof and trigger an abort
-	if strings.HasSuffix(msg.Type(),"PreSignRound3Message") && !msg.IsBroadcast() &&
+	if strings.HasSuffix(msg.Type(), "PreSignRound3Message") && !msg.IsBroadcast() &&
 		msg.GetFrom().Index == maliciousPartySimulatingAbort &&
-		len(msg.GetTo()) > 0 && msg.GetTo()[0].Index==innocentPartySimulatingAbort {
+		len(msg.GetTo()) > 0 && msg.GetTo()[0].Index == innocentPartySimulatingAbort {
 		meta := tss.MessageRouting{
 			From:        msg.GetFrom(),
 			To:          msg.GetTo(),
 			IsBroadcast: false,
 		}
-		i := msg.GetFrom().Index // culprit
+		i := msg.GetFrom().Index  // culprit
 		j := msg.GetTo()[0].Index // victim
 
 		victimParty := party
@@ -304,20 +304,20 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 		modN := common.ModInt(round.EC().Params().N)
 		fake𝛿i := modN.Mul(fakeki, round.temp.𝛾i)
 
-		common.Logger.Debugf(" test - fake proof - i:%v, j: %v, PK: %v, K(C): %v, Γ(g): %v, NTildej(NCap): %v, " +
+		common.Logger.Debugf(" test - fake proof - i:%v, j: %v, PK: %v, K(C): %v, Γ(g): %v, NTildej(NCap): %v, "+
 			"H1j(s): %v, H2j(t): %v, ki(x): %v, 𝜌i: %v -- fakeΔi:%v",
-			parties[i],parties[j], common.FormatBigInt(pk.N),
+			parties[i], parties[j], common.FormatBigInt(pk.N),
 			common.FormatBigInt(fakeKi),
 			crypto.FormatECPoint(round.temp.Γ),
 			common.FormatBigInt(round.key.NTildej[j]), common.FormatBigInt(round.key.H1j[j]), common.FormatBigInt(round.key.H2j[j]),
 			common.FormatBigInt(fakeki), common.FormatBigInt(fake𝜌i), crypto.FormatECPoint(fakeΔi))
 		proof, errP := zkplogstar.NewProof(ec, pk, fakeKi, fakeΔi, round.temp.Γ, round.key.NTildej[j],
 			round.key.H1j[j], round.key.H2j[j], fakeki, fake𝜌i)
-		if errP!=nil {
+		if errP != nil {
 			common.Logger.Errorf("error changing message %s from %s", msg.Type(), msg.GetFrom())
 		}
 
-		verified := proof.Verify(ec, pk, fakeKi, fakeΔi, round.temp.Γ, round.key.NTildej[j],round.key.H1j[j],round.key.H2j[j])
+		verified := proof.Verify(ec, pk, fakeKi, fakeΔi, round.temp.Γ, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j])
 		common.Logger.Debugf(" i: %v, j: %v, verified? %v", parties[i], parties[j], verified)
 		r3msg := NewPreSignRound3Message(msg.GetTo()[0], msg.GetFrom(), fake𝛿i, fakeΔi, proof)
 		// repackaging the malicious message
@@ -326,7 +326,7 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 
 	common.Logger.Debugf("updater party:%v, pMsg: %v", party, pMsg)
 	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
-			errCh <- errUpdate
+		errCh <- errUpdate
 	}
 }
 
@@ -376,13 +376,13 @@ signing:
 			if ok = assert.NotNil(t, errS.Culprits(), "here should have been one culprit"); !ok {
 				t.FailNow()
 			}
-			if ok = assert.EqualValues(t, 1, len(errS.Culprits()),  "there should have been one culprit"); !ok {
+			if ok = assert.EqualValues(t, 1, len(errS.Culprits()), "there should have been one culprit"); !ok {
 				t.FailNow()
 			}
 			if ok = assert.NotNil(t, errS.Culprits()[0], "there should have been one culprit"); !ok {
 				t.FailNow()
 			}
-			if ok = assert.EqualValues(t, maliciousPartySimulatingAbort, errS.Culprits()[0].Index,  "error in test in identification of the malicious party"); !ok {
+			if ok = assert.EqualValues(t, maliciousPartySimulatingAbort, errS.Culprits()[0].Index, "error in test in identification of the malicious party"); !ok {
 				t.FailNow()
 			}
 			break signing
@@ -411,28 +411,26 @@ signing:
 	}
 }
 
-
-
 func TestIdAbortSimulateRound7(test *testing.T) {
 	setUp("debug")
-    var err error
+	var err error
 	ec := tss.S256()
 	q := ec.Params().N
 
 	modN := common.ModInt(ec.Params().N)
-	var modMul = func(N, a, b *big.Int) * big.Int {
+	var modMul = func(N, a, b *big.Int) *big.Int {
 		_N := common.ModInt(big.NewInt(0).Set(N))
 		return _N.Mul(a, b)
 	}
-	var modQ3Mul = func(a, b *big.Int) * big.Int {
-		 q3 := common.ModInt(new(big.Int).Mul(q, new(big.Int).Mul(q, q)))
-		 return q3.Mul(a, b)
+	var modQ3Mul = func(a, b *big.Int) *big.Int {
+		q3 := common.ModInt(new(big.Int).Mul(q, new(big.Int).Mul(q, q)))
+		return q3.Mul(a, b)
 	}
-	var q3Add = func(a, b *big.Int) * big.Int {
+	var q3Add = func(a, b *big.Int) *big.Int {
 		q3 := new(big.Int).Mul(q, new(big.Int).Mul(q, q))
 		return q3.Add(a, b)
 	}
-	var i,j int
+	var i, j int
 
 	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
 	n := len(signPIDs)
@@ -451,12 +449,12 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 	𝛽 := make([][]*big.Int, n)
 	𝛽ʹ := make([][]*big.Int, n)
 
-	if err!= nil {
+	if err != nil {
 		test.Errorf("error %v", err)
 		test.FailNow()
 	}
 
-	for i=0; i < len(signPIDs); i++ {
+	for i = 0; i < len(signPIDs); i++ {
 		sk[i], pk[i] = keys[i].PaillierSK, &keys[i].PaillierSK.PublicKey
 
 		NCap[i], s[i], t[i] = keys[i].NTildei, keys[i].H1i, keys[i].H2i
@@ -468,13 +466,13 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 		D[i] = make([]*MtAOut, n)
 		𝛽[i] = make([]*big.Int, n)
 		𝛽ʹ[i] = make([]*big.Int, n)
-		if err!= nil {
+		if err != nil {
 			test.Errorf("error %v", err)
 			test.FailNow()
 		}
 	}
-	for i=0; i< len(signPIDs); i++ {
-		for j=0; j<len(signPIDs); j++ {
+	for i = 0; i < len(signPIDs); i++ {
+		for j = 0; j < len(signPIDs); j++ {
 			if j == i {
 				continue
 			}
@@ -490,19 +488,19 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 		}
 	}
 
-	for i=0; i< len(signPIDs); i++ {
+	for i = 0; i < len(signPIDs); i++ {
 		Gi, 𝜈i, _ := sk[i].EncryptAndReturnRandomness(𝛾[i])
 
 		// Fig 7. Output.2
 		Hi, err := pk[i].HomoMult(k[i], Gi)
-		if err!= nil {
+		if err != nil {
 			test.Errorf("error %v", err)
 			test.FailNow()
 		}
 
 		DeltaShareEnc := Hi
 		secretProduct := big.NewInt(1).Exp(𝜈i, k[i], pk[i].NSquare())
-		encryptedValueSum := modQ3Mul(k[i],𝛾[i])
+		encryptedValueSum := modQ3Mul(k[i], 𝛾[i])
 
 		{
 			proof, _ := zkpdec.NewProof(ec, pk[i], Hi, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i], encryptedValueSum, secretProduct)
@@ -510,40 +508,40 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 			assert.True(test, ok, "zkpdec proof must verify")
 		}
 
-		for j=0; j<len(signPIDs); j++ {
+		for j = 0; j < len(signPIDs); j++ {
 			if j == i {
 				continue
 			}
 
 			𝜌𝛾s := modMul(pk[i].NSquare(), big.NewInt(1).Exp(𝜌[i], 𝛾[j], pk[i].NSquare()), D[i][j].Sij)
-			𝛾k𝛽ʹ := q3Add(𝛽ʹ[j][i], modQ3Mul(𝛾[j],k[i]))
+			𝛾k𝛽ʹ := q3Add(𝛽ʹ[j][i], modQ3Mul(𝛾[j], k[i]))
 
-			 common.Logger.Debugf("ut NewMtAHardcoded D(i%v,j:%v): %v, 𝛽ji: %v, 𝛽ʹji: %v, sij:%v, 𝛾k𝛽ʹ:%v, 𝜌𝛾s: %v, 𝛾j:%v", i, j, common.FormatBigInt(D[i][j].Dji),
+			common.Logger.Debugf("ut NewMtAHardcoded D(i%v,j:%v): %v, 𝛽ji: %v, 𝛽ʹji: %v, sij:%v, 𝛾k𝛽ʹ:%v, 𝜌𝛾s: %v, 𝛾j:%v", i, j, common.FormatBigInt(D[i][j].Dji),
 				common.FormatBigInt(𝛽[j][i]), common.FormatBigInt(𝛽ʹ[j][i]), common.FormatBigInt(D[i][j].Sij), common.FormatBigInt(𝛾k𝛽ʹ),
 				common.FormatBigInt(𝜌𝛾s), common.FormatBigInt(𝛾[j]))
 			{
-				proofD, err1 := zkpdec.NewProof(ec, pk[i], D[i][j].Dji, modN.Add(zero,𝛾k𝛽ʹ), NCap[i], s[i], t[i], 𝛾k𝛽ʹ, 𝜌𝛾s)
+				proofD, err1 := zkpdec.NewProof(ec, pk[i], D[i][j].Dji, modN.Add(zero, 𝛾k𝛽ʹ), NCap[i], s[i], t[i], 𝛾k𝛽ʹ, 𝜌𝛾s)
 				assert.NoError(test, err1)
-				okD := proofD.Verify(ec, pk[i], D[i][j].Dji, modN.Add(zero,𝛾k𝛽ʹ), NCap[i], s[i], t[i])
+				okD := proofD.Verify(ec, pk[i], D[i][j].Dji, modN.Add(zero, 𝛾k𝛽ʹ), NCap[i], s[i], t[i])
 				assert.True(test, okD, "proof must verify")
 			}
 
 			// F
 			var Fji *big.Int
 			Fji, D[i][j].Rij, err = pk[i].EncryptAndReturnRandomness(𝛽[i][j])
-			if err!= nil {
+			if err != nil {
 				test.Errorf("error %v", err)
 				test.FailNow()
 			}
 
 			common.Logger.Debugf("ut F(j:%v,i:%v): %v, 𝛽ij: %v, rij:%v", j, i, common.FormatBigInt(Fji),
-				common.FormatBigInt(𝛽[i][j]),common.FormatBigInt(D[i][j].Rij))
+				common.FormatBigInt(𝛽[i][j]), common.FormatBigInt(D[i][j].Rij))
 
 			// DF
 			𝜌𝛾sr := modMul(pk[i].NSquare(), 𝜌𝛾s, D[i][j].Rij)
 			𝛾k𝛽ʹ𝛽 := q3Add(𝛾k𝛽ʹ, 𝛽[i][j])
 			DF, err3 := pk[i].HomoAdd(D[i][j].Dji, Fji)
-			if err3!= nil {
+			if err3 != nil {
 				test.Errorf("error %v", err3)
 				test.FailNow()
 			}
@@ -555,7 +553,7 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 					common.FormatBigInt(𝜌𝛾sr))
 
 				proof2, err4 := zkpdec.NewProof(ec, pk[i], DF, modN.Add(zero, 𝛾k𝛽ʹ𝛽), NCap[i], s[i], t[i], 𝛾k𝛽ʹ𝛽, 𝜌𝛾sr)
-				if err4!= nil {
+				if err4 != nil {
 					test.Errorf("error %v", err4)
 					test.FailNow()
 				}
@@ -569,7 +567,7 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 			encryptedValueSum = q3Add(𝛾k𝛽ʹ𝛽, encryptedValueSum)
 
 			DeltaShareEnc, err = pk[i].HomoAdd(DF, DeltaShareEnc)
-			if err!= nil {
+			if err != nil {
 				test.Errorf("error %v", err)
 				test.FailNow()
 			}
@@ -581,7 +579,7 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 				common.FormatBigInt(encryptedValueSum), common.FormatBigInt(secretProduct))
 
 			proofDeltaShare, err6 := zkpdec.NewProof(ec, pk[i], DeltaShareEnc, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i], encryptedValueSum, secretProduct)
-			if err6!= nil {
+			if err6 != nil {
 				test.Errorf("error %v", err6)
 				test.FailNow()
 			}

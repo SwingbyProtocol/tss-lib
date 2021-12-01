@@ -17,9 +17,8 @@ import (
 
 // Using a modulus length of 2048 is recommended in the GG18 spec
 const (
-    testSafePrimeBits = 1024
+	testSafePrimeBits = 1024
 )
-
 
 func TestFacPQNoSmallFactor(test *testing.T) {
 	ec := tss.EC()

@@ -40,10 +40,10 @@ func NewDGRound1Message(
 	vct cmt.HashCommitment,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
-		From:             from,
-		To:               to,
-		IsBroadcast:      true,
-		IsToOldCommittee: false,
+		From:                    from,
+		To:                      to,
+		IsBroadcast:             true,
+		IsToOldCommittee:        false,
 		IsToOldAndNewCommittees: false,
 	}
 	content := &DGRound1Message{

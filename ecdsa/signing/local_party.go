@@ -65,15 +65,15 @@ type (
 		keyDerivationDelta *big.Int
 
 		// round 2
-		𝛾i              *big.Int
-		DeltaShareBetas []*big.Int
+		𝛾i                 *big.Int
+		DeltaShareBetas    []*big.Int
 		DeltaShareBetaNegs []*big.Int
-		DeltaMtASij []*big.Int
-		DeltaMtARij []*big.Int
-		Dji []*big.Int
-		ChiShareBetas   []*big.Int
-		DeltaMtAFji     []*big.Int
-		ChiMtAF         *big.Int
+		DeltaMtASij        []*big.Int
+		DeltaMtARij        []*big.Int
+		Dji                []*big.Int
+		ChiShareBetas      []*big.Int
+		DeltaMtAFji        []*big.Int
+		ChiMtAF            *big.Int
 
 		// round 3
 		Γ                *crypto.ECPoint
@@ -94,10 +94,10 @@ type (
 		r1msgK             []*big.Int
 		r1msg𝜓0ij          []*zkpenc.ProofEnc
 		r2msgBigGammaShare []*crypto.ECPoint
-		r2msgDeltaD     []*big.Int
-		r2msgDeltaF      []*big.Int
-		r2msgDeltaFjiPki []*big.Int
-		r2msgDeltaProof  []*zkpaffg.ProofAffg
+		r2msgDeltaD        []*big.Int
+		r2msgDeltaF        []*big.Int
+		r2msgDeltaFjiPki   []*big.Int
+		r2msgDeltaProof    []*zkpaffg.ProofAffg
 		r2msgChiD          []*big.Int
 		r2msgChiF          []*big.Int
 		r2msgChiProof      []*zkpaffg.ProofAffg
@@ -108,14 +108,14 @@ type (
 		r4msg𝜎j            []*big.Int
 		r4msgAborting      []bool
 		// for identification
-		r5msg𝛾j           []*big.Int
-		r5msgsji   []*big.Int
+		r5msg𝛾j   []*big.Int
+		r5msgsji  []*big.Int
 		r5msg𝛽ʹji []*big.Int
 
-		r6msgH             []*big.Int
-		r6msgProofMul      []*zkpmul.ProofMul
-		r6msgProofDec     []*zkpdec.ProofDec
-		r6msgDeltaShareEnc []*big.Int
+		r6msgH                 []*big.Int
+		r6msgProofMul          []*zkpmul.ProofMul
+		r6msgProofDec          []*zkpdec.ProofDec
+		r6msgDeltaShareEnc     []*big.Int
 		r6msgEncryptedValueSum []*big.Int
 	}
 )

@@ -55,7 +55,7 @@ func (round *round1) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
-	
+
 	// Fig 6. Round 1.
 	var preParams *LocalPreParams
 	if round.save.LocalPreParams.Validate() {

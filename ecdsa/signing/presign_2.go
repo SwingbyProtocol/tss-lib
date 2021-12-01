@@ -123,7 +123,7 @@ func (round *presign2) Start() *tss.Error {
 			ProofLogstar := <-ProofOut
 
 			FjiPki, rij, err := round.key.PaillierSK.PublicKey.EncryptAndReturnRandomness(DeltaMtA.Beta) // Encrypting Fji
-									// with pk i
+			// with pk i
 			if err != nil {
 				errChs <- round.WrapError(errors.New("encryption failed"), Pj)
 				return

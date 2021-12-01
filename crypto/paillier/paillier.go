@@ -149,6 +149,7 @@ func GenerateKeyPairAndPQ(modulusBitLen int, timeout time.Duration, optionalConc
 	privateKey = &PrivateKey{PublicKey: *publicKey, LambdaN: lambdaN, PhiN: phiN}
 	return
 }
+
 // ----- //
 
 func (publicKey *PublicKey) EncryptAndReturnRandomness(m *big.Int) (c *big.Int, x *big.Int, err error) {

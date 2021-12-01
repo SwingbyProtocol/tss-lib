@@ -91,7 +91,7 @@ func NewKGRound2Message(
 		Ridi:      ridi.Bytes(),
 		Ai:        aiBytes[:],
 		Xi:        XiBytes[:],
-		PrmProof: 𝜓iBytes[:],
+		PrmProof:  𝜓iBytes[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -149,7 +149,7 @@ func (m *KGRound2Message) UnmarshalRidi() *big.Int {
 }
 
 func (m *KGRound2Message) UnmarshalProofPrm() (*zkpprm.ProofPrm, error) {
-	return  zkpprm.NewProofFromBytes(m.PrmProof)
+	return zkpprm.NewProofFromBytes(m.PrmProof)
 }
 
 // ----- //

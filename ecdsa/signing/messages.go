@@ -254,8 +254,8 @@ func NewIdentificationPrepRound5Message(
 		IsBroadcast: false,
 	}
 	content := &IdentificationPrepRound5Message{
-		Gamma:      𝛾i.Bytes(),
-		Sji: sji.Bytes(),
+		Gamma:     𝛾i.Bytes(),
+		Sji:       sji.Bytes(),
 		BetaNegji: 𝛽ʹji.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
@@ -297,11 +297,11 @@ func NewIdentificationRound6Message(
 	MulProofBzs := MulProof.Bytes()
 	proofDeltaShareBzs := proofDeltaShare.Bytes()
 	content := &IdentificationRound6Message{
-		H:             H.Bytes(),
-		MulProof:      MulProofBzs[:],
-		DeltaShareEnc: deltaShareEnc.Bytes(),
+		H:                 H.Bytes(),
+		MulProof:          MulProofBzs[:],
+		DeltaShareEnc:     deltaShareEnc.Bytes(),
 		EncryptedValueSum: encryptedValueSum.Bytes(),
-		DecProof: proofDeltaShareBzs[:],
+		DecProof:          proofDeltaShareBzs[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)

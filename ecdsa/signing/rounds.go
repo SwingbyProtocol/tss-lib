@@ -127,4 +127,3 @@ func (round *base) Dump(dumpCh chan tss.ParsedMessage) {
 	DumpMsg := NewTempDataDumpMessage(round.PartyID(), *round.temp, round.number)
 	dumpCh <- DumpMsg
 }
-

@@ -174,7 +174,7 @@ func BaseUpdate2(p Party, msg ParsedMessage, task string) (ok bool, err *Error) 
 				// finished! the round implementation will have sent the data through the `end` channel.
 				common.Logger.Infof("party %s: %s finished!", p.PartyID(), task)
 			}
-			p.unlock()                      // recursive so can't defer after return
+			p.unlock()                       // recursive so can't defer after return
 			return BaseUpdate2(p, msg, task) // re-run round update or finish)
 		}
 		return r(true, nil)

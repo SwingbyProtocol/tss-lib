@@ -58,7 +58,7 @@ type (
 		r2msgAj     []*crypto.ECPoint
 		r2msgXj     []*crypto.ECPoint
 		r2msgRidj   []*big.Int
-		r2msg𝜓j   []*zkpprm.ProofPrm
+		r2msg𝜓j     []*zkpprm.ProofPrm
 		r3msgxij    []*big.Int
 		r3msgpfmod  []*zkpmod.ProofMod
 		r3msgpffac  []*zkpfac.ProofFac
@@ -100,7 +100,7 @@ func NewLocalParty(
 	p.temp.r2msgAj = make([]*crypto.ECPoint, partyCount)
 	p.temp.r2msgXj = make([]*crypto.ECPoint, partyCount)
 	p.temp.r2msgRidj = make([]*big.Int, partyCount)
-    p.temp.r2msg𝜓j = make([]*zkpprm.ProofPrm, partyCount)
+	p.temp.r2msg𝜓j = make([]*zkpprm.ProofPrm, partyCount)
 	p.temp.r3msgxij = make([]*big.Int, partyCount)
 	p.temp.r3msgpfmod = make([]*zkpmod.ProofMod, partyCount)
 	p.temp.r3msgpffac = make([]*zkpfac.ProofFac, partyCount)
