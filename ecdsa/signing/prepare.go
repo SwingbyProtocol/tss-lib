@@ -47,8 +47,7 @@ func PrepareForSigning(ec elliptic.Curve, i, pax int, xi *big.Int, ks []*big.Int
 			if j == c {
 				continue
 			}
-			ksc := ks[c]
-			ksj := ks[j]
+			ksc, ksj := modQ.Add(ks[c], zero), modQ.Add(ks[j], zero)
 			if ksj.Cmp(ksc) == 0 {
 				panic(fmt.Errorf("index of two parties are equal"))
 			}
