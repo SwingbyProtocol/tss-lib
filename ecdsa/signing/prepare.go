@@ -47,7 +47,7 @@ func PrepareForSigning(i, pax int, xi *big.Int, ks []*big.Int, bigXs []*crypto.E
 			if j == c {
 				continue
 			}
-			ksc, ksj := ks[c], ks[j]
+			ksc, ksj := modQ.Add(ks[c], zero), modQ.Add(ks[j], zero)
 			if ksj.Cmp(ksc) == 0 {
 				err = fmt.Errorf("the indices of two parties are equal")
 				return
