@@ -44,7 +44,7 @@ func (round *round1) Start() *tss.Error {
 
 	// 2. compute the vss shares
 	ids := round.Parties().IDs().Keys()
-	vs, shares, err := vss.Create(round.Threshold(), ui, ids)
+	vs, shares, err := vss.Create(tss.EC(), round.Threshold(), ui, ids)
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}

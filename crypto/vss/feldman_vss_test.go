@@ -17,6 +17,32 @@ import (
 	"github.com/binance-chain/tss-lib/tss"
 )
 
+func TestCheckIndexesDup(t *testing.T) {
+	indexes := make([]*big.Int, 0)
+	for i := 0; i < 1000; i++ {
+		indexes = append(indexes, common.GetRandomPositiveInt(tss.EC().Params().N))
+	}
+	_, e := CheckIndexes(tss.EC(), indexes)
+	assert.NoError(t, e)
+
+	indexes = append(indexes, indexes[99])
+	_, e = CheckIndexes(tss.EC(), indexes)
+	assert.Error(t, e)
+}
+
+func TestCheckIndexesZero(t *testing.T) {
+	indexes := make([]*big.Int, 0)
+	for i := 0; i < 1000; i++ {
+		indexes = append(indexes, common.GetRandomPositiveInt(tss.EC().Params().N))
+	}
+	_, e := CheckIndexes(tss.EC(), indexes)
+	assert.NoError(t, e)
+
+	indexes = append(indexes, tss.EC().Params().N)
+	_, e = CheckIndexes(tss.EC(), indexes)
+	assert.Error(t, e)
+}
+
 func TestCreate(t *testing.T) {
 	num, threshold := 5, 3
 
@@ -27,7 +53,7 @@ func TestCreate(t *testing.T) {
 		ids = append(ids, common.GetRandomPositiveInt(tss.EC().Params().N))
 	}
 
-	vs, _, err := Create(threshold, secret, ids)
+	vs, _, err := Create(tss.EC(), threshold, secret, ids)
 	assert.Nil(t, err)
 
 	assert.Equal(t, threshold+1, len(vs))
@@ -55,7 +81,7 @@ func TestVerify(t *testing.T) {
 		ids = append(ids, common.GetRandomPositiveInt(tss.EC().Params().N))
 	}
 
-	vs, shares, err := Create(threshold, secret, ids)
+	vs, shares, err := Create(tss.EC(), threshold, secret, ids)
 	assert.NoError(t, err)
 
 	for i := 0; i < num; i++ {
@@ -73,7 +99,7 @@ func TestReconstruct(t *testing.T) {
 		ids = append(ids, common.GetRandomPositiveInt(tss.EC().Params().N))
 	}
 
-	_, shares, err := Create(threshold, secret, ids)
+	_, shares, err := Create(tss.EC(), threshold, secret, ids)
 	assert.NoError(t, err)
 
 	secret2, err2 := shares[:threshold-1].ReConstruct()

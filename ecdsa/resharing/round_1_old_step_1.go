@@ -53,7 +53,7 @@ func (round *round1) Start() *tss.Error {
 	}
 
 	// 2.
-	vi, shares, err := vss.Create(round.NewThreshold(), wi, newKs)
+	vi, shares, err := vss.Create(tss.EC(), round.NewThreshold(), wi, newKs)
 	if err != nil {
 		return round.WrapError(err, round.PartyID())
 	}
