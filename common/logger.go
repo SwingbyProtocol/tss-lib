@@ -23,4 +23,3 @@ func FormatBigInt(a *big.Int) string {
 		return new(big.Int).And(i, aux).Text(16)
 	}(a)
 }
-

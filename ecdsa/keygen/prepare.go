@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	one  = big.NewInt(1)
+	one = big.NewInt(1)
 )
 
 // GeneratePreParams finds two safe primes and computes the Paillier secret required for the protocol.

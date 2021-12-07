@@ -13,8 +13,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	keygen "github.com/binance-chain/tss-lib/ecdsa/keygen"
 	. "github.com/binance-chain/tss-lib/crypto/zkp/prm"
+	keygen "github.com/binance-chain/tss-lib/ecdsa/keygen"
 )
 
 func TestPrm(test *testing.T) {
@@ -25,13 +25,13 @@ func TestPrm(test *testing.T) {
 	P2, Q2 := new(big.Int).Lsh(P, 1), new(big.Int).Lsh(Q, 1)
 	Phi := new(big.Int).Mul(P2, Q2)
 
-    proof, err := NewProof(s, t, N, Phi, lambda)
-    assert.NoError(test, err)
-	
+	proof, err := NewProof(s, t, N, Phi, lambda)
+	assert.NoError(test, err)
+
 	proofBzs := proof.Bytes()
 	proof, err = NewProofFromBytes(proofBzs[:])
 	assert.NoError(test, err)
 
-    ok := proof.Verify(s, t, N)
-    assert.True(test, ok, "proof must verify")
+	ok := proof.Verify(s, t, N)
+	assert.True(test, ok, "proof must verify")
 }

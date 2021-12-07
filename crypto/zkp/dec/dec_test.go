@@ -7,94 +7,94 @@
 package zkpdec
 
 import (
-    "math/big"
-    "testing"
-    "time"
+	"math/big"
+	"testing"
+	"time"
 
-    "github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/assert"
 
-    "github.com/binance-chain/tss-lib/common"
-    "github.com/binance-chain/tss-lib/crypto"
-    "github.com/binance-chain/tss-lib/crypto/paillier"
-    "github.com/binance-chain/tss-lib/tss"
+	"github.com/binance-chain/tss-lib/common"
+	"github.com/binance-chain/tss-lib/crypto"
+	"github.com/binance-chain/tss-lib/crypto/paillier"
+	"github.com/binance-chain/tss-lib/tss"
 )
 
 // Using a modulus length of 2048 is recommended in the GG18 spec
 const (
-    testSafePrimeBits = 1024
+	testSafePrimeBits = 1024
 )
 
 func TestDec(test *testing.T) {
-    ec := tss.EC()
-    q := ec.Params().N
+	ec := tss.EC()
+	q := ec.Params().N
 
 	primes := [2]*big.Int{common.GetRandomPrimeInt(testSafePrimeBits), common.GetRandomPrimeInt(testSafePrimeBits)}
-    NCap, s, t, err := crypto.GenerateNTildei(primes)
-    assert.NoError(test, err)
+	NCap, s, t, err := crypto.GenerateNTildei(primes)
+	assert.NoError(test, err)
 
-    sk, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
-    assert.NoError(test, err)
+	sk, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
+	assert.NoError(test, err)
 
-    x := common.GetRandomPositiveInt(q)
+	x := common.GetRandomPositiveInt(q)
 	y := new(big.Int).Add(x, q)
-    C, rho, err := sk.EncryptAndReturnRandomness(y)
-    assert.NoError(test, err)
-	
-    proof, err := NewProof(ec, pk, C, x, NCap, s, t, y, rho)
-    assert.NoError(test, err)
+	C, rho, err := sk.EncryptAndReturnRandomness(y)
+	assert.NoError(test, err)
 
-    ok := proof.Verify(ec, pk, C, x, NCap, s, t)
-    assert.True(test, ok, "proof must verify")
+	proof, err := NewProof(ec, pk, C, x, NCap, s, t, y, rho)
+	assert.NoError(test, err)
+
+	ok := proof.Verify(ec, pk, C, x, NCap, s, t)
+	assert.True(test, ok, "proof must verify")
 }
 
 func TestDecWithCompositions(test *testing.T) {
-    ec := tss.EC()
-    q := ec.Params().N
-    q3 := new(big.Int).Mul(q, new(big.Int).Mul(q, q))
-    // modQ3 := common.ModInt(q3)
-    modN := common.ModInt(q)
-    zero := big.NewInt(0)
+	ec := tss.EC()
+	q := ec.Params().N
+	q3 := new(big.Int).Mul(q, new(big.Int).Mul(q, q))
+	// modQ3 := common.ModInt(q3)
+	modN := common.ModInt(q)
+	zero := big.NewInt(0)
 
-    primes := [2]*big.Int{common.GetRandomPrimeInt(testSafePrimeBits), common.GetRandomPrimeInt(testSafePrimeBits)}
-    NCap, s, t, err := crypto.GenerateNTildei(primes)
-    assert.NoError(test, err)
+	primes := [2]*big.Int{common.GetRandomPrimeInt(testSafePrimeBits), common.GetRandomPrimeInt(testSafePrimeBits)}
+	NCap, s, t, err := crypto.GenerateNTildei(primes)
+	assert.NoError(test, err)
 
-    _, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
-    assert.NoError(test, err)
-    N2 := pk.NSquare()
+	_, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
+	assert.NoError(test, err)
+	N2 := pk.NSquare()
 
-    // Ki = enc(ki,𝜌i)
-    𝛾i := common.GetRandomPositiveInt(q)
-    ki := common.GetRandomPositiveInt(q)
-    Ki, 𝜌i, err := pk.EncryptAndReturnRandomness(ki)
+	// Ki = enc(ki,𝜌i)
+	𝛾i := common.GetRandomPositiveInt(q)
+	ki := common.GetRandomPositiveInt(q)
+	Ki, 𝜌i, err := pk.EncryptAndReturnRandomness(ki)
 
-    proof1, err := NewProof(ec, pk, Ki, modN.Add(zero,ki), NCap, s, t, ki, 𝜌i)
-    assert.NoError(test, err)
-    ok1 := proof1.Verify(ec, pk, Ki, modN.Add(zero,ki), NCap, s, t)
-    assert.True(test, ok1, "proof must verify")
+	proof1, err := NewProof(ec, pk, Ki, modN.Add(zero, ki), NCap, s, t, ki, 𝜌i)
+	assert.NoError(test, err)
+	ok1 := proof1.Verify(ec, pk, Ki, modN.Add(zero, ki), NCap, s, t)
+	assert.True(test, ok1, "proof must verify")
 
-    // 𝛾K = (𝛾i ⊗ Ki)
-    𝛾K, err := pk.HomoMult(𝛾i, Ki)
-    𝜌ʹ := big.NewInt(1).Exp(𝜌i, 𝛾i, N2)
-    yʹ := q3.Mul(𝛾i, ki)
-    proof2, err := NewProof(ec, pk, 𝛾K, modN.Add(zero,yʹ), NCap, s, t, yʹ, 𝜌ʹ)
-    assert.NoError(test, err)
-    ok2 := proof2.Verify(ec, pk, 𝛾K, modN.Add(zero,yʹ), NCap, s, t)
-    assert.True(test, ok2, "proof must verify")
+	// 𝛾K = (𝛾i ⊗ Ki)
+	𝛾K, err := pk.HomoMult(𝛾i, Ki)
+	𝜌ʹ := big.NewInt(1).Exp(𝜌i, 𝛾i, N2)
+	yʹ := q3.Mul(𝛾i, ki)
+	proof2, err := NewProof(ec, pk, 𝛾K, modN.Add(zero, yʹ), NCap, s, t, yʹ, 𝜌ʹ)
+	assert.NoError(test, err)
+	ok2 := proof2.Verify(ec, pk, 𝛾K, modN.Add(zero, yʹ), NCap, s, t)
+	assert.True(test, ok2, "proof must verify")
 
-    // Di = (𝛾i ⊗ Ki) ⊕ enc(-𝛽,si)
-    x := common.GetRandomPositiveInt(q)
-    𝛽ʹ := new(big.Int).Add(x, q)
-    T, si, err := pk.EncryptAndReturnRandomness(𝛽ʹ)
-    assert.NoError(test, err)
-    Di, err := pk.HomoAdd(𝛾K, T)
+	// Di = (𝛾i ⊗ Ki) ⊕ enc(-𝛽,si)
+	x := common.GetRandomPositiveInt(q)
+	𝛽ʹ := new(big.Int).Add(x, q)
+	T, si, err := pk.EncryptAndReturnRandomness(𝛽ʹ)
+	assert.NoError(test, err)
+	Di, err := pk.HomoAdd(𝛾K, T)
 
-    𝜌ʺ := N2.Mul(big.NewInt(1).Exp(𝜌i, 𝛾i, N2),si)
-    yʺ := q3.Add(𝛽ʹ, q3.Mul(𝛾i, ki))
-    proof3, err := NewProof(ec, pk, Di, modN.Add(zero, yʺ), NCap, s, t, yʺ, 𝜌ʺ)
-    assert.NoError(test, err)
+	𝜌ʺ := N2.Mul(big.NewInt(1).Exp(𝜌i, 𝛾i, N2), si)
+	yʺ := q3.Add(𝛽ʹ, q3.Mul(𝛾i, ki))
+	proof3, err := NewProof(ec, pk, Di, modN.Add(zero, yʺ), NCap, s, t, yʺ, 𝜌ʺ)
+	assert.NoError(test, err)
 
-    ok3 := proof3.Verify(ec, pk, Di, modN.Add(zero, yʺ), NCap, s, t)
-    assert.True(test, ok3, "proof must verify")
+	ok3 := proof3.Verify(ec, pk, Di, modN.Add(zero, yʺ), NCap, s, t)
+	assert.True(test, ok3, "proof must verify")
 
 }

@@ -17,7 +17,7 @@ import (
 )
 
 const (
-    ProofSchBytesParts = 3
+	ProofSchBytesParts = 3
 )
 
 type (

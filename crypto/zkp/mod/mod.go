@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	Iterations = 13
-    ProofModBytesParts = Iterations*4 + 1
+	Iterations         = 13
+	ProofModBytesParts = Iterations*4 + 1
 )
 
 var (
@@ -44,7 +44,7 @@ func NewProof(N, P, Q *big.Int) (*ProofMod, error) {
 	Phi := new(big.Int).Mul(new(big.Int).Sub(P, one), new(big.Int).Sub(Q, one))
 	// Fig 16.1
 	W := common.GetRandomQuandraticNonResidue(N)
-	
+
 	// Fig 16.2
 	Y := [Iterations]*big.Int{}
 	for i := range Y {
@@ -60,9 +60,9 @@ func NewProof(N, P, Q *big.Int) (*ProofMod, error) {
 	B := [Iterations]*big.Int{}
 	Z := [Iterations]*big.Int{}
 
-	for i := range(Y) {
+	for i := range Y {
 		for j := 0; j < 4; j++ {
-			a, b := j&1, j&2 >> 1
+			a, b := j&1, j&2>>1
 			Yi := new(big.Int).SetBytes(Y[i].Bytes()) // TODO use bool instead
 			if a > 0 {
 				Yi = modN.Mul(big.NewInt(-1), Yi)
@@ -85,9 +85,9 @@ func NewProof(N, P, Q *big.Int) (*ProofMod, error) {
 }
 
 func NewProofFromBytes(bzs [][]byte) (*ProofMod, error) {
-    if !common.AnyNonEmptyMultiByte(bzs, ProofModBytesParts) {
-        return nil, fmt.Errorf("expected %d byte parts to construct ProofMod", ProofModBytesParts)
-    }
+	if !common.AnyNonEmptyMultiByte(bzs, ProofModBytesParts) {
+		return nil, fmt.Errorf("expected %d byte parts to construct ProofMod", ProofModBytesParts)
+	}
 	bis := make([]*big.Int, len(bzs))
 	for i := range bis {
 		bis[i] = new(big.Int).SetBytes(bzs[i])
@@ -98,24 +98,24 @@ func NewProofFromBytes(bzs [][]byte) (*ProofMod, error) {
 
 	A := [Iterations]*big.Int{}
 	copy(A[:], bis[(Iterations+1):(Iterations*2+1)])
-	
+
 	B := [Iterations]*big.Int{}
 	copy(B[:], bis[(Iterations*2+1):(Iterations*3+1)])
 
 	Z := [Iterations]*big.Int{}
 	copy(Z[:], bis[(Iterations*3+1):])
 
-    return &ProofMod{
+	return &ProofMod{
 		W: bis[0],
 		X: X,
 		A: A,
-        B: B,
-        Z: Z,
-    }, nil
+		B: B,
+		Z: Z,
+	}, nil
 }
 
 func (pf *ProofMod) Verify(N *big.Int) bool {
-	if pf == nil  || !pf.ValidateBasic() {
+	if pf == nil || !pf.ValidateBasic() {
 		return false
 	}
 	modN := common.ModInt(N)
@@ -160,7 +160,7 @@ func (pf *ProofMod) Verify(N *big.Int) bool {
 	}
 
 	for i := 0; i < Iterations*2; i++ {
-		if ! <-chs {
+		if !<-chs {
 			return false
 		}
 	}
@@ -177,7 +177,7 @@ func (pf *ProofMod) ValidateBasic() bool {
 			return false
 		}
 	}
-    for i := range pf.A {
+	for i := range pf.A {
 		if pf.A[i] == nil {
 			return false
 		}
@@ -196,7 +196,7 @@ func (pf *ProofMod) ValidateBasic() bool {
 }
 
 func (pf *ProofMod) Bytes() [ProofModBytesParts][]byte {
-    bzs := [ProofModBytesParts][]byte{}
+	bzs := [ProofModBytesParts][]byte{}
 	bzs[0] = pf.W.Bytes()
 	for i := range pf.X {
 		bzs[1+i] = pf.X[i].Bytes()

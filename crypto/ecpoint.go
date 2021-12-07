@@ -211,18 +211,18 @@ func (p *ECPoint) GobDecode(buf []byte) error {
 // ----- //
 func (p *ECPoint) Bytes() [2][]byte {
 	return [...][]byte{
-        p.X().Bytes(),
-        p.Y().Bytes(),
+		p.X().Bytes(),
+		p.Y().Bytes(),
 	}
 }
 
 func NewECPointFromBytes(ec elliptic.Curve, bzs [][]byte) (*ECPoint, error) {
-    point, err := NewECPoint(ec,
-        new(big.Int).SetBytes(bzs[0]),
-        new(big.Int).SetBytes(bzs[1]))
-    if err != nil {
-        return nil, err
-    }
+	point, err := NewECPoint(ec,
+		new(big.Int).SetBytes(bzs[0]),
+		new(big.Int).SetBytes(bzs[1]))
+	if err != nil {
+		return nil, err
+	}
 	return point, nil
 }
 

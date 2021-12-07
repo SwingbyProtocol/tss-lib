@@ -19,19 +19,19 @@ import (
 
 // Using a modulus length of 2048 is recommended in the GG18 spec
 const (
-    testSafePrimeBits = 1024
+	testSafePrimeBits = 1024
 )
 
 func TestMul(test *testing.T) {
-    ec := tss.EC()
-    q := ec.Params().N
+	ec := tss.EC()
+	q := ec.Params().N
 
-    sk, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
-    assert.NoError(test, err)
+	sk, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
+	assert.NoError(test, err)
 
-    x := common.GetRandomPositiveInt(q)
-    X, rhox, err := sk.EncryptAndReturnRandomness(x)
-    assert.NoError(test, err)
+	x := common.GetRandomPositiveInt(q)
+	X, rhox, err := sk.EncryptAndReturnRandomness(x)
+	assert.NoError(test, err)
 
 	y := common.GetRandomPositiveInt(q)
 	Y, _, err := sk.EncryptAndReturnRandomness(y)
@@ -41,9 +41,9 @@ func TestMul(test *testing.T) {
 	C, err := pk.HomoMult(x, Y)
 	assert.NoError(test, err)
 
-    proof, err := NewProof(ec, pk, X, Y, C, x, rhox)
-    assert.NoError(test, err)
+	proof, err := NewProof(ec, pk, X, Y, C, x, rhox)
+	assert.NoError(test, err)
 
-    ok := proof.Verify(ec, pk, X, Y, C)
-    assert.True(test, ok, "proof must verify")
+	ok := proof.Verify(ec, pk, X, Y, C)
+	assert.True(test, ok, "proof must verify")
 }

@@ -20,11 +20,11 @@ type CurveName string
 const (
 	Secp256k1 CurveName = "secp256k1"
 	Nist256p1 CurveName = "nist256p1" // a.k.a secp256r1
-	Ed25519 CurveName = "ed25519"
+	Ed25519   CurveName = "ed25519"
 )
 
 var (
-	ec elliptic.Curve
+	ec       elliptic.Curve
 	registry map[CurveName]elliptic.Curve
 )
 
@@ -33,13 +33,13 @@ func init() {
 	ec = s256k1.S256()
 
 	registry = make(map[CurveName]elliptic.Curve)
-	registry[Secp256k1]=s256k1.S256()
-	registry[Nist256p1]=elliptic.P256()
-	registry[Ed25519]=edwards.Edwards()
+	registry[Secp256k1] = s256k1.S256()
+	registry[Nist256p1] = elliptic.P256()
+	registry[Ed25519] = edwards.Edwards()
 }
 
 func RegisterCurve(name CurveName, curve elliptic.Curve) {
-	registry[name]=curve
+	registry[name] = curve
 }
 
 // return curve, exist(bool)

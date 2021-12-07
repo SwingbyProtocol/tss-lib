@@ -38,6 +38,7 @@ var (
 	zero = big.NewInt(0)
 	one  = big.NewInt(1)
 )
+
 // Check share ids of Shamir's Secret Sharing, return error if duplicate or 0 value found
 func CheckIndexes(ec elliptic.Curve, indexes []*big.Int) ([]*big.Int, error) {
 	visited := make(map[string]struct{})

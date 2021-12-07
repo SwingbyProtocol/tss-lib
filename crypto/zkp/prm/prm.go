@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	Iterations = 64
-    ProofPrmBytesParts = Iterations*2
+	Iterations         = 64
+	ProofPrmBytesParts = Iterations * 2
 )
 
 type (
@@ -38,7 +38,7 @@ func NewProof(s, t, N, Phi, lambda *big.Int) (*ProofPrm, error) {
 
 	// Fig 17.2
 	e := common.SHA512_256i(append([]*big.Int{s, t, N}, A[:]...)...)
-	
+
 	// Fig 17.3
 	Z := [Iterations]*big.Int{}
 	for i := range Z {
@@ -49,9 +49,9 @@ func NewProof(s, t, N, Phi, lambda *big.Int) (*ProofPrm, error) {
 }
 
 func NewProofFromBytes(bzs [][]byte) (*ProofPrm, error) {
-    if !common.NonEmptyMultiBytes(bzs, ProofPrmBytesParts) {
-        return nil, fmt.Errorf("expected %d byte parts to construct ProofPrm", ProofPrmBytesParts)
-    }
+	if !common.NonEmptyMultiBytes(bzs, ProofPrmBytesParts) {
+		return nil, fmt.Errorf("expected %d byte parts to construct ProofPrm", ProofPrmBytesParts)
+	}
 	bis := make([]*big.Int, len(bzs))
 	for i := range bis {
 		bis[i] = new(big.Int).SetBytes(bzs[i])
@@ -62,14 +62,14 @@ func NewProofFromBytes(bzs [][]byte) (*ProofPrm, error) {
 	Z := [Iterations]*big.Int{}
 	copy(Z[:], bis[Iterations:])
 
-    return &ProofPrm{
-        A: A,
-        Z: Z,
-    }, nil
+	return &ProofPrm{
+		A: A,
+		Z: Z,
+	}, nil
 }
 
 func (pf *ProofPrm) Verify(s, t, N *big.Int) bool {
-	if pf == nil  || !pf.ValidateBasic() {
+	if pf == nil || !pf.ValidateBasic() {
 		return false
 	}
 	modN := common.ModInt(N)
@@ -89,7 +89,7 @@ func (pf *ProofPrm) Verify(s, t, N *big.Int) bool {
 }
 
 func (pf *ProofPrm) ValidateBasic() bool {
-    for i := range pf.A {
+	for i := range pf.A {
 		if pf.A[i] == nil {
 			return false
 		}
@@ -103,7 +103,7 @@ func (pf *ProofPrm) ValidateBasic() bool {
 }
 
 func (pf *ProofPrm) Bytes() [ProofPrmBytesParts][]byte {
-    bzs := [ProofPrmBytesParts][]byte{}
+	bzs := [ProofPrmBytesParts][]byte{}
 	for i := range pf.A {
 		bzs[i] = pf.A[i].Bytes()
 	}
