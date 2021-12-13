@@ -8,9 +8,9 @@ package keygen
 
 import (
 	"encoding/hex"
+	"errors"
 	"math/big"
 
-	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/ecdsa"
@@ -100,7 +100,7 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 		keyAndShift := new(big.Int).Add(idKey, reshareKeyOffset)
 		savedIdx, ok := keysToIndices[hex.EncodeToString(keyAndShift.Bytes())]
 		if !ok {
-			common.Logger.Warn("BuildLocalSaveDataSubset: unable to find a signer party in the local save data", id)
+			panic(errors.New("BuildLocalSaveDataSubset: unable to find a signer party in the local save data"))
 		}
 		newData.Ks[j] = sourceData.Ks[savedIdx]
 		newData.NTildej[j] = sourceData.NTildej[savedIdx]
