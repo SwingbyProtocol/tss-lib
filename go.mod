@@ -3,22 +3,23 @@ module github.com/binance-chain/tss-lib
 go 1.12
 
 require (
-	github.com/agl/ed25519 v0.0.0-20170116200512-5312a6153412
-	github.com/btcsuite/btcd v0.0.0-20190629003639-c26ffa870fd8
-	github.com/btcsuite/btcutil v0.0.0-20190425235716-9e5f4b9a998d
-	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.0
-	github.com/golang/protobuf v1.5.0
-	github.com/hashicorp/go-multierror v1.0.0
-	github.com/ipfs/go-log v0.0.1
-	github.com/mattn/go-colorable v0.1.2 // indirect
-	github.com/opentracing/opentracing-go v1.1.0 // indirect
-	github.com/otiai10/mint v1.2.4 // indirect
-	github.com/otiai10/primes v0.0.0-20180210170552-f6d2a1ba97c4
-	github.com/pkg/errors v0.8.1
-	github.com/stretchr/testify v1.3.0
-	golang.org/x/crypto v0.0.0-20170930174604-9419663f5a44
-	golang.org/x/sys v0.0.0-20190712062909-fae7ac547cb7 // indirect
+	github.com/agl/ed25519 v0.0.0-20200225211852-fd4d107ace12
+	github.com/btcsuite/btcd v0.22.0-beta
+	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
+	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.2
+	github.com/golang/protobuf v1.5.2
+	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1
+	github.com/ipfs/go-log v1.0.5
+	github.com/ipfs/go-log/v2 v2.4.0 // indirect
+	github.com/otiai10/primes v0.0.0-20210501021515-f1b2be525a11
+	github.com/pkg/errors v0.9.1
+	github.com/stretchr/testify v1.7.0
+	go.uber.org/atomic v1.9.0 // indirect
+	go.uber.org/multierr v1.7.0 // indirect
+	go.uber.org/zap v1.19.1 // indirect
+	golang.org/x/crypto v0.0.0-20211209193657-4570a0811e8b
+	golang.org/x/sys v0.0.0-20211213223007-03aa0b5f6827 // indirect
 	google.golang.org/protobuf v1.27.1
 )
 
