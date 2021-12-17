@@ -7,7 +7,6 @@
 package signing
 
 import (
-	"fmt"
 	"math/big"
 	"sync/atomic"
 	"testing"
@@ -32,13 +31,12 @@ func setUp(level string) {
 	if err := log.SetLogLevel("tss-lib", level); err != nil {
 		panic(err)
 	}
-
-	// only for test
-	tss.SetCurve(tss.Edwards())
 }
 
 func TestE2EConcurrent(t *testing.T) {
-	setUp("info")
+	setUp("debug")
+
+	// tss.SetCurve(edwards.Edwards()) deprecated
 
 	threshold := testThreshold
 
@@ -59,10 +57,10 @@ func TestE2EConcurrent(t *testing.T) {
 
 	updater := test.SharedPartyUpdater
 
-	msg := big.NewInt(200).Bytes()
+	msg := big.NewInt(200)
 	// init the parties
 	for i := 0; i < len(signPIDs); i++ {
-		params := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+		params := tss.NewParameters(edwards.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 
 		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
@@ -101,7 +99,7 @@ signing:
 		case <-endCh:
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
-				t.Logf("Done. Received save data from %d participants", ended)
+				t.Logf("Done. Received signature data from %d participants", ended)
 				R := parties[0].temp.r
 
 				// BEGIN check s correctness
@@ -115,27 +113,34 @@ signing:
 					edwards25519.ScMulAdd(&tmpSumS, sumS, bigIntToEncodedBytes(big.NewInt(1)), p.temp.si)
 					sumS = &tmpSumS
 				}
-				fmt.Printf("S: %s\n", encodedBytesToBigInt(sumS).String())
-				fmt.Printf("R: %s\n", R.String())
 				// END check s correctness
 
-				// BEGIN EdDSA verify
+				// BEGIN EDDSA verify
 				pkX, pkY := keys[0].EDDSAPub.X(), keys[0].EDDSAPub.Y()
 				pk := edwards.PublicKey{
-					Curve: tss.Edwards(),
+					Curve: tss.EC(),
 					X:     pkX,
 					Y:     pkY,
 				}
 
+				sBytes := copyBytes(parties[0].data.Signature[32:64])
+				sEncodedBigInt := encodedBytesToBigInt(sBytes)
+
 				newSig, err := edwards.ParseSignature(parties[0].data.Signature)
 				if err != nil {
-					println("new sig error, ", err.Error())
+					t.Errorf("new sig error %v", err.Error())
+					t.FailNow()
 				}
+				t.Logf("R: %s\n", common.FormatBigInt(newSig.R))
+				t.Logf("S: %s\n", common.FormatBigInt(newSig.S))
 
-				ok := edwards.Verify(&pk, msg, newSig.R, newSig.S)
-				assert.True(t, ok, "eddsa verify must pass")
-				t.Log("EdDSA signing test done.")
-				// END EdDSA verify
+				ok := edwards.Verify(&pk, msg.Bytes(), R, sEncodedBigInt)
+				if !assert.True(t, ok, "eddsa verify must pass") {
+					t.Error("eddsa verify must pass")
+					t.FailNow()
+				}
+				t.Log("EDDSA signing test done.")
+				// END EDDSA verify
 
 				break signing
 			}

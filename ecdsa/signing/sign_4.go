@@ -93,7 +93,7 @@ func (round *sign4) Start() *tss.Error {
 		return nil
 	}
 	// compute the multiplicative inverse thelta mod q
-	𝛿Inverse := modN.ModInverse(𝛿)
+	𝛿Inverse := modN.Inverse(𝛿)
 	BigR := round.temp.Γ.ScalarMult(𝛿Inverse)
 
 	// Fig 8. Round 1. compute signature share

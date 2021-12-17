@@ -72,7 +72,7 @@ func GeneratePreParams(timeout time.Duration, optionalConcurrency ...int) (*Loca
 	modPQ := common.ModInt(new(big.Int).Mul(p, q))
 	f1 := common.GetRandomPositiveRelativelyPrimeInt(NTildei)
 	alpha := common.GetRandomPositiveRelativelyPrimeInt(NTildei)
-	beta := modPQ.ModInverse(alpha)
+	beta := modPQ.Inverse(alpha)
 	h1i := modNTildeI.Mul(f1, f1)
 	h2i := modNTildeI.Exp(h1i, alpha)
 

@@ -10,16 +10,19 @@ import (
 	"crypto/elliptic"
 	"errors"
 	"time"
+
+	"github.com/binance-chain/tss-lib/common"
 )
 
 type (
 	Parameters struct {
-		ec                  elliptic.Curve
-		partyID             *PartyID
-		parties             *PeerContext
-		partyCount          int
-		threshold           int
-		safePrimeGenTimeout time.Duration
+		ec                      elliptic.Curve
+		partyID                 *PartyID
+		parties                 *PeerContext
+		partyCount              int
+		threshold               int
+		safePrimeGenTimeout     time.Duration
+		unsafeKGIgnoreH1H2Dupes bool
 	}
 
 	ReSharingParameters struct {
@@ -37,6 +40,9 @@ const (
 // Exported, used in `tss` client
 func NewParameters(ec elliptic.Curve, ctx *PeerContext, partyID *PartyID, partyCount, threshold int, optionalSafePrimeGenTimeout ...time.Duration) *Parameters {
 	var safePrimeGenTimeout time.Duration
+	if threshold >= partyCount {
+		panic(errors.New("NewParameters: t<n necessarily with the dishonest majority assumption"))
+	}
 	if 0 < len(optionalSafePrimeGenTimeout) {
 		if 1 < len(optionalSafePrimeGenTimeout) {
 			panic(errors.New("GeneratePreParams: expected 0 or 1 item in `optionalSafePrimeGenTimeout`"))
@@ -77,6 +83,19 @@ func (params *Parameters) Threshold() int {
 
 func (params *Parameters) SafePrimeGenTimeout() time.Duration {
 	return params.safePrimeGenTimeout
+}
+
+// Getter. The H1, H2 dupe check is disabled during some benchmarking scenarios to allow reuse of pre-params.
+func (params *Parameters) UNSAFE_KGIgnoreH1H2Dupes() bool {
+	return params.unsafeKGIgnoreH1H2Dupes
+}
+
+// Setter. The H1, H2 dupe check is disabled during some benchmarking scenarios to allow reuse of pre-params.
+func (params *Parameters) UNSAFE_setKGIgnoreH1H2Dupes(unsafeKGIgnoreH1H2Dupes bool) {
+	if unsafeKGIgnoreH1H2Dupes {
+		common.Logger.Warn("UNSAFE_setKGIgnoreH1H2Dupes() has been called; do not use these shares in production.")
+	}
+	params.unsafeKGIgnoreH1H2Dupes = unsafeKGIgnoreH1H2Dupes
 }
 
 // ----- //

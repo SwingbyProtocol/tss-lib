@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	MaxParts    = 3
-	MaxPartSize = int64(1 * 1024 * 1024) // 1 MB - rather liberal
+	PartsCap    = 3
+	MaxPartSize = int64(1 * 1024 * 128) // ~128 KB
 )
 
 type builder struct {
@@ -23,7 +23,7 @@ type builder struct {
 
 func NewBuilder() *builder {
 	b := new(builder)
-	b.parts = make([][]*big.Int, 0, MaxParts)
+	b.parts = make([][]*big.Int, 0, PartsCap)
 	return b
 }
 
@@ -31,15 +31,15 @@ func (b *builder) Parts() [][]*big.Int {
 	return b.parts[:]
 }
 
-func (b *builder) AddPart(part []*big.Int) *builder {
+func (b *builder) AddPart(part ...*big.Int) *builder {
 	b.parts = append(b.parts, part[:])
 	return b
 }
 
 func (b *builder) Secrets() ([]*big.Int, error) {
 	secretsLen := 0
-	if len(b.parts) > MaxParts {
-		return nil, fmt.Errorf("builder.Secrets: too many commitment parts provided: got %d, max %d", len(b.parts), MaxParts)
+	if len(b.parts) > PartsCap {
+		return nil, fmt.Errorf("builder.Secrets: too many commitment parts provided: got %d, max %d", len(b.parts), PartsCap)
 	}
 	for _, p := range b.parts {
 		secretsLen += 1 + len(p) // +1 to accommodate length prefix element
@@ -61,7 +61,7 @@ func ParseSecrets(secrets []*big.Int) ([][]*big.Int, error) {
 		return nil, errors.New("ParseSecrets: secrets == nil or is too small")
 	}
 	var el, nextPartLen int64
-	parts := make([][]*big.Int, 0, MaxParts)
+	parts := make([][]*big.Int, 0, PartsCap)
 	isLenEl := true // are we looking at a length prefix element? (first one is)
 	inLen := int64(len(secrets))
 	for el < inLen {
@@ -70,13 +70,16 @@ func ParseSecrets(secrets []*big.Int) ([][]*big.Int, error) {
 		}
 		if isLenEl {
 			nextPartLen = secrets[el].Int64()
+			if nextPartLen <= 0 {
+				return nil, fmt.Errorf("ParseSecrets: commitment part len is 0 or negative: part %d, len %d", len(parts), nextPartLen)
+			}
 			if MaxPartSize < nextPartLen {
 				return nil, fmt.Errorf("ParseSecrets: commitment part too large: part %d, size %d", len(parts), nextPartLen)
 			}
 			el += 1
 		} else {
-			if MaxParts <= len(parts) {
-				return nil, fmt.Errorf("ParseSecrets: commitment has too many parts: part %d, max %d", len(parts), MaxParts)
+			if PartsCap <= len(parts) {
+				return nil, fmt.Errorf("ParseSecrets: commitment has too many parts: part %d, max %d", len(parts), PartsCap)
 			}
 			if inLen < el+nextPartLen {
 				return nil, errors.New("ParseSecrets: not enough data to consume stated data length")

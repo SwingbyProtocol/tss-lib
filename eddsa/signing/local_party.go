@@ -48,8 +48,8 @@ type (
 
 		// temp data (thrown away after sign) / round 1
 		wi,
+		m,
 		ri *big.Int
-		m        []byte
 		pointRi  *crypto.ECPoint
 		deCommit cmt.HashDeCommitment
 
@@ -63,7 +63,7 @@ type (
 )
 
 func NewLocalParty(
-	msg []byte,
+	msg *big.Int,
 	params *tss.Parameters,
 	key keygen.LocalPartySaveData,
 	out chan<- tss.Message,
@@ -119,6 +119,18 @@ func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroa
 	return p.Update(msg)
 }
 
+func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
+	if msg.GetFrom() == nil || !msg.GetFrom().ValidateBasic() {
+		return false, p.WrapError(fmt.Errorf("received msg with an invalid sender: %s", msg))
+	}
+	// check that the message's "from index" will fit into the array
+	if maxFromIdx := len(p.params.Parties().IDs()) - 1; maxFromIdx < msg.GetFrom().Index {
+		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
+			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
+	}
+	return p.BaseParty.ValidateMessage(msg)
+}
+
 func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	// ValidateBasic is cheap; double-check the message here in case the public StoreMessage was called externally
 	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
@@ -139,7 +151,7 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		p.temp.signRound3Messages[fromPIdx] = msg
 
 	default: // unrecognised message, just ignore!
-		common.Logger.Warningf("unrecognised message ignored: %v", msg)
+		common.Logger.Warnf("unrecognised message ignored: %v", msg)
 		return false, nil
 	}
 	return true, nil

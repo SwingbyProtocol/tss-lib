@@ -13,8 +13,26 @@ protob:
 		protoc --go_out=. ./protob/$$protocol.proto ; \
 	done
 
+########################################
+### Format
+
+fmt:
+	@go fmt ./...
+
+lint:
+	@golangci-lint run
+
 build: protob
 	go fmt ./...
+
+########################################
+### Benchmarking
+
+benchgen: fmt
+	go run ./cmd/tss-benchgen benchdata
+
+benchsign: fmt
+	go run ./cmd/tss-benchsign benchdata
 
 ########################################
 ### Testing
@@ -22,15 +40,16 @@ build: protob
 test_unit:
 	@echo "--> Running Unit Tests"
 	@echo "!!! WARNING: This will take a long time :)"
-	go test -timeout 30m $(PACKAGES)
+	go test -timeout 60m $(PACKAGES)
 
 test_unit_race:
 	@echo "--> Running Unit Tests (with Race Detection)"
 	@echo "!!! WARNING: This will take a long time :)"
-	go test -timeout 30m -race $(PACKAGES)
+	# go clean -testcache
+	go test -timeout 60m -race $(PACKAGES)
 
 test:
-	make test_unit
+	make test_unit_race
 
 ########################################
 ### Pre Commit
@@ -42,5 +61,4 @@ pre_commit: build test
 # To avoid unintended conflicts with file names, always add to .PHONY
 # # unless there is a reason not to.
 # # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: protob build test_unit test_unit_race test
-
+.PHONY: protob build test_unit test_unit_race test benchgen benchsign

@@ -31,6 +31,7 @@ var (
 
 func setUp(t *testing.T) {
 	if privateKey != nil && publicKey != nil {
+		t.Parallel()
 		return
 	}
 	var err error
@@ -53,6 +54,12 @@ func TestEncrypt(t *testing.T) {
 	t.Log(cipher)
 }
 
+func TestEncryptWithChosenRandomnessFailsBadRandom(t *testing.T) {
+	setUp(t)
+	_, err := publicKey.EncryptWithGivenRandomness(big.NewInt(1), big.NewInt(0))
+	assert.Error(t, err, "must error")
+}
+
 func TestEncryptDecrypt(t *testing.T) {
 	setUp(t)
 	exp := big.NewInt(100)
@@ -67,6 +74,56 @@ func TestEncryptDecrypt(t *testing.T) {
 	cypher = new(big.Int).Set(privateKey.N)
 	_, err = privateKey.Decrypt(cypher)
 	assert.Error(t, err)
+}
+
+func TestEncryptDecryptAndRecoverRandomness(t *testing.T) {
+	setUp(t)
+	exp := big.NewInt(100)
+	cypher, rand, err := privateKey.EncryptAndReturnRandomness(exp)
+	if err != nil {
+		t.Error(err)
+	}
+	ret, rec, err := privateKey.DecryptAndRecoverRandomness(cypher)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, exp.Cmp(ret),
+		"wrong decryption ", ret, " is not ", exp)
+	assert.Equal(t, rand, rec,
+		"wrong randomness ", rand, " is not ", rec)
+}
+
+func TestEncryptDecryptAndRecoverRandomnessAndReEncrypt1(t *testing.T) {
+	setUp(t)
+	exp := big.NewInt(100)
+	cypher, rand, _ := privateKey.EncryptAndReturnRandomness(exp)
+	ret, err := privateKey.PublicKey.EncryptWithGivenRandomness(exp, rand)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, cypher.Cmp(ret),
+		"wrong encryption ", ret, " is not ", cypher)
+}
+
+func TestEncryptDecryptAndRecoverRandomnessAndReEncrypt2(t *testing.T) {
+	setUp(t)
+	exp := big.NewInt(100)
+	cypher, _, _ := privateKey.EncryptAndReturnRandomness(exp)
+	_, rand, _ := privateKey.DecryptAndRecoverRandomness(cypher)
+	ret, err := privateKey.PublicKey.EncryptWithGivenRandomness(exp, rand)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, cypher.Cmp(ret),
+		"wrong encryption ", ret, " is not ", cypher)
+}
+
+func TestEncryptWithChosenRandomnessDecrypt(t *testing.T) {
+	setUp(t)
+	exp := big.NewInt(100)
+	rnd := common.GetRandomPositiveInt(privateKey.N)
+	cypher, err := privateKey.EncryptWithGivenRandomness(exp, rnd)
+	if err != nil {
+		t.Error(err)
+	}
+	ret, err := privateKey.Decrypt(cypher)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, exp.Cmp(ret),
+		"wrong decryption ", ret, " is not ", exp)
 }
 
 func TestHomoMul(t *testing.T) {

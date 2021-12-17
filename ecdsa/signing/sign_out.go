@@ -21,7 +21,7 @@ import (
 
 func VerirySig(ec elliptic.Curve, R *crypto.ECPoint, S *big.Int, m *big.Int, PK *crypto.ECPoint) bool {
 	modN := common.ModInt(ec.Params().N)
-	SInv := modN.ModInverse(S)
+	SInv := modN.Inverse(S)
 	mG := crypto.ScalarBaseMult(ec, m)
 	rx := R.X()
 	rxPK := PK.ScalarMult(rx)

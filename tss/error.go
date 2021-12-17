@@ -10,13 +10,19 @@ import (
 	"fmt"
 )
 
-// fundamental is an error that has a message and a stack, but no caller.
+// Represents an error that occurred during execution of the TSS protocol rounds.
 type Error struct {
 	cause    error
 	task     string
 	round    int
 	victim   *PartyID
 	culprits []*PartyID
+}
+
+type VictimAndCulprit struct {
+	Victim  *PartyID
+	Culprit *PartyID
+	Message string
 }
 
 func NewError(err error, task string, round int, victim *PartyID, culprits ...*PartyID) *Error {
@@ -35,6 +41,10 @@ func (err *Error) Victim() *PartyID { return err.victim }
 
 func (err *Error) Culprits() []*PartyID { return err.culprits }
 
+func (err *Error) SelfCaused() bool {
+	return len(err.culprits) == 0 || (len(err.culprits) == 1 && err.culprits[0] == err.victim)
+}
+
 func (err *Error) Error() string {
 	if err == nil || err.cause == nil {
 		return "Error is nil"
@@ -43,6 +53,24 @@ func (err *Error) Error() string {
 		return fmt.Sprintf("task %s, party %v, round %d, culprits %s: %s",
 			err.task, err.victim, err.round, err.culprits, err.cause.Error())
 	}
-	return fmt.Sprintf("task %s, party %v, round %d: %s",
-		err.task, err.victim, err.round, err.cause.Error())
+	if err.victim != nil {
+		return fmt.Sprintf("task %s, party %v, round %d: %s",
+			err.task, err.victim, err.round, err.cause.Error())
+	}
+	return fmt.Sprintf("task %s, round %d: %s",
+		err.task, err.round, err.cause.Error())
+}
+
+func (vc *VictimAndCulprit) Error() string {
+	message := ""
+	if vc.Culprit != nil {
+		message = fmt.Sprintf("culprit party: %s", vc.Culprit)
+	}
+	if vc.Victim != nil {
+		message = message + fmt.Sprintf(" victim party: %s", vc.Victim)
+	}
+	if len(vc.Message) > 0 {
+		message = message + " " + vc.Message
+	}
+	return message
 }

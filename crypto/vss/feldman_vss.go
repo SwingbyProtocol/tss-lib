@@ -42,7 +42,7 @@ var (
 // Check share ids of Shamir's Secret Sharing, return error if duplicate or 0 value found
 func CheckIndexes(ec elliptic.Curve, indexes []*big.Int) ([]*big.Int, error) {
 	visited := make(map[string]struct{})
-	for i, v := range indexes {
+	for _, v := range indexes {
 		vMod := new(big.Int).Mod(v, ec.Params().N)
 		if vMod.Cmp(zero) == 0 {
 			return nil, errors.New("party index should not be 0")
@@ -52,7 +52,6 @@ func CheckIndexes(ec elliptic.Curve, indexes []*big.Int) ([]*big.Int, error) {
 			return nil, fmt.Errorf("duplicate indexes %s", vModStr)
 		}
 		visited[vModStr] = struct{}{}
-		indexes[i] = vMod
 	}
 	return indexes, nil
 }
@@ -67,14 +66,14 @@ func Create(ec elliptic.Curve, threshold int, secret *big.Int, indexes []*big.In
 	if threshold < 1 {
 		return nil, nil, errors.New("vss threshold < 1")
 	}
-	ids, err := CheckIndexes(ec, indexes)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	num := len(indexes)
 	if num < threshold {
 		return nil, nil, ErrNumSharesBelowThreshold
+	}
+
+	ids, err := CheckIndexes(ec, indexes)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	poly := samplePolynomial(ec, threshold, secret)
@@ -136,7 +135,7 @@ func (shares Shares) ReConstruct(ec elliptic.Curve) (secret *big.Int, err error)
 				continue
 			}
 			sub := modN.Sub(xs[j], share.ID)
-			subInv := modN.ModInverse(sub)
+			subInv := modN.Inverse(sub)
 			div := modN.Mul(xs[j], subInv)
 			times = modN.Mul(times, div)
 		}

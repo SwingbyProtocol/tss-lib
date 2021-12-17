@@ -7,6 +7,8 @@
 package keygen
 
 import (
+	"errors"
+
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -56,6 +58,14 @@ func (round *base) Params() *tss.Parameters {
 	return round.Parameters
 }
 
+func (round *base) ValidateParams() *error {
+	if round.Threshold() >= round.PartyCount() {
+		err := errors.New("t<n necessarily with the dishonest majority assumption")
+		return &err
+	}
+	return nil
+}
+
 func (round *base) RoundNumber() int {
 	return round.number
 }
@@ -88,6 +98,10 @@ func (round *base) WaitingFor() []*tss.PartyID {
 
 func (round *base) WrapError(err error, culprits ...*tss.PartyID) *tss.Error {
 	return tss.NewError(err, TaskName, round.number, round.PartyID(), culprits...)
+}
+
+func (round *base) WrapMultiError(err error, victim *tss.PartyID, culprits ...*tss.PartyID) *tss.Error {
+	return tss.NewError(err, TaskName, round.number, victim, culprits...)
 }
 
 // ----- //

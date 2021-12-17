@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type (
@@ -81,7 +81,7 @@ var (
 // NewMessageWrapper constructs a MessageWrapper from routing metadata and content
 func NewMessageWrapper(routing MessageRouting, content MessageContent) *MessageWrapper {
 	// marshal the content to the ProtoBuf Any type
-	any, _ := ptypes.MarshalAny(content)
+	any, _ := anypb.New(proto.MessageV2(content))
 	// convert given PartyIDs to the wire format
 	var to []*MessageWrapper_PartyID
 	if routing.To != nil {
@@ -157,13 +157,13 @@ func (mm *MessageImpl) ValidateBasic() bool {
 }
 
 func (mm *MessageImpl) String() string {
-	toStr := "all"
+	toStr := ""
 	if mm.To != nil {
-		toStr = fmt.Sprintf("%v", mm.To)
+		toStr = fmt.Sprintf("To: %v", mm.To)
 	}
 	extraStr := ""
 	if mm.IsToOldCommittee() {
 		extraStr = " (To Old Committee)"
 	}
-	return fmt.Sprintf("Type: %s, From: %s, To: %s%s", mm.Type(), mm.From.String(), toStr, extraStr)
+	return fmt.Sprintf("Type: %s, From: %s%s%s", mm.Type(), mm.From.String(), toStr, extraStr)
 }

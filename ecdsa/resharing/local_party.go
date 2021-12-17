@@ -14,6 +14,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
+	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -54,9 +55,10 @@ type (
 		VD        cmt.HashDeCommitment
 
 		// temporary storage of data that is persisted by the new party in round 5 if all "ACK" messages are received
-		newXi     *big.Int
-		newKs     []*big.Int
-		newBigXjs []*crypto.ECPoint // Xj to save in round 5
+		newXi         *big.Int
+		newKs         []*big.Int
+		newBigXjs     []*crypto.ECPoint // Xj to save in round 5
+		abortTriggers []ecdsautils.AbortTrigger
 	}
 )
 
@@ -92,7 +94,7 @@ func NewLocalParty(
 	p.temp.dgRound3Message2s = make([]tss.ParsedMessage, oldPartyCount)          // "
 	p.temp.dgRound4Messages = make([]tss.ParsedMessage, params.NewPartyCount())  // from n of New Committee
 	// save data init
-	if key.LocalPreParams.Validate() {
+	if key.LocalPreParams.ValidateWithProof() {
 		p.save.LocalPreParams = key.LocalPreParams
 	}
 	return p
@@ -160,7 +162,7 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	case *DGRound4Message:
 		p.temp.dgRound4Messages[fromPIdx] = msg
 	default: // unrecognised message, just ignore!
-		common.Logger.Warningf("unrecognised message ignored: %v", msg)
+		common.Logger.Warnf("unrecognised message ignored: %v", msg)
 		return false, nil
 	}
 	return true, nil

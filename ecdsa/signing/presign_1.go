@@ -136,9 +136,12 @@ func (round *presign1) prepare() error {
 	if round.Threshold()+1 > len(ks) {
 		return fmt.Errorf("t+1=%d is not satisfied by the key count of %d", round.Threshold()+1, len(ks))
 	}
-	wi, BigWs := PrepareForSigning(round.Params().EC(), i, len(ks), xi, ks, BigXs)
+	if wi, BigWs, err := PrepareForSigning(round.Params().EC(), i, len(ks), xi, ks, BigXs); err != nil {
+		return err
+	} else {
+		round.temp.w = wi
+		round.temp.BigWs = BigWs
+	}
 
-	round.temp.w = wi
-	round.temp.BigWs = BigWs
 	return nil
 }
