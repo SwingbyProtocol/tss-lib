@@ -7,8 +7,16 @@
 package tss
 
 import (
+	"errors"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
-	"google.golang.org/protobuf/proto"
+)
+
+const (
+	ECDSAProtoNamePrefix = "binance.tss-lib.ecdsa."
+	EDDSAProtoNamePrefix = "binance.tss-lib.eddsa."
 )
 
 // Used externally to update a LocalParty with a valid ParsedMessage
@@ -24,14 +32,16 @@ func ParseWireMessage(wireBytes []byte, from *PartyID, isBroadcast bool) (Parsed
 }
 
 func parseWrappedMessage(wire *MessageWrapper, from *PartyID) (ParsedMessage, error) {
+	var any ptypes.DynamicAny
 	meta := MessageRouting{
 		From:        from,
 		IsBroadcast: wire.IsBroadcast,
 	}
-	var err error
-	var m proto.Message
-	if m, err = wire.Message.UnmarshalNew(); err != nil {
+	if err := ptypes.UnmarshalAny(wire.Message, &any); err != nil {
 		return nil, err
 	}
-	return NewMessage(meta, m.(MessageContent), wire), nil
+	if content, ok := any.Message.(MessageContent); ok {
+		return NewMessage(meta, content, wire), nil
+	}
+	return nil, errors.New("ParseWireMessage: the message contained unknown content")
 }

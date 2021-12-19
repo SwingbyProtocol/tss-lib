@@ -61,12 +61,12 @@ func TestHDKeyDerivation(t *testing.T) {
 
 	// Using an arbitrary path of indices. In the common notation, this would be "m/13/209/3".
 	il, extendedChildPk, errorDerivation := ckd.DeriveChildKeyFromHierarchy([]uint32{13, 209, 3}, extendedParentPk,
-		tss.EC().Params().N)
+		tss.EC().Params().N, tss.EC())
 	assert.NoErrorf(t, errorDerivation, "there should not be an error deriving the child public key")
 
 	keyDerivationDelta := il
 
-	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, &extendedChildPk.PublicKey)
+	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, &extendedChildPk.PublicKey, tss.EC())
 	assert.NoErrorf(t, err, "there should not be an error setting the derived keys")
 
 	// PHASE: signing
@@ -76,9 +76,9 @@ func TestHDKeyDerivation(t *testing.T) {
 
 	errCh := make(chan *tss.Error, len(signPIDs))
 	outCh := make(chan tss.Message, len(signPIDs))
-	endCh := make(chan *SignatureData, len(signPIDs))
+	endCh := make(chan common.SignatureData, len(signPIDs))
 
-	updater := test.SharedPartyUpdaterWithQueues
+	updater := test.SharedPartyUpdater
 
 	msg, parties, errCh := initTheParties(signPIDs, p2pCtx, threshold, keys, keyDerivationDelta, outCh, endCh, parties, errCh)
 
@@ -114,10 +114,10 @@ signing:
 				t.Logf("Done. Received signature data from %d participants %+v", ended, data)
 
 				// bigR is stored as bytes for the OneRoundData protobuf struct
-				bigRX, bigRY := new(big.Int).SetBytes(parties[0].temp.BigR.GetX()), new(big.Int).SetBytes(parties[0].temp.BigR.GetY())
+				bigRX, bigRY := parties[0].temp.BigR.X(), parties[0].temp.BigR.Y()
 				bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
 
-				r := parties[0].temp.rI.X()
+				r := parties[0].temp.Rx
 				fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
 
 				modN := common.ModInt(tss.EC().Params().N)
@@ -125,7 +125,7 @@ signing:
 				// BEGIN check s correctness
 				sumS := big.NewInt(0)
 				for _, p := range parties {
-					sumS = modN.Add(sumS, p.temp.sI)
+					sumS = modN.Add(sumS, p.temp.SigmaShare)
 				}
 				fmt.Printf("S: %s\n", sumS.String())
 				// END check s correctness

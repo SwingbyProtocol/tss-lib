@@ -43,13 +43,16 @@ func (round *finalization) Start() *tss.Error {
 	// save the signature for final output
 	signature := new(common.ECSignature)
 	signature.Signature = append(bigIntToEncodedBytes(round.temp.r)[:], sumS[:]...)
-	signature.R = round.temp.r.Bytes()
-	signature.S = s.Bytes()
+	signature.R = bigIntToEncodedBytes(round.temp.r)[:]
+	signature.S = bigIntToEncodedBytes(s)[:]
 	signature.M = round.temp.m.Bytes()
-	round.data.Signature = signature
+
+	round.data.R = signature.R
+	round.data.S = signature.S
+	round.data.Signature = append(round.data.R, round.data.S...)
 
 	pk := edwards.PublicKey{
-		Curve: tss.EC(),
+		Curve: round.Params().EC(),
 		X:     round.key.EDDSAPub.X(),
 		Y:     round.key.EDDSAPub.Y(),
 	}
@@ -58,7 +61,7 @@ func (round *finalization) Start() *tss.Error {
 	if !ok {
 		return round.WrapError(fmt.Errorf("signature verification failed"))
 	}
-	round.end <- round.data
+	round.end <- *round.data
 
 	return nil
 }
@@ -75,4 +78,14 @@ func (round *finalization) Update() (bool, *tss.Error) {
 
 func (round *finalization) NextRound() tss.Round {
 	return nil // finished!
+}
+
+func padToLengthBytesInPlace(src []byte, length int) []byte {
+	oriLen := len(src)
+	if oriLen < length {
+		for i := 0; i < length-oriLen; i++ {
+			src = append([]byte{0}, src...)
+		}
+	}
+	return src
 }

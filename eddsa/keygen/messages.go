@@ -7,17 +7,18 @@
 package keygen
 
 import (
+	"crypto/elliptic"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
+	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
 // These messages were generated from Protocol Buffers definitions into eddsa-keygen.pb.go
+// The following messages are registered on the Protocol Buffers "wire"
 
 var (
 	// Ensure that keygen messages implement ValidateBasic
@@ -82,17 +83,17 @@ func (m *KGRound2Message1) UnmarshalShare() *big.Int {
 func NewKGRound2Message2(
 	from *tss.PartyID,
 	deCommitment cmt.HashDeCommitment,
-	proof *zkp.DLogProof,
+	proof *zkpsch.ProofSch,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
 	}
 	dcBzs := common.BigIntsToBytes(deCommitment)
+	proofBzs := proof.Bytes()
 	content := &KGRound2Message2{
 		DeCommitment: dcBzs,
-		ProofAlpha:   proof.Alpha.ToProtobufPoint(),
-		ProofT:       proof.T.Bytes(),
+		Proof:        proofBzs[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -100,7 +101,8 @@ func NewKGRound2Message2(
 
 func (m *KGRound2Message2) ValidateBasic() bool {
 	return m != nil &&
-		common.NonEmptyMultiBytes(m.GetDeCommitment())
+		common.NonEmptyMultiBytes(m.GetDeCommitment()) &&
+		common.NonEmptyMultiBytes(m.Proof, zkpsch.ProofSchBytesParts)
 }
 
 func (m *KGRound2Message2) UnmarshalDeCommitment() []*big.Int {
@@ -108,13 +110,6 @@ func (m *KGRound2Message2) UnmarshalDeCommitment() []*big.Int {
 	return cmt.NewHashDeCommitmentFromBytes(deComBzs)
 }
 
-func (m *KGRound2Message2) UnmarshalZKProof() (*zkp.DLogProof, error) {
-	point, err := crypto.NewECPointFromProtobuf(m.GetProofAlpha())
-	if err != nil {
-		return nil, err
-	}
-	return &zkp.DLogProof{
-		Alpha: point,
-		T:     new(big.Int).SetBytes(m.GetProofT()),
-	}, nil
+func (m *KGRound2Message2) UnmarshalZKProof(ec elliptic.Curve) (*zkpsch.ProofSch, error) {
+	return zkpsch.NewProofFromBytes(ec, m.GetProof())
 }

@@ -141,7 +141,7 @@ func runKeyGen(dir string, t, n, msgLatency int) {
 
 	// init the parties
 	for i := 0; i < len(pIDs); i++ {
-		params := tss.NewParameters(p2pCtx, pIDs[i], len(pIDs), t)
+		params := tss.NewParameters(tss.EC(), p2pCtx, pIDs[i], len(pIDs), t)
 		params.UNSAFE_setKGIgnoreH1H2Dupes(true)
 		P := keygen.NewLocalParty(params, outCh, endCh, preParamTestData).(*keygen.LocalParty)
 		parties = append(parties, P)

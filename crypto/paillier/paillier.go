@@ -52,7 +52,8 @@ type (
 )
 
 var (
-	ErrMessageTooLong = fmt.Errorf("the message is too large or < 0")
+	ErrMessageTooLong   = fmt.Errorf("the message is too large or < 0")
+	ErrMessageMalFormed = fmt.Errorf("the message is mal-formed")
 
 	zero = big.NewInt(0)
 	one  = big.NewInt(1)
@@ -106,11 +107,69 @@ func GenerateKeyPair(modulusBitLen int, timeout time.Duration, optionalConcurren
 	return
 }
 
+// len is the length of the modulus (each prime = len / 2)
+func GenerateKeyPairAndPQ(modulusBitLen int, timeout time.Duration, optionalConcurrency ...int) (privateKey *PrivateKey, publicKey *PublicKey, P, Q *big.Int, err error) {
+	var concurrency int
+	if 0 < len(optionalConcurrency) {
+		if 1 < len(optionalConcurrency) {
+			panic(errors.New("GeneratePreParams: expected 0 or 1 item in `optionalConcurrency`"))
+		}
+		concurrency = optionalConcurrency[0]
+	} else {
+		concurrency = runtime.NumCPU()
+	}
+
+	// KS-BTL-F-03: use two safe primes for P, Q
+	var N *big.Int
+	{
+		tmp := new(big.Int)
+		for {
+			sgps, err := common.GetRandomSafePrimesConcurrent(modulusBitLen/2, 2, timeout, concurrency)
+			if err != nil {
+				return nil, nil, nil, nil, err
+			}
+			P, Q = sgps[0].SafePrime(), sgps[1].SafePrime()
+			// KS-BTL-F-03: check that p-q is also very large in order to avoid square-root attacks
+			if tmp.Sub(P, Q).BitLen() >= (modulusBitLen/2)-pQBitLenDifference {
+				break
+			}
+		}
+		N = tmp.Mul(P, Q)
+	}
+
+	// phiN = P-1 * Q-1
+	PMinus1, QMinus1 := new(big.Int).Sub(P, one), new(big.Int).Sub(Q, one)
+	phiN := new(big.Int).Mul(PMinus1, QMinus1)
+
+	// lambdaN = lcm(P−1, Q−1)
+	gcd := new(big.Int).GCD(nil, nil, PMinus1, QMinus1)
+	lambdaN := new(big.Int).Div(phiN, gcd)
+
+	publicKey = &PublicKey{N: N}
+	privateKey = &PrivateKey{PublicKey: *publicKey, LambdaN: lambdaN, PhiN: phiN}
+	return
+}
+
 // ----- //
 
-func (pk *PublicKey) EncryptWithChosenRandomness(m, x *big.Int) (c *big.Int, err error) {
+func (publicKey *PublicKey) EncryptAndReturnRandomness(m *big.Int) (c *big.Int, x *big.Int, err error) {
+	if m.Cmp(zero) == -1 || m.Cmp(publicKey.N) != -1 { // m < 0 || m >= N ?
+		return nil, nil, ErrMessageTooLong
+	}
+	x = common.GetRandomPositiveRelativelyPrimeInt(publicKey.N)
+	N2 := publicKey.NSquare()
+	// 1. gamma^m mod N2
+	Gm := new(big.Int).Exp(publicKey.Gamma(), m, N2)
+	// 2. x^N mod N2
+	xN := new(big.Int).Exp(x, publicKey.N, N2)
+	// 3. (1) * (2) mod N2
+	c = common.ModInt(N2).Mul(Gm, xN)
+	return
+}
+
+func (pk *PublicKey) EncryptWithGivenRandomness(m, x *big.Int) (c *big.Int, err error) {
 	if x == nil || x.Cmp(zero) == 0 {
-		return nil, errors.New("EncryptWithChosenRandomness() requires non-zero randomness")
+		return nil, errors.New("EncryptWithGivenRandomness() requires non-zero randomness")
 	}
 	if m.Cmp(zero) == -1 || m.Cmp(pk.N) != -1 { // m < 0 || m >= N ?
 		return nil, ErrMessageTooLong
@@ -126,80 +185,67 @@ func (pk *PublicKey) EncryptWithChosenRandomness(m, x *big.Int) (c *big.Int, err
 	return
 }
 
-func (pk *PublicKey) EncryptAndReturnRandomness(m *big.Int) (c *big.Int, x *big.Int, err error) {
-	if m.Cmp(zero) == -1 || m.Cmp(pk.N) != -1 { // m < 0 || m >= N ?
-		return nil, nil, ErrMessageTooLong
-	}
-	modNSq := common.ModInt(pk.NSquare())
-	x = common.GetRandomPositiveRelativelyPrimeInt(pk.N)
-	// 1. gamma^m mod N2
-	Gm := modNSq.Exp(pk.Gamma(), m)
-	// 2. x^N mod N2
-	xN := modNSq.Exp(x, pk.N)
-	// 3. (1) * (2) mod N2
-	c = modNSq.Mul(Gm, xN)
+func (publicKey *PublicKey) Encrypt(m *big.Int) (c *big.Int, err error) {
+	c, _, err = publicKey.EncryptAndReturnRandomness(m)
 	return
 }
 
-func (pk *PublicKey) Encrypt(m *big.Int) (c *big.Int, err error) {
-	c, _, err = pk.EncryptAndReturnRandomness(m)
-	return
-}
-
-func (pk *PublicKey) HomoMult(m, c1 *big.Int) (*big.Int, error) {
-	if m.Cmp(zero) == -1 || m.Cmp(pk.N) != -1 { // m < 0 || m >= N ?
+func (publicKey *PublicKey) HomoMult(m, c1 *big.Int) (*big.Int, error) {
+	if m.Cmp(zero) == -1 || m.Cmp(publicKey.N) != -1 { // m < 0 || m >= N ?
 		return nil, ErrMessageTooLong
 	}
-	NSq := pk.NSquare()
-	if c1.Cmp(zero) == -1 || c1.Cmp(NSq) != -1 { // c1 < 0 || c1 >= N2 ?
+	N2 := publicKey.NSquare()
+	if c1.Cmp(zero) == -1 || c1.Cmp(N2) != -1 { // c1 < 0 || c1 >= N2 ?
 		return nil, ErrMessageTooLong
 	}
 	// cipher^m mod N2
-	return common.ModInt(NSq).Exp(c1, m), nil
+	return common.ModInt(N2).Exp(c1, m), nil
 }
 
-func (pk *PublicKey) HomoAdd(c1, c2 *big.Int) (*big.Int, error) {
-	NSq := pk.NSquare()
-	if c1.Cmp(zero) == -1 || c1.Cmp(NSq) != -1 { // c1 < 0 || c1 >= N2 ?
+func (publicKey *PublicKey) HomoAdd(c1, c2 *big.Int) (*big.Int, error) {
+	N2 := publicKey.NSquare()
+	if c1.Cmp(zero) == -1 || c1.Cmp(N2) != -1 { // c1 < 0 || c1 >= N2 ?
 		return nil, ErrMessageTooLong
 	}
-	if c2.Cmp(zero) == -1 || c2.Cmp(NSq) != -1 { // c2 < 0 || c2 >= N2 ?
+	if c2.Cmp(zero) == -1 || c2.Cmp(N2) != -1 { // c2 < 0 || c2 >= N2 ?
 		return nil, ErrMessageTooLong
 	}
 	// c1 * c2 mod N2
-	return common.ModInt(NSq).Mul(c1, c2), nil
+	return common.ModInt(N2).Mul(c1, c2), nil
 }
 
-func (pk *PublicKey) NSquare() *big.Int {
-	return new(big.Int).Mul(pk.N, pk.N)
+func (publicKey *PublicKey) NSquare() *big.Int {
+	return new(big.Int).Mul(publicKey.N, publicKey.N)
 }
 
 // AsInts returns the PublicKey serialised to a slice of *big.Int for hashing
-func (pk *PublicKey) AsInts() []*big.Int {
-	return []*big.Int{pk.N, pk.Gamma()}
+func (publicKey *PublicKey) AsInts() []*big.Int {
+	return []*big.Int{publicKey.N, publicKey.Gamma()}
 }
 
 // Gamma returns N+1
-func (pk *PublicKey) Gamma() *big.Int {
-	return new(big.Int).Add(pk.N, one)
+func (publicKey *PublicKey) Gamma() *big.Int {
+	return new(big.Int).Add(publicKey.N, one)
 }
 
 // ----- //
 
-func (sk *PrivateKey) Decrypt(c *big.Int) (m *big.Int, err error) {
-	NSq := sk.NSquare()
-	modN := common.ModInt(sk.N)
-	modNSq := common.ModInt(NSq)
-	if c.Cmp(zero) == -1 || c.Cmp(NSq) != -1 { // c < 0 || c >= N2 ?
+func (privateKey *PrivateKey) Decrypt(c *big.Int) (m *big.Int, err error) {
+	N2 := privateKey.NSquare()
+	if c.Cmp(zero) == -1 || c.Cmp(N2) != -1 { // c < 0 || c >= N2 ?
 		return nil, ErrMessageTooLong
 	}
+	cg := new(big.Int).GCD(nil, nil, c, N2)
+	if cg.Cmp(one) == 1 {
+		return nil, ErrMessageMalFormed
+	}
 	// 1. L(u) = (c^LambdaN-1 mod N2) / N
-	Lc := L(modNSq.Exp(c, sk.LambdaN), sk.N)
+	Lc := L(new(big.Int).Exp(c, privateKey.LambdaN, N2), privateKey.N)
 	// 2. L(u) = (Gamma^LambdaN-1 mod N2) / N
-	Lg := L(modNSq.Exp(sk.Gamma(), sk.LambdaN), sk.N)
+	Lg := L(new(big.Int).Exp(privateKey.Gamma(), privateKey.LambdaN, N2), privateKey.N)
 	// 3. (1) * modInv(2) mod N
-	inv := modN.Inverse(Lg)
-	m = modN.Mul(Lc, inv)
+	inv := new(big.Int).ModInverse(Lg, privateKey.N)
+	m = common.ModInt(privateKey.N).Mul(Lc, inv)
 	return
 }
 
@@ -226,13 +272,13 @@ func (sk *PrivateKey) DecryptAndRecoverRandomness(c *big.Int) (m, x *big.Int, er
 // An efficient non-interactive statistical zero-knowledge proof system for quasi-safe prime products.
 // In: In Proc. of the 5th ACM Conference on Computer and Communications Security (CCS-98. Citeseer (1998)
 
-func (sk *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) Proof {
+func (privateKey *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) Proof {
 	var pi Proof
 	iters := ProofIters
-	xs := GenerateXs(iters, k, sk.N, ecdsaPub)
+	xs := GenerateXs(iters, k, privateKey.N, ecdsaPub)
 	for i := 0; i < iters; i++ {
-		M := new(big.Int).ModInverse(sk.N, sk.PhiN)
-		pi[i] = new(big.Int).Exp(xs[i], M, sk.N)
+		M := new(big.Int).ModInverse(privateKey.N, privateKey.PhiN)
+		pi[i] = new(big.Int).Exp(xs[i], M, privateKey.N)
 	}
 	return pi
 }

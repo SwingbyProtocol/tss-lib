@@ -26,7 +26,7 @@ const (
 	// To change these parameters, you must first delete the text fixture files in test/_fixtures/ and then run the keygen test alone.
 	// Then the signing and resharing tests will work with the new n, t configuration using the newly written fixture files.
 	TestParticipants = test.TestParticipants
-	TestThreshold    = test.TestParticipants / 2
+	TestThreshold    = test.TestThreshold
 )
 const (
 	testFixtureDirFormat  = "%s/../../test/_ecdsa_fixtures"
@@ -53,6 +53,10 @@ func LoadKeygenTestFixtures(qty int, optionalStart ...int) ([]LocalPartySaveData
 				"could not unmarshal fixture data for party %d located at: %s",
 				i, fixtureFilePath)
 		}
+		for _, kbxj := range key.BigXj {
+			kbxj.SetCurve(tss.S256())
+		}
+		key.ECDSAPub.SetCurve(tss.S256())
 		keys = append(keys, key)
 	}
 	partyIDs := make(tss.UnSortedPartyIDs, len(keys))
@@ -87,6 +91,10 @@ func LoadKeygenTestFixturesRandomSet(qty, fixtureCount int) ([]LocalPartySaveDat
 				"could not unmarshal fixture data for party %d located at: %s",
 				i, fixtureFilePath)
 		}
+		for _, kbxj := range key.BigXj {
+			kbxj.SetCurve(tss.S256())
+		}
+		key.ECDSAPub.SetCurve(tss.S256())
 		keys = append(keys, key)
 	}
 	partyIDs := make(tss.UnSortedPartyIDs, len(keys))

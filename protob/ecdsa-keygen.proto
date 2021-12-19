@@ -5,61 +5,44 @@
 // file LICENSE at the root of the source code distribution tree.
 
 syntax = "proto3";
-
-option go_package = "github.com/binance-chain/tss-lib/ecdsa/keygen";
-
-import "protob/shared.proto";
+package binance.tsslib.ecdsa.keygen;
+option go_package = "ecdsa/keygen";
 
 /*
  * Represents a BROADCAST message sent during Round 1 of the ECDSA TSS keygen protocol.
  */
-message KGRound1Message {
-    bytes commitment = 1;
-    bytes paillier_n = 2;
-    bytes authentication_ecdsa_public_key_x = 3;
-    bytes authentication_ecdsa_public_key_y = 4;
-    bytes authentication_paillier_sig_r = 5;
-    bytes authentication_paillier_sig_s = 6;
-    bytes n_tilde = 7;
-    bytes h1 = 8;
-    bytes h2 = 9;
-    repeated bytes dlnproof_1 = 10;
-    repeated bytes dlnproof_2 = 11;
-    bytes proof_n_square_free = 12;
-    bytes rand_int_proof_n_square_free = 13;
+ message KGRound1Message {
+    bytes VHash = 1;
+}
 
+/*
+ * Represents a BROADCAST message sent during Round 1 of the ECDSA TSS keygen protocol.
+ */
+message KGRound2Message {
+    repeated bytes vs = 1;
+    bytes paillier_n = 2;
+    bytes n_tilde = 3;
+    bytes h1 = 4;
+    bytes h2 = 5;
+    bytes ridi = 6;
+    repeated bytes Ai = 7;
+    repeated bytes Xi = 8;
+    repeated bytes PrmProof = 9;
 }
 
 /*
  * Represents a P2P message sent to each party during Round 2 of the ECDSA TSS keygen protocol.
  */
-message KGRound2Message1 {
+message KGRound3Message {
     bytes share = 1;
-    bytes authentication_ecdsa_sig_r = 2;
-    bytes authentication_ecdsa_sig_s = 3;
-}
-
-/*
- * Represents a BROADCAST message sent to each party during Round 2 of the ECDSA TSS keygen protocol.
- */
-message KGRound2Message2 {
-    repeated bytes de_commitment = 1;
+    repeated bytes mod_proof = 2;
+    repeated bytes fac_proof = 3;
+    repeated bytes psii_proof = 4;
 }
 
 /*
  * Represents a BROADCAST message sent to each party during Round 3 of the ECDSA TSS keygen protocol.
  */
-message KGRound3Message {
-    repeated bytes paillier_proof = 1;
-    ECPoint proof_xi_alpha = 2;
-    bytes proof_xi_t = 3;
-}
-
-/*
- * Represents a BROADCAST message sent to each party during Round 3 of the ECDSA TSS keygen protocol
- * when in abort mode.
- */
-message KGRound3MessageAbortMode {
-    uint32 plaintiff_party = 1;
-    repeated VSSShareWithAuthSigMessage suspicious_vsss = 2;
+message KGRound4Message {
+    repeated bytes proof = 1;
 }

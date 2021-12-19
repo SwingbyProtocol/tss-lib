@@ -7,16 +7,17 @@
 package signing
 
 import (
+	"crypto/elliptic"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto"
 	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
+	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
 // These messages were generated from Protocol Buffers definitions into eddsa-signing.pb.go
+// The following messages are registered on the Protocol Buffers "wire"
 
 var (
 	// Ensure that signing messages implement ValidateBasic
@@ -58,17 +59,17 @@ func (m *SignRound1Message) UnmarshalCommitment() *big.Int {
 func NewSignRound2Message(
 	from *tss.PartyID,
 	deCommitment cmt.HashDeCommitment,
-	proof *zkp.DLogProof,
+	proof *zkpsch.ProofSch,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
 	}
 	dcBzs := common.BigIntsToBytes(deCommitment)
+	proofBzs := proof.Bytes()
 	content := &SignRound2Message{
 		DeCommitment: dcBzs,
-		ProofAlpha:   proof.Alpha.ToProtobufPoint(),
-		ProofT:       proof.T.Bytes(),
+		Proof:        proofBzs[:],
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -76,10 +77,8 @@ func NewSignRound2Message(
 
 func (m *SignRound2Message) ValidateBasic() bool {
 	return m != nil &&
-		m.ProofAlpha != nil &&
 		common.NonEmptyMultiBytes(m.DeCommitment, 3) &&
-		m.ProofAlpha.ValidateBasic() &&
-		common.NonEmptyBytes(m.ProofT)
+		common.NonEmptyMultiBytes(m.Proof, zkpsch.ProofSchBytesParts)
 }
 
 func (m *SignRound2Message) UnmarshalDeCommitment() []*big.Int {
@@ -87,15 +86,8 @@ func (m *SignRound2Message) UnmarshalDeCommitment() []*big.Int {
 	return cmt.NewHashDeCommitmentFromBytes(deComBzs)
 }
 
-func (m *SignRound2Message) UnmarshalZKProof() (*zkp.DLogProof, error) {
-	point, err := crypto.NewECPointFromProtobuf(m.GetProofAlpha())
-	if err != nil {
-		return nil, err
-	}
-	return &zkp.DLogProof{
-		Alpha: point,
-		T:     new(big.Int).SetBytes(m.GetProofT()),
-	}, nil
+func (m *SignRound2Message) UnmarshalZKProof(ec elliptic.Curve) (*zkpsch.ProofSch, error) {
+	return zkpsch.NewProofFromBytes(ec, m.GetProof())
 }
 
 // ----- //

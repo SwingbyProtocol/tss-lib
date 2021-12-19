@@ -7,6 +7,7 @@
 package signing
 
 import (
+	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -19,63 +20,52 @@ type (
 	base struct {
 		*tss.Parameters
 		key     *keygen.LocalPartySaveData
-		data    *SignatureData
+		data    *common.SignatureData
 		temp    *localTempData
 		out     chan<- tss.Message
-		end     chan<- *SignatureData
+		end     chan<- common.SignatureData
 		ok      []bool // `ok` tracks parties which have been verified by Update()
 		started bool
-		ended   bool
 		number  int
 	}
-	round1 struct {
+	presign1 struct {
 		*base
 	}
-	round2 struct {
-		*round1
+	presign2 struct {
+		*presign1
 	}
-	round3 struct {
-		*round2
+	presign3 struct {
+		*presign2
 	}
-	round4 struct {
-		*round3
+	sign4 struct {
+		*presign3
+		AbortingSigning bool
 	}
-	round5 struct {
-		*round4
+	identificationPrep struct {
+		*sign4
 	}
-	round6 struct {
-		*round5
+	signout struct {
+		*sign4
+	}
 
-		// Trigger for when a consistency check fails during Phase 5 of the protocol, resulting in a Type 5 identifiable abort (GG20)
-		abortingT5 bool
+	// identification rounds
+	identification6 struct {
+		*identificationPrep
 	}
-	round7AbortPrep struct {
-		*round6
-	}
-	// The final round for the one-round signing mode (see the README)
-	round7 struct {
-		*round7AbortPrep
-		abortingT7 bool
-	}
-	finalizationAbortPrep struct {
-		*round7
-	}
-	finalization struct {
-		*finalizationAbortPrep
+	identification7 struct {
+		*identification6
 	}
 )
 
 var (
-	_ tss.PreprocessingRound = (*round1)(nil)
-	_ tss.PreprocessingRound = (*round2)(nil)
-	_ tss.PreprocessingRound = (*round3)(nil)
-	_ tss.PreprocessingRound = (*round4)(nil)
-	_ tss.PreprocessingRound = (*round5)(nil)
-	_ tss.PreprocessingRound = (*round6)(nil)
-	_ tss.PreprocessingRound = (*round7)(nil)
-	_ tss.PreprocessingRound = (*round7AbortPrep)(nil)
-	_ tss.PreprocessingRound = (*finalizationAbortPrep)(nil)
-	_ tss.PreprocessingRound = (*finalization)(nil)
+	_ tss.Round = (*presign1)(nil)
+	_ tss.Round = (*presign2)(nil)
+	_ tss.Round = (*presign3)(nil)
+	_ tss.Round = (*sign4)(nil)
+	_ tss.Round = (*signout)(nil)
+	_ tss.Round = (*identificationPrep)(nil)
+	_ tss.Round = (*identification6)(nil)
+	_ tss.Round = (*identification7)(nil)
 )
 
 // ----- //
@@ -90,16 +80,15 @@ func (round *base) RoundNumber() int {
 
 // CanProceed is inherited by other rounds
 func (round *base) CanProceed() bool {
-	return round.started && round.ended
-}
-
-func (round *base) Process(*tss.ParsedMessage, *tss.PartyID, *tss.GenericParameters) *tss.Error {
-	return nil
-}
-
-func (round *base) Postprocess(parameters *tss.GenericParameters) *tss.Error {
-	round.ended = true
-	return nil
+	if !round.started {
+		return false
+	}
+	for _, ok := range round.ok {
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // WaitingFor is called by a Party for reporting back to the caller
@@ -128,14 +117,13 @@ func (round *base) resetOK() {
 	}
 }
 
-func SafeDoubleDictionaryGet(doubleDictionary map[string]map[string]interface{}, key string, Pj *tss.PartyID) (interface{}, bool) {
-	if doubleDictionary == nil {
-		return nil, false
+func (round *base) setOK() {
+	for j := range round.ok {
+		round.ok[j] = true
 	}
-	val, ok := doubleDictionary[key]
-	if !ok {
-		return nil, ok
-	}
-	val2, ok2 := val[Pj.UniqueIDString()]
-	return val2, ok2
+}
+
+func (round *base) Dump(dumpCh chan tss.ParsedMessage) {
+	DumpMsg := NewTempDataDumpMessage(round.PartyID(), *round.temp, round.number)
+	dumpCh <- DumpMsg
 }

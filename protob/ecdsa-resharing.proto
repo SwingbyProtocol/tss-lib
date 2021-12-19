@@ -5,17 +5,16 @@
 // file LICENSE at the root of the source code distribution tree.
 
 syntax = "proto3";
-
-option go_package = "github.com/binance-chain/tss-lib/ecdsa/resharing";
-
-import "protob/shared.proto";
+package binance.tsslib.ecdsa.resharing;
+option go_package = "ecdsa/resharing";
 
 /*
  * The Round 1 data is broadcast to peers of the New Committee in this message.
  */
 message DGRound1Message {
-    ECPoint ecdsa_pub = 1;
-    bytes v_commitment = 2;
+    bytes ecdsa_pub_x = 1;
+    bytes ecdsa_pub_y = 2;
+    bytes v_commitment = 3;
 }
 
 /*
@@ -24,25 +23,15 @@ message DGRound1Message {
 message DGRound2Message1 {
     bytes paillier_n = 1;
     repeated bytes paillier_proof = 2;
-    bytes authentication_ecdsa_public_key_x = 3;
-    bytes authentication_ecdsa_public_key_y = 4;
-    bytes authentication_paillier_sig_r = 5;
-    bytes authentication_paillier_sig_s = 6;
-    bytes n_tilde = 7;
-    bytes h1 = 8;
-    bytes h2 = 9;
-    repeated bytes dlnproof_1 = 10;
-    repeated bytes dlnproof_2 = 11;
-    bytes proof_n_square_free = 12;
-    bytes rand_int_proof_n_square_free = 13;
+    bytes n_tilde = 3;
+    bytes h1 = 4;
+    bytes h2 = 5;
 }
 
 /*
  * The Round 2 "ACK" is broadcast to peers of the Old Committee in this message.
  */
 message DGRound2Message2 {
-    bytes authentication_ecdsa_public_key_x = 1;
-    bytes authentication_ecdsa_public_key_y = 2;
 }
 
 /*
@@ -50,10 +39,6 @@ message DGRound2Message2 {
  */
 message DGRound3Message1 {
     bytes share = 1;
-    bytes authentication_ecdsa_sig_r = 2;
-    bytes authentication_ecdsa_sig_s = 3;
-    bytes authentication_ecdsa_public_key_x = 4;
-    bytes authentication_ecdsa_public_key_y = 5;
 }
 
 /*
@@ -67,16 +52,4 @@ message DGRound3Message2 {
  * The Round 4 "ACK" is broadcast to peers of the Old and New Committees from the New Committee in this message.
  */
 message DGRound4Message {
-    message ACK {
-        ECPoint proof_xi_alpha = 1;
-        bytes proof_xi_t = 2;
-    }
-    message AbortData {
-         uint32 plaintiff_party = 1;
-         repeated VSSShareWithAuthSigMessage suspicious_vsss = 2;
-    }
-    oneof content {
-        ACK ack = 1;
-        AbortData abort = 2;
-    }
 }

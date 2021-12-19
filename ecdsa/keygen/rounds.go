@@ -9,7 +9,6 @@ package keygen
 import (
 	"errors"
 
-	"github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -40,6 +39,9 @@ type (
 	round4 struct {
 		*round3
 	}
+	roundout struct {
+		*round4
+	}
 )
 
 var (
@@ -47,6 +49,7 @@ var (
 	_ tss.Round = (*round2)(nil)
 	_ tss.Round = (*round3)(nil)
 	_ tss.Round = (*round4)(nil)
+	_ tss.Round = (*roundout)(nil)
 )
 
 // ----- //
@@ -108,16 +111,4 @@ func (round *base) resetOK() {
 	for j := range round.ok {
 		round.ok[j] = false
 	}
-}
-
-func (round *base) shouldTriggerAbort(trigger ecdsautils.AbortTrigger) bool {
-	if len(round.temp.abortTriggers) == 0 {
-		return false
-	}
-	for _, t := range round.temp.abortTriggers {
-		if trigger == t {
-			return true
-		}
-	}
-	return false
 }

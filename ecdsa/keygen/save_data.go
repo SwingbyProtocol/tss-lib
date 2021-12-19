@@ -8,19 +8,17 @@ package keygen
 
 import (
 	"encoding/hex"
-	"errors"
 	"math/big"
 
+	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
-	"github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
 type (
 	LocalPreParams struct {
-		PaillierSK          *paillier.PrivateKey // ski
-		AuthEcdsaPrivateKey *ecdsautils.MarshallableEcdsaPrivateKey
+		PaillierSK *paillier.PrivateKey // ski
 		NTildei,
 		H1i, H2i,
 		Alpha, Beta,
@@ -44,17 +42,11 @@ type (
 		NTildej, H1j, H2j []*big.Int
 
 		// public keys (Xj = uj*G for each Pj)
-		BigXj             []*crypto.ECPoint                        // Xj
-		PaillierPKs       []*paillier.PublicKey                    // pkj
-		AuthenticationPKs []*ecdsautils.MarshallableEcdsaPublicKey // auth_yj
+		BigXj       []*crypto.ECPoint     // Xj
+		PaillierPKs []*paillier.PublicKey // pkj
 
-		// the ECDSA public key
+		// used for test assertions (may be discarded)
 		ECDSAPub *crypto.ECPoint // y
-
-		// The ReshareKeyOffset is 0 before a reshare run and is set to an epoch each reshare run.
-		ReshareKeyOffset uint64
-
-		MostRecentReshareEpoch int64
 	}
 )
 
@@ -64,13 +56,11 @@ func NewLocalPartySaveData(partyCount int) (saveData LocalPartySaveData) {
 	saveData.H1j, saveData.H2j = make([]*big.Int, partyCount), make([]*big.Int, partyCount)
 	saveData.BigXj = make([]*crypto.ECPoint, partyCount)
 	saveData.PaillierPKs = make([]*paillier.PublicKey, partyCount)
-	saveData.AuthenticationPKs = make([]*ecdsautils.MarshallableEcdsaPublicKey, partyCount)
 	return
 }
 
 func (preParams LocalPreParams) Validate() bool {
 	return preParams.PaillierSK != nil &&
-		preParams.AuthEcdsaPrivateKey != nil &&
 		preParams.NTildei != nil &&
 		preParams.H1i != nil &&
 		preParams.H2i != nil
@@ -78,7 +68,7 @@ func (preParams LocalPreParams) Validate() bool {
 
 func (preParams LocalPreParams) ValidateWithProof() bool {
 	return preParams.Validate() &&
-		preParams.Alpha != nil &&
+		//preParams.Alpha != nil &&
 		preParams.Beta != nil &&
 		preParams.P != nil &&
 		preParams.Q != nil
@@ -94,13 +84,10 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 	newData.LocalPreParams = sourceData.LocalPreParams
 	newData.LocalSecrets = sourceData.LocalSecrets
 	newData.ECDSAPub = sourceData.ECDSAPub
-	reshareKeyOffset := big.NewInt(int64(sourceData.ReshareKeyOffset))
 	for j, id := range sortedIDs {
-		idKey := new(big.Int).SetBytes(id.Key)
-		keyAndShift := new(big.Int).Add(idKey, reshareKeyOffset)
-		savedIdx, ok := keysToIndices[hex.EncodeToString(keyAndShift.Bytes())]
+		savedIdx, ok := keysToIndices[hex.EncodeToString(id.Key)]
 		if !ok {
-			panic(errors.New("BuildLocalSaveDataSubset: unable to find a signer party in the local save data"))
+			common.Logger.Warning("BuildLocalSaveDataSubset: unable to find a signer party in the local save data", id)
 		}
 		newData.Ks[j] = sourceData.Ks[savedIdx]
 		newData.NTildej[j] = sourceData.NTildej[savedIdx]
@@ -108,7 +95,6 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 		newData.H2j[j] = sourceData.H2j[savedIdx]
 		newData.BigXj[j] = sourceData.BigXj[savedIdx]
 		newData.PaillierPKs[j] = sourceData.PaillierPKs[savedIdx]
-		newData.AuthenticationPKs[j] = sourceData.AuthenticationPKs[savedIdx]
 	}
 	return newData
 }

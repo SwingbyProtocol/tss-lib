@@ -7,12 +7,8 @@
 package resharing
 
 import (
-	"crypto/ecdsa"
-	"crypto/rand"
 	"errors"
 
-	"github.com/binance-chain/tss-lib/crypto/dlnp"
-	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
 )
@@ -33,16 +29,19 @@ func (round *round2) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
+	// 2. "broadcast" "ACK" members of the OLD committee
+	r2msg1 := NewDGRound2Message2(
+		round.OldParties().IDs().Exclude(round.PartyID()), round.PartyID())
+	round.temp.dgRound2Message2s[i] = r2msg1
+	round.out <- r2msg1
+
 	// 1.
 	// generate Paillier public key E_i, private key and proof
 	// generate safe primes for ZKPs later on
 	// compute ntilde, h1, h2 (uses safe primes)
 	// use the pre-params if they were provided to the LocalParty constructor
 	var preParams *keygen.LocalPreParams
-	if round.save.LocalPreParams.Validate() && !round.save.LocalPreParams.ValidateWithProof() {
-		return round.WrapError(
-			errors.New("`optionalPreParams` failed to validate; it might have been generated with an older version of tss-lib"))
-	} else if round.save.LocalPreParams.ValidateWithProof() {
+	if round.save.LocalPreParams.Validate() {
 		preParams = &round.save.LocalPreParams
 	} else {
 		var err error
@@ -51,56 +50,19 @@ func (round *round2) Start() *tss.Error {
 			return round.WrapError(errors.New("pre-params generation failed"), Pi)
 		}
 	}
-
-	// 11. "broadcast" "ACK" members of the OLD committee
-	r2msg2 := NewDGRound2Message2(
-		round.OldParties().IDs().Exclude(round.PartyID()), round.PartyID(), &preParams.AuthEcdsaPrivateKey.PublicKey)
-	round.temp.dgRound2Message2s[i] = r2msg2
-	round.out <- r2msg2
-
 	round.save.LocalPreParams = *preParams
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
 
-	// Sign the Paillier PK
-	r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(preParams.AuthEcdsaPrivateKey),
-		ecdsautils.HashPaillierKey(&preParams.PaillierSK.PublicKey))
-	if err != nil {
-		return round.WrapError(errors.New("ecdsa signature for authentication failed"), Pi)
-	}
-	authPaillierSignaturei := ecdsautils.NewECDSASignature(r, s)
-
-	// generate the dlnproofs for resharing
-	h1i, h2i, alpha, beta, p, q, NTildei :=
-		preParams.H1i,
-		preParams.H2i,
-		preParams.Alpha,
-		preParams.Beta,
-		preParams.P,
-		preParams.Q,
-		preParams.NTildei
-
-	randIntProofNSquareFreei, proofNSquareFree := ecdsautils.ProofNSquareFree(NTildei, p, q)
-
-	dlnProof1 := dlnp.NewProof(h1i, h2i, alpha, p, q, NTildei)
-	dlnProof2 := dlnp.NewProof(h2i, h1i, beta, p, q, NTildei)
-
 	paillierPf := preParams.PaillierSK.Proof(Pi.KeyInt(), round.save.ECDSAPub)
-	r2msg1, err := NewDGRound2Message1(
+	r2msg2 := NewDGRound2Message1(
 		round.NewParties().IDs().Exclude(round.PartyID()), round.PartyID(),
-		&preParams.PaillierSK.PublicKey,
-		&preParams.AuthEcdsaPrivateKey.PublicKey,
-		authPaillierSignaturei,
-		paillierPf, preParams.NTildei, preParams.H1i, preParams.H2i, proofNSquareFree, randIntProofNSquareFreei, dlnProof1, dlnProof2)
-	if err != nil {
-		return round.WrapError(err, Pi)
-	}
-	round.temp.dgRound2Message1s[i] = r2msg1
-	round.out <- r2msg1
+		&preParams.PaillierSK.PublicKey, paillierPf, preParams.NTildei, preParams.H1i, preParams.H2i)
+	round.temp.dgRound2Message1s[i] = r2msg2
+	round.out <- r2msg2
 
 	// for this P: SAVE de-commitments, paillier keys for round 2
 	round.save.PaillierSK = preParams.PaillierSK
-	round.save.AuthEcdsaPrivateKey = preParams.AuthEcdsaPrivateKey
 	round.save.PaillierPKs[i] = &preParams.PaillierSK.PublicKey
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
@@ -125,16 +87,16 @@ func (round *round2) CanAccept(msg tss.ParsedMessage) bool {
 func (round *round2) Update() (bool, *tss.Error) {
 	if round.ReSharingParams().IsOldCommittee() && round.ReSharingParameters.IsNewCommittee() {
 		// accept messages from new -> old committee
-		for j, msg2 := range round.temp.dgRound2Message2s {
+		for j, msg1 := range round.temp.dgRound2Message2s {
 			if round.newOK[j] {
 				continue
 			}
-			if msg2 == nil || !round.CanAccept(msg2) {
+			if msg1 == nil || !round.CanAccept(msg1) {
 				return false, nil
 			}
 			// accept message from new -> committee
-			msg1 := round.temp.dgRound2Message1s[j]
-			if msg1 == nil || !round.CanAccept(msg1) {
+			msg2 := round.temp.dgRound2Message1s[j]
+			if msg2 == nil || !round.CanAccept(msg2) {
 				return false, nil
 			}
 			round.newOK[j] = true

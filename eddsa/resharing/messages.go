@@ -7,6 +7,7 @@
 package resharing
 
 import (
+	"crypto/elliptic"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -25,7 +26,6 @@ var (
 		(*DGRound2Message)(nil),
 		(*DGRound3Message1)(nil),
 		(*DGRound3Message2)(nil),
-		(*DGRound4Message)(nil),
 	}
 )
 
@@ -44,7 +44,8 @@ func NewDGRound1Message(
 		IsToOldCommittee: false,
 	}
 	content := &DGRound1Message{
-		EddsaPub:    eddsaPub.ToProtobufPoint(),
+		EddsaPubX:   eddsaPub.X().Bytes(),
+		EddsaPubY:   eddsaPub.Y().Bytes(),
 		VCommitment: vct.Bytes(),
 	}
 	msg := tss.NewMessageWrapper(meta, content)
@@ -53,13 +54,16 @@ func NewDGRound1Message(
 
 func (m *DGRound1Message) ValidateBasic() bool {
 	return m != nil &&
-		m.GetEddsaPub() != nil &&
-		m.GetEddsaPub().ValidateBasic() &&
+		common.NonEmptyBytes(m.EddsaPubX) &&
+		common.NonEmptyBytes(m.EddsaPubY) &&
 		common.NonEmptyBytes(m.VCommitment)
 }
 
-func (m *DGRound1Message) UnmarshalEDDSAPub() (*crypto.ECPoint, error) {
-	return crypto.NewECPointFromProtobuf(m.GetEddsaPub())
+func (m *DGRound1Message) UnmarshalEDDSAPub(ec elliptic.Curve) (*crypto.ECPoint, error) {
+	return crypto.NewECPoint(
+		ec,
+		new(big.Int).SetBytes(m.EddsaPubX),
+		new(big.Int).SetBytes(m.EddsaPubY))
 }
 
 func (m *DGRound1Message) UnmarshalVCommitment() *big.Int {

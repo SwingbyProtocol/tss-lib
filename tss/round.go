@@ -6,12 +6,6 @@
 
 package tss
 
-import (
-	"sync"
-
-	"github.com/Workiva/go-datastructures/queue"
-)
-
 type Round interface {
 	Params() *Parameters
 	Start() *Error
@@ -22,19 +16,4 @@ type Round interface {
 	NextRound() Round
 	WaitingFor() []*PartyID
 	WrapError(err error, culprits ...*PartyID) *Error
-}
-
-type QueueFunction struct {
-	Queue                     *queue.Queue
-	Messages                  *[]ParsedMessage
-	MessageProcessingFunction func(PreprocessingRound, *ParsedMessage, *PartyID, *GenericParameters, *sync.RWMutex) (*GenericParameters, *Error)
-	Parallel                  bool
-}
-
-type PreprocessingRound interface {
-	Round
-	Preprocess() (*GenericParameters, *Error)
-	Postprocess(*GenericParameters) *Error
-	InboundQueuesToConsume() []QueueFunction
-	CanProcess(msg ParsedMessage) bool
 }

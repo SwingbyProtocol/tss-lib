@@ -4,7 +4,7 @@
 // terms governing use, modification, and redistribution, is contained in the
 // file LICENSE at the root of the source code distribution tree.
 
-package mta
+package zkpenc
 
 import (
 	"math/big"
@@ -24,22 +24,23 @@ const (
 	testSafePrimeBits = 1024
 )
 
-func TestProveRangeAlice(t *testing.T) {
-	q := tss.EC().Params().N
+func TestEnc(test *testing.T) {
+	ec := tss.EC()
+	q := ec.Params().N
 
-	sk, pk, err := paillier.GenerateKeyPair(testPaillierKeyLength, 10*time.Minute)
-	assert.NoError(t, err)
+	sk, pk, err := paillier.GenerateKeyPair(testSafePrimeBits*2, time.Minute*10)
+	assert.NoError(test, err)
 
-	m := common.GetRandomPositiveInt(q)
-	c, r, err := sk.EncryptAndReturnRandomness(m)
-	assert.NoError(t, err)
+	k := common.GetRandomPositiveInt(q)
+	K, rho, err := sk.EncryptAndReturnRandomness(k)
+	assert.NoError(test, err)
 
 	primes := [2]*big.Int{common.GetRandomPrimeInt(testSafePrimeBits), common.GetRandomPrimeInt(testSafePrimeBits)}
-	NTildei, h1i, h2i, err := crypto.GenerateNTildei(primes)
-	assert.NoError(t, err)
-	proof, err := ProveRangeAlice(pk, c, NTildei, h1i, h2i, m, r)
-	assert.NoError(t, err)
+	NCap, s, t, err := crypto.GenerateNTildei(primes)
+	assert.NoError(test, err)
+	proof, err := NewProof(ec, pk, K, NCap, s, t, k, rho)
+	assert.NoError(test, err)
 
-	ok := proof.Verify(pk, NTildei, h1i, h2i, c)
-	assert.True(t, ok, "proof must verify")
+	ok := proof.Verify(ec, pk, NCap, s, t, K)
+	assert.True(test, ok, "proof must verify")
 }

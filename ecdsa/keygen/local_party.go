@@ -12,9 +12,14 @@ import (
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
-	cmt "github.com/binance-chain/tss-lib/crypto/commitments"
+	"github.com/binance-chain/tss-lib/crypto"
+	zkpfac "github.com/binance-chain/tss-lib/crypto/zkp/fac"
+
+	// cmt "github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/crypto/vss"
-	"github.com/binance-chain/tss-lib/ecdsa"
+	zkpmod "github.com/binance-chain/tss-lib/crypto/zkp/mod"
+	zkpprm "github.com/binance-chain/tss-lib/crypto/zkp/prm"
+	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -36,23 +41,29 @@ type (
 		end chan<- LocalPartySaveData
 	}
 
-	localMessageStore struct {
-		kgRound1Messages,
-		kgRound2Message1s,
-		kgRound2Message2s,
-		kgRound3Messages []tss.ParsedMessage
-	}
-
 	localTempData struct {
-		localMessageStore
-
 		// temp data (thrown away after keygen)
-		ui            *big.Int // used for tests
-		KGCs          []cmt.HashCommitment
-		vs            vss.Vs
-		shares        vss.Shares
-		deCommitPolyG cmt.HashDeCommitment
-		abortTriggers []ecdsautils.AbortTrigger
+		ui     *big.Int // used for tests
+		ridi   *big.Int // used for tests
+		rid    *big.Int
+		shares vss.Shares
+		vs     vss.Vs
+		Ai     *crypto.ECPoint
+		Xi     *crypto.ECPoint
+		τ      *big.Int
+		𝜓i     *zkpprm.ProofPrm
+
+		r1msgVHashs []*big.Int
+		r2msgVss    [][]*crypto.ECPoint
+		r2msgAj     []*crypto.ECPoint
+		r2msgXj     []*crypto.ECPoint
+		r2msgRidj   []*big.Int
+		r2msg𝜓j     []*zkpprm.ProofPrm
+		r3msgxij    []*big.Int
+		r3msgpfmod  []*zkpmod.ProofMod
+		r3msgpffac  []*zkpfac.ProofFac
+		r3msgpfsch  []*zkpsch.ProofSch
+		r4msgpf     []*zkpsch.ProofSch
 	}
 )
 
@@ -70,8 +81,8 @@ func NewLocalParty(
 		if 1 < len(optionalPreParams) {
 			panic(errors.New("keygen.NewLocalParty expected 0 or 1 item in `optionalPreParams`"))
 		}
-		if !optionalPreParams[0].ValidateWithProof() {
-			panic(errors.New("`optionalPreParams` failed to validate; it might have been generated with an older version of tss-lib"))
+		if !optionalPreParams[0].Validate() {
+			panic(errors.New("keygen.NewLocalParty: `optionalPreParams` failed to validate"))
 		}
 		data.LocalPreParams = optionalPreParams[0]
 	}
@@ -83,13 +94,18 @@ func NewLocalParty(
 		out:       out,
 		end:       end,
 	}
-	// msgs init
-	p.temp.kgRound1Messages = make([]tss.ParsedMessage, partyCount)
-	p.temp.kgRound2Message1s = make([]tss.ParsedMessage, partyCount)
-	p.temp.kgRound2Message2s = make([]tss.ParsedMessage, partyCount)
-	p.temp.kgRound3Messages = make([]tss.ParsedMessage, partyCount)
-	// temp data init
-	p.temp.KGCs = make([]cmt.HashCommitment, partyCount)
+	// msgs data init
+	p.temp.r1msgVHashs = make([]*big.Int, partyCount)
+	p.temp.r2msgVss = make([][]*crypto.ECPoint, partyCount)
+	p.temp.r2msgAj = make([]*crypto.ECPoint, partyCount)
+	p.temp.r2msgXj = make([]*crypto.ECPoint, partyCount)
+	p.temp.r2msgRidj = make([]*big.Int, partyCount)
+	p.temp.r2msg𝜓j = make([]*zkpprm.ProofPrm, partyCount)
+	p.temp.r3msgxij = make([]*big.Int, partyCount)
+	p.temp.r3msgpfmod = make([]*zkpmod.ProofMod, partyCount)
+	p.temp.r3msgpffac = make([]*zkpfac.ProofFac, partyCount)
+	p.temp.r3msgpfsch = make([]*zkpsch.ProofSch, partyCount)
+	p.temp.r4msgpf = make([]*zkpsch.ProofSch, partyCount)
 	return p
 }
 
@@ -136,17 +152,69 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
 	switch msg.Content().(type) {
 	case *KGRound1Message:
-		p.temp.kgRound1Messages[fromPIdx] = msg
-	case *KGRound2Message1:
-		p.temp.kgRound2Message1s[fromPIdx] = msg
-	case *KGRound2Message2:
-		p.temp.kgRound2Message2s[fromPIdx] = msg
+		//p.temp.kgRound1Messages[fromPIdx] = msg // TODO remove
+		r1msg := msg.Content().(*KGRound1Message)
+		p.temp.r1msgVHashs[fromPIdx] = r1msg.UnmarshalVHash()
+	case *KGRound2Message:
+		//p.temp.kgRound2Messages[fromPIdx] = msg
+		r2msg := msg.Content().(*KGRound2Message)
+		p.data.PaillierPKs[fromPIdx] = r2msg.UnmarshalPaillierPK() // used in round 4
+		p.data.NTildej[fromPIdx] = r2msg.UnmarshalNTilde()
+		p.data.H1j[fromPIdx], p.data.H2j[fromPIdx] = r2msg.UnmarshalH1(), r2msg.UnmarshalH2()
+		var err error
+		p.temp.r2msgVss[fromPIdx], err = r2msg.UnmarshalVs(p.params.EC())
+		p.temp.r2msgAj[fromPIdx], err = r2msg.UnmarshalAi(p.params.EC())
+		p.temp.r2msgXj[fromPIdx], err = r2msg.UnmarshalXi(p.params.EC())
+		if err != nil {
+			return false, p.WrapError(err)
+		}
+		p.temp.r2msgRidj[fromPIdx] = r2msg.UnmarshalRidi()
+		p.temp.r2msg𝜓j[fromPIdx], err = r2msg.UnmarshalProofPrm()
+		if err != nil {
+			return false, p.WrapError(err)
+		}
 	case *KGRound3Message:
-		p.temp.kgRound3Messages[fromPIdx] = msg
-	case *KGRound3MessageAbortMode:
-		p.temp.kgRound3Messages[fromPIdx] = msg
+		//p.temp.kgRound3Messages[fromPIdx] = msg
+		r3msg := msg.Content().(*KGRound3Message)
+		xij, err := p.data.PaillierSK.Decrypt(r3msg.UnmarshalShare())
+		if err != nil {
+			return false, p.WrapError(err, p.params.Parties().IDs()[fromPIdx])
+		}
+		p.temp.r3msgxij[fromPIdx] = xij
+		proofMod, err := r3msg.UnmarshalProofMod()
+		if err != nil {
+			return false, p.WrapError(err, p.params.Parties().IDs()[fromPIdx])
+		}
+		p.temp.r3msgpfmod[fromPIdx] = proofMod
+		// if ok := proofMod.Verify(p.data.NTildej[fromPIdx]); !ok {
+		// 	return false, p.WrapError(errors.New("proofMod verify failed"), p.params.Parties().IDs()[fromPIdx])
+		// }
+
+		proofFac, err := r3msg.UnmarshalProofFac()
+		if err != nil {
+			return false, p.WrapError(err, p.params.Parties().IDs()[fromPIdx])
+		}
+		// if ok := proofPrm.Verify(p.data.H1j[fromPIdx], p.data.H2j[fromPIdx], p.data.NTildej[fromPIdx]); !ok {
+		// 	return false, p.WrapError(errors.New("proofPrm verify failed"), p.params.Parties().IDs()[fromPIdx])
+		// }
+		p.temp.r3msgpffac[fromPIdx] = proofFac
+
+		proofSch, err := r3msg.UnmarshalProofSch(p.params.EC())
+		if err != nil {
+			return false, p.WrapError(err, p.params.Parties().IDs()[fromPIdx])
+		}
+		p.temp.r3msgpfsch[fromPIdx] = proofSch
+	case *KGRound4Message:
+		//p.temp.kgRound4Messages[fromPIdx] = msg
+		r4msg := msg.Content().(*KGRound4Message)
+		proof, err := r4msg.UnmarshalProof(p.params.EC())
+		if err != nil {
+			return false, p.WrapError(err, p.params.Parties().IDs()[fromPIdx])
+		}
+		p.temp.r4msgpf[fromPIdx] = proof
+
 	default: // unrecognised message, just ignore!
-		common.Logger.Warnf("unrecognised message ignored: %v", msg)
+		common.Logger.Warningf("unrecognised message ignored: %v", msg)
 		return false, nil
 	}
 	return true, nil

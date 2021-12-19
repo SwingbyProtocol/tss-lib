@@ -11,25 +11,31 @@ import (
 	"fmt"
 	"math/big"
 	"runtime"
-	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/binance-chain/tss-lib/crypto"
+	"github.com/binance-chain/tss-lib/crypto/paillier"
+	zkpdec "github.com/binance-chain/tss-lib/crypto/zkp/dec"
+	zkplogstar "github.com/binance-chain/tss-lib/crypto/zkp/logstar"
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/binance-chain/tss-lib/common"
-	"github.com/binance-chain/tss-lib/crypto"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
 const (
-	testParticipants = test.TestParticipants
-	testThreshold    = test.TestThreshold
+	testParticipants            = test.TestParticipants
+	testThreshold               = test.TestThreshold
+	culpritPartySimulatingAbort = 2
+	victimPartySimulatingAbort  = 1
 )
 
 func setUp(level string) {
@@ -40,12 +46,12 @@ func setUp(level string) {
 
 func initTheParties(signPIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, threshold int,
 	keys []keygen.LocalPartySaveData, keyDerivationDelta *big.Int, outCh chan tss.Message,
-	endCh chan *SignatureData, parties []*LocalParty,
+	endCh chan common.SignatureData, parties []*LocalParty,
 	errCh chan *tss.Error) (*big.Int, []*LocalParty, chan *tss.Error) {
 	// init the parties
 	msg := common.GetRandomPrimeInt(256)
 	for i := 0; i < len(signPIDs); i++ {
-		params := tss.NewParameters(p2pCtx, signPIDs[i], len(signPIDs), threshold)
+		params := tss.NewParameters(tss.EC(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 
 		P := NewLocalParty(msg, params, keys[i], keyDerivationDelta, outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
@@ -59,7 +65,7 @@ func initTheParties(signPIDs tss.SortedPartyIDs, p2pCtx *tss.PeerContext, thresh
 }
 
 func TestE2EConcurrent(t *testing.T) {
-	setUp("debug")
+	setUp("info")
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
@@ -75,11 +81,24 @@ func TestE2EConcurrent(t *testing.T) {
 
 	errCh := make(chan *tss.Error, len(signPIDs))
 	outCh := make(chan tss.Message, len(signPIDs))
-	endCh := make(chan *SignatureData, len(signPIDs))
+	endCh := make(chan common.SignatureData, len(signPIDs))
+	dumpCh := make(chan tss.Message, len(signPIDs))
 
-	updater := test.SharedPartyUpdaterWithQueues
+	updater := test.SharedPartyUpdater
 
-	msg, parties, errCh := initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
+	// init the parties
+	for i := 0; i < len(signPIDs); i++ {
+		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+
+		keyDerivationDelta := big.NewInt(0)
+		P := NewLocalParty(big.NewInt(42), params, keys[i], keyDerivationDelta, outCh, endCh).(*LocalParty)
+		parties = append(parties, P)
+		go func(P *LocalParty) {
+			if err := P.Start(); err != nil {
+				errCh <- err
+			}
+		}(P)
+	}
 
 	var ended int32
 signing:
@@ -107,24 +126,26 @@ signing:
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
-		case data := <-endCh:
+		case dtemp := <-dumpCh:
+			fmt.Println("got from dump")
+			fmt.Println(dtemp)
+			// P = ...... with dtemp
+			// P.start
+
+		case <-endCh:
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
-				t.Logf("Done. Received signature data from %d participants %+v", ended, data)
+				t.Logf("Done. Received signature data from %d participants", ended)
+				R := parties[0].temp.BigR
+				r := parties[0].temp.Rx
+				fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
 
-				// bigR is stored as bytes for the OneRoundData protobuf struct
-				bigRX, bigRY := new(big.Int).SetBytes(parties[0].temp.BigR.GetX()), new(big.Int).SetBytes(parties[0].temp.BigR.GetY())
-				bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
-
-				r := parties[0].temp.rI.X()
-				fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
-
-				modN := common.ModInt(tss.EC().Params().N)
+				modN := common.ModInt(tss.S256().Params().N)
 
 				// BEGIN check s correctness
 				sumS := big.NewInt(0)
 				for _, p := range parties {
-					sumS = modN.Add(sumS, p.temp.sI)
+					sumS = modN.Add(sumS, p.temp.SigmaShare)
 				}
 				fmt.Printf("S: %s\n", sumS.String())
 				// END check s correctness
@@ -136,96 +157,19 @@ signing:
 					X:     pkX,
 					Y:     pkY,
 				}
-				ok := ecdsa.Verify(&pk, msg.Bytes(), bigR.X(), sumS)
+				ok := ecdsa.Verify(&pk, big.NewInt(42).Bytes(), R.X(), sumS)
 				assert.True(t, ok, "ecdsa verify must pass")
-
-				btcecSig := &btcec.Signature{R: r, S: sumS}
-				btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(&pk))
-				assert.True(t, ok, "ecdsa verify 2 must pass")
-
 				t.Log("ECDSA signing test done.")
 				// END ECDSA verify
 
 				break signing
 			}
-
 		}
 	}
 }
 
-// Test a type 7 abort. Change the zk-proof in SignRound6Message to force a consistency check failure
-// in round 7 with y != bigSJ products.
-func type7IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
-	// do not send a message from this party back to itself
-	if party.PartyID() == msg.GetFrom() {
-		return
-	}
-	bz, _, err := msg.WireBytes()
-	if err != nil {
-		errCh <- party.WrapError(err)
-		return
-	}
-	pMsg, err := tss.ParseWireMessage(bz, msg.GetFrom(), msg.IsBroadcast())
-	if err != nil {
-		errCh <- party.WrapError(err)
-		return
-	}
-
-	// Intercepting a round 6 broadcast message to inject a bad zk-proof and trigger a type 7 abort
-	if msg.Type() == "SignRound6Message" && msg.IsBroadcast() {
-		r6msg, meta, ok := sabotageRound6Message(party, &msg, errCh)
-		if !ok {
-			return
-		}
-		// repackaging the round 6 message
-		pMsg = tss.NewMessage(meta, r6msg, tss.NewMessageWrapper(meta, r6msg))
-	}
-	qParty := party.(tss.QueuingParty)
-	if _, errUpdate := qParty.ValidateAndStoreInQueues(pMsg); errUpdate != nil {
-		if errUpdate.Culprits() != nil && len(errUpdate.Culprits()) > 0 {
-			errCh <- errUpdate
-		}
-	}
-}
-
-// Create a fake zk-proof and change the round 6 message
-func sabotageRound6Message(toParty tss.Party, msg *tss.Message, errCh chan<- *tss.Error) (*SignRound6Message, tss.MessageRouting, bool) {
-	fakeh, _ := crypto.ECBasePoint2(tss.EC())
-	fakesigmaI := new(big.Int).SetInt64(1)
-	fakelI := new(big.Int).SetInt64(1)
-	fakeTI, err1 := crypto.ScalarBaseMult(tss.EC(), fakesigmaI).Add(fakeh.ScalarMult(fakesigmaI))
-	if err1 != nil {
-		common.Logger.Error("internal test error assembling fake TI for round 6 message")
-		errCh <- toParty.WrapError(err1)
-		return nil, tss.MessageRouting{}, false
-	}
-	round5 := (toParty.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
-	toParty.Lock()
-	r3msg := round5.temp.signRound3Messages[(*msg).GetFrom().Index].Content().(*SignRound3Message)
-	r3msg.TI = fakeTI.ToProtobufPoint()
-	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
-	fakebigSI := bigR.ScalarMult(fakesigmaI)
-	stPf, err2 := zkp.NewSTProof(fakeTI, bigR, fakeh, fakesigmaI, fakelI)
-	if err2 != nil {
-		common.Logger.Error("internal test error creating a new fake proof")
-		errCh <- toParty.WrapError(err2)
-		return nil, tss.MessageRouting{}, false
-	}
-
-	parsedR6msg := NewSignRound6MessageSuccess((*msg).GetFrom(), fakebigSI, stPf)
-	toParty.Unlock()
-	r6msg := parsedR6msg.Content().(*SignRound6Message)
-	meta := tss.MessageRouting{
-		From:        (*msg).GetFrom(),
-		To:          (*msg).GetTo(),
-		IsBroadcast: true,
-	}
-	return r6msg, meta, true
-}
-
-// Test a type 7 abort. Use a custom updater to change one round 6 message.
-func TestType7Abort(t *testing.T) {
-	setUp("debug")
+func TestE2EWithHDKeyDerivation(t *testing.T) {
+	setUp("info")
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
@@ -234,6 +178,19 @@ func TestType7Abort(t *testing.T) {
 	assert.Equal(t, testThreshold+1, len(keys))
 	assert.Equal(t, testThreshold+1, len(signPIDs))
 
+	chainCode := make([]byte, 32)
+	max32b := new(big.Int).Lsh(new(big.Int).SetUint64(1), 256)
+	max32b = new(big.Int).Sub(max32b, new(big.Int).SetUint64(1))
+	common.GetRandomPositiveInt(max32b).FillBytes(chainCode)
+
+	il, extendedChildPk, errorDerivation := derivingPubkeyFromPath(keys[0].ECDSAPub, chainCode, []uint32{12, 209, 3}, btcec.S256())
+	assert.NoErrorf(t, errorDerivation, "there should not be an error deriving the child public key")
+
+	keyDerivationDelta := il
+
+	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, &extendedChildPk.PublicKey, btcec.S256())
+	assert.NoErrorf(t, err, "there should not be an error setting the derived keys")
+
 	// PHASE: signing
 	// use a shuffled selection of the list of parties for this test
 	p2pCtx := tss.NewPeerContext(signPIDs)
@@ -241,22 +198,31 @@ func TestType7Abort(t *testing.T) {
 
 	errCh := make(chan *tss.Error, len(signPIDs))
 	outCh := make(chan tss.Message, len(signPIDs))
-	endCh := make(chan *SignatureData, len(signPIDs))
+	endCh := make(chan common.SignatureData, len(signPIDs))
+	// dumpCh := make(chan tss.Message, len(signPIDs))
 
-	updater := type7IdentifiedAbortUpdater
+	updater := test.SharedPartyUpdater
 
-	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
+	// init the parties
+	for i := 0; i < len(signPIDs); i++ {
+		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 
+		P := NewLocalParty(big.NewInt(42), params, keys[i], keyDerivationDelta, outCh, endCh).(*LocalParty)
+		parties = append(parties, P)
+		go func(P *LocalParty) {
+			if err := P.Start(); err != nil {
+				errCh <- err
+			}
+		}(P)
+	}
+
+	var ended int32
 signing:
 	for {
-		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
 		select {
 		case err := <-errCh:
-			assert.NotNil(t, err, "an error should have been produced")
-			assert.NotNil(t, err.Culprits(), "culprits should have been identified")
-			assert.Greater(t, len(err.Culprits()), 0, "there should have been at least one culprit")
-			assert.Regexp(t, ".*round 7 consistency check failed: y != bigSJ products, Type 7 identified abort.*", err.Error(),
-				"the error should have had a Type 7 identified abort message")
+			common.Logger.Errorf("Error: %s", err)
+			assert.FailNow(t, err.Error())
 			break signing
 
 		case msg := <-outCh:
@@ -275,146 +241,45 @@ signing:
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
-		case data := <-endCh:
-			assert.FailNow(t, "the end channel should not have returned data %v", data)
-		}
-	}
-}
+		case <-endCh:
+			atomic.AddInt32(&ended, 1)
+			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
+				t.Logf("Done. Received signature data from %d participants", ended)
+				R := parties[0].temp.BigR
+				r := parties[0].temp.Rx
+				fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
 
-const (
-	type4failureFromParty = 0
-)
+				modN := common.ModInt(tss.S256().Params().N)
 
-// Test a type 4 abort
-func type4IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
-	// do not send a message from this party back to itself
-	if party.PartyID() == msg.GetFrom() {
-		return
-	}
-	bz, _, err := msg.WireBytes()
-	if err != nil {
-		errCh <- party.WrapError(err)
-		return
-	}
-	pMsg, err := tss.ParseWireMessage(bz, msg.GetFrom(), msg.IsBroadcast())
-	if err != nil {
-		errCh <- party.WrapError(err)
-		return
-	}
-
-	// Intercepting a round 5 broadcast message to inject a bad k_i and trigger a type 4 abort
-	if msg.Type() == "SignRound5Message" && msg.IsBroadcast() && msg.GetFrom().Index == type4failureFromParty {
-		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
-		party.Lock()
-		r5msg, meta, ok := taintRound5Message(party, msg, pMsg)
-		party.Unlock()
-		if !ok {
-			return
-		}
-		// repackaging the round 5 message
-		pMsg = tss.NewMessage(meta, r5msg, tss.NewMessageWrapper(meta, r5msg))
-	}
-	qParty := party.(tss.QueuingParty)
-	if _, errUpdate := qParty.ValidateAndStoreInQueues(pMsg); errUpdate != nil {
-		errCh <- errUpdate
-	}
-}
-
-// taint a round 5 message setting a bad k_i
-func taintRound5Message(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage) (*SignRound5Message, tss.MessageRouting, bool) {
-	r5msg := pMsg.Content().(*SignRound5Message)
-	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
-	savedOriginalProofs := r5msg.GetProofPdlWSlacks()
-	bigR, err := crypto.NewECPointFromProtobuf(round5.temp.BigR)
-	if err != nil {
-		common.Logger.Error(err)
-		return nil, tss.MessageRouting{}, false
-	}
-	fakekI := new(big.Int).SetInt64(1)
-	fakeBigRBarI := bigR.ScalarMult(fakekI)
-	i := party.PartyID().Index
-	pdlWSlackPf, _ := r5msg.UnmarshalPDLwSlackProof(i)
-	savedOriginalProofs[i].ProofPdlWSlack, _ = pdlWSlackPf.Marshal()
-	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, nil)
-	r5msg = round5Message.Content().(*SignRound5Message)
-	r5msg.ProofPdlWSlacks = savedOriginalProofs
-	meta := tss.MessageRouting{
-		From:        msg.GetFrom(),
-		To:          msg.GetTo(),
-		IsBroadcast: true,
-	}
-	return r5msg, meta, true
-}
-
-// Test a type 4 abort. Use a custom updater to change one round 5 message.
-func TestType4IdentifiedAbort(t *testing.T) {
-	setUp("debug")
-	threshold := testThreshold
-
-	// PHASE: load keygen fixtures
-	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
-	assert.NoError(t, err, "should load keygen fixtures")
-	assert.Equal(t, testThreshold+1, len(keys))
-	assert.Equal(t, testThreshold+1, len(signPIDs))
-
-	// PHASE: signing
-	// use a shuffled selection of the list of parties for this test
-	p2pCtx := tss.NewPeerContext(signPIDs)
-	parties := make([]*LocalParty, 0, len(signPIDs))
-
-	errCh := make(chan *tss.Error, len(signPIDs))
-	outCh := make(chan tss.Message, len(signPIDs))
-	endCh := make(chan *SignatureData, len(signPIDs))
-
-	updater := type4IdentifiedAbortUpdater
-
-	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
-
-signing:
-	for {
-		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
-		select {
-		case err := <-errCh:
-			assert.NotNil(t, err, "an error should have been triggered")
-			assert.NotNil(t, err.Culprits(), "culprits should have been identified")
-			assert.EqualValues(t, len(err.Culprits()), 1, "there should have been 1 culprit")
-			assert.True(t, err.Culprits()[0].Index == type4failureFromParty,
-				"the culprit should have been player "+strconv.Itoa(type4failureFromParty))
-			assert.Regexp(t, ".*failed to verify ZK proof of consistency between R_i and E_i\\(k_i\\) for P 0", err.Error(),
-				"the error should have contained a proof of consistency failure message")
-
-			break signing
-
-		case msg := <-outCh:
-			dest := msg.GetTo()
-			if dest == nil {
-				for _, P := range parties {
-					if P.PartyID().Index == msg.GetFrom().Index {
-						continue
-					}
-					go updater(P, msg, errCh)
+				// BEGIN check s correctness
+				sumS := big.NewInt(0)
+				for _, p := range parties {
+					sumS = modN.Add(sumS, p.temp.SigmaShare)
 				}
-			} else {
-				if dest[0].Index == msg.GetFrom().Index {
-					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
+				fmt.Printf("S: %s\n", sumS.String())
+				// END check s correctness
+
+				// BEGIN ECDSA verify
+				pkX, pkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
+				pk := ecdsa.PublicKey{
+					Curve: tss.EC(),
+					X:     pkX,
+					Y:     pkY,
 				}
-				go updater(parties[dest[0].Index], msg, errCh)
+				ok := ecdsa.Verify(&pk, big.NewInt(42).Bytes(), R.X(), sumS)
+				assert.True(t, ok, "ecdsa verify must pass")
+				t.Log("ECDSA signing test done.")
+				// END ECDSA verify
+
+				break signing
 			}
-
-		case data := <-endCh:
-			assert.FailNow(t, "the end channel should not have returned data %v", data)
 		}
 	}
 }
 
 //
-
-const (
-	type5failureFromParty = 0
-)
-
-// Test a type 5 abort
-func type5IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
+func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalParty, errCh chan<- *tss.Error,
+	partyMutex *sync.RWMutex) {
 	// do not send a message from this party back to itself
 	if party.PartyID() == msg.GetFrom() {
 		return
@@ -430,76 +295,86 @@ func type5IdentifiedAbortUpdater(party tss.Party, msg tss.Message, errCh chan<- 
 		return
 	}
 
-	// Intercepting a round 5 broadcast message to inject a bad k_i and trigger a type 5 abort
-	if msg.Type() == "SignRound5Message" && msg.IsBroadcast() && msg.GetFrom().Index == type4failureFromParty {
-		common.Logger.Debugf("intercepting and changing message %s from %s", msg.Type(), msg.GetFrom())
-		party.Lock()
-		r5msg, meta, ok := taintRound5MessageWithZKP(party, msg, pMsg)
-		if !ok {
-			return
+	// Intercepting a round 3 message to inject a bad zk-proof and trigger an abort
+	if strings.HasSuffix(msg.Type(), "PreSignRound3Message") && !msg.IsBroadcast() &&
+		msg.GetFrom().Index == culpritPartySimulatingAbort &&
+		len(msg.GetTo()) > 0 && msg.GetTo()[0].Index == victimPartySimulatingAbort {
+		meta := tss.MessageRouting{
+			From:        msg.GetFrom(),
+			To:          msg.GetTo(),
+			IsBroadcast: false,
 		}
-		// repackaging the round 5 message
-		pMsg = tss.NewMessage(meta, r5msg, tss.NewMessageWrapper(meta, r5msg))
-		party.Unlock()
+		i := msg.GetFrom().Index  // culprit
+		j := msg.GetTo()[0].Index // victim
+
+		victimParty := party
+		common.Logger.Debugf("intercepting and changing message %s from %s (culprit) to party: %v (victim)",
+			msg.Type(), msg.GetFrom(), victimParty)
+		ok := false
+		var roundVictim *presign3
+		for {
+			partyMutex.RLock()
+			if roundVictim, ok = victimParty.Round().(*presign3); !ok {
+				partyMutex.RUnlock()
+				time.Sleep(5 * time.Second)
+			} else {
+				partyMutex.RUnlock()
+				break
+			}
+		}
+
+		var otherRoundCulprit *presign3
+		ok = false
+		partyMutex.RLock()
+		if otherRoundCulprit, ok = parties[i].Round().(*presign3); !ok {
+			r4 := parties[i].Round().(*sign4)
+			otherRoundCulprit = r4.presign3
+		}
+		partyMutex.RUnlock()
+		ec := tss.EC()
+		q := ec.Params().N
+		sk, pk := otherRoundCulprit.key.PaillierSK, &otherRoundCulprit.key.PaillierSK.PublicKey
+
+		fakeki := common.GetRandomPositiveInt(q)
+		fakeKi, fake𝜌i, _ := sk.EncryptAndReturnRandomness(fakeki)
+		fakeΔi := roundVictim.temp.Γ.ScalarMult(fakeki)
+		modN := common.ModInt(roundVictim.EC().Params().N)
+		fake𝛿i := modN.Mul(fakeki, roundVictim.temp.𝛾i)
+
+		common.Logger.Debugf(" test - fake proof - i:%v, j: %v, PK: %v, K(C): %v, Γ(g): %v, NTildej(NCap): %v, "+
+			"H1j(s): %v, H2j(t): %v, ki(x): %v, 𝜌i: %v -- fakeΔi:%v",
+			parties[i], parties[j], common.FormatBigInt(pk.N),
+			common.FormatBigInt(fakeKi),
+			crypto.FormatECPoint(roundVictim.temp.Γ),
+			common.FormatBigInt(roundVictim.key.NTildej[j]), common.FormatBigInt(roundVictim.key.H1j[j]), common.FormatBigInt(roundVictim.key.H2j[j]),
+			common.FormatBigInt(fakeki), common.FormatBigInt(fake𝜌i), crypto.FormatECPoint(fakeΔi))
+		proof, errP := zkplogstar.NewProof(ec, pk, fakeKi, fakeΔi, roundVictim.temp.Γ, roundVictim.key.NTildej[j],
+			roundVictim.key.H1j[j], roundVictim.key.H2j[j], fakeki, fake𝜌i)
+		if errP != nil {
+			common.Logger.Errorf("error changing message %s from %s", msg.Type(), msg.GetFrom())
+		}
+
+		verified := proof.Verify(ec, pk, fakeKi, fakeΔi, roundVictim.temp.Γ, roundVictim.key.NTildej[j], roundVictim.key.H1j[j], roundVictim.key.H2j[j])
+		common.Logger.Debugf(" i: %v, j: %v, verified? %v", parties[i], parties[j], verified)
+		r3msg := NewPreSignRound3Message(msg.GetTo()[0], msg.GetFrom(), fake𝛿i, fakeΔi, proof)
+		// repackaging the malicious message
+		pMsg = tss.NewMessage(meta, r3msg.Content(), tss.NewMessageWrapper(meta, r3msg.Content()))
 	}
-	qParty := party.(tss.QueuingParty)
-	if _, errUpdate := qParty.ValidateAndStoreInQueues(pMsg); errUpdate != nil {
+
+	common.Logger.Debugf("updater party:%v, pMsg: %v", party, pMsg)
+	isVictim := partyMutex != nil // && len(msg.GetTo()) > 0 && msg.GetTo()[0] != nil && msg.GetTo()[0].Index == victimPartySimulatingAbort
+	if isVictim {
+		partyMutex.Lock()
+	}
+	if _, errUpdate := party.Update(pMsg); errUpdate != nil {
 		errCh <- errUpdate
 	}
+	if isVictim {
+		partyMutex.Unlock()
+	}
 }
 
-// taint a round 5 message setting bad k_i and ZK proof
-func taintRound5MessageWithZKP(party tss.Party, msg tss.Message, pMsg tss.ParsedMessage) (*SignRound5Message, tss.MessageRouting, bool) {
-	round5 := (party.FirstRound().NextRound().NextRound().NextRound().NextRound()).(*round5)
-
-	r5msg := pMsg.Content().(*SignRound5Message)
-	bigR, _ := crypto.NewECPointFromProtobuf(round5.temp.BigR)
-	i := party.PartyID().Index
-	savedOriginalProofs := r5msg.GetProofPdlWSlacks()
-	fakekI := new(big.Int).SetInt64(1)
-	fakeBigRBarI := bigR.ScalarMult(fakekI)
-
-	paiPK := round5.key.PaillierPKs[type5failureFromParty]
-	cA, rA, err := paiPK.EncryptAndReturnRandomness(fakekI)
-	if err != nil {
-		common.Logger.Error("internal test error")
-	}
-
-	r1msg1 := round5.temp.signRound1Message1s[type5failureFromParty].Content().(*SignRound1Message1)
-	r1msg1.C = cA.Bytes()
-
-	// compute ZK proof of consistency between R_i and E_i(k_i)
-	// ported from: https://git.io/Jf69a
-	pdlWSlackStatement := zkp.PDLwSlackStatement{
-		N:          paiPK.N,
-		CipherText: cA,
-		Q:          fakeBigRBarI,
-		G:          bigR,
-		H1:         round5.key.H1j[i],
-		H2:         round5.key.H2j[i],
-		NTilde:     round5.key.NTildej[i],
-	}
-	pdlWSlackWitness := zkp.PDLwSlackWitness{
-		X: fakekI,
-		R: rA,
-	}
-	pdlWSlackPf := zkp.NewPDLwSlackProof(pdlWSlackWitness, pdlWSlackStatement)
-
-	savedOriginalProofs[i].ProofPdlWSlack, _ = pdlWSlackPf.Marshal()
-	round5Message := NewSignRound5Message(msg.GetFrom(), fakeBigRBarI, nil)
-
-	r5msg2 := round5Message.Content().(*SignRound5Message)
-	r5msg2.ProofPdlWSlacks = savedOriginalProofs
-	meta := tss.MessageRouting{
-		From:        msg.GetFrom(),
-		To:          msg.GetTo(),
-		IsBroadcast: true,
-	}
-	return r5msg2, meta, true
-}
-
-// Test a type 5 abort. Use a custom updater to change one round 5 message.
-func TestType5IdentifiedAbort(t *testing.T) {
+func TestAbortIdentification(t *testing.T) {
 	setUp("debug")
 	threshold := testThreshold
 
@@ -516,25 +391,45 @@ func TestType5IdentifiedAbort(t *testing.T) {
 
 	errCh := make(chan *tss.Error, len(signPIDs))
 	outCh := make(chan tss.Message, len(signPIDs))
-	endCh := make(chan *SignatureData, len(signPIDs))
+	endCh := make(chan common.SignatureData, len(signPIDs))
 
-	updater := type5IdentifiedAbortUpdater
+	updater := identifiedAbortUpdater
 
-	_, parties, errCh = initTheParties(signPIDs, p2pCtx, threshold, keys, big.NewInt(0), outCh, endCh, parties, errCh)
+	// init the parties
+	for i := 0; i < len(signPIDs); i++ {
+		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+
+		keyDerivationDelta := big.NewInt(0)
+		P := NewLocalParty(big.NewInt(42), params, keys[i], keyDerivationDelta, outCh, endCh).(*LocalParty)
+		parties = append(parties, P)
+		go func(P *LocalParty) {
+			if err := P.Start(); err != nil {
+				errCh <- err
+			}
+		}(P)
+	}
+	var partyMutex sync.RWMutex
 
 signing:
 	for {
-		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
 		select {
-		case err := <-errCh:
-			if err.Victim() != nil && err.Victim().Index == type4failureFromParty {
-				// let us not credit our own malicious party
-				continue
+		case errS := <-errCh:
+			ok := true
+			if ok = assert.NotNil(t, errS, "there should have been an error"); !ok {
+				t.FailNow()
 			}
-			assert.NotNil(t, err, "an error should have been triggered")
-			assert.Regexp(t, ".*round 7 consistency check failed: g != R products, Type 5 identified abort.*", err.Error(),
-				"the error should have had a type 5 identified abort failure message")
-
+			if ok = assert.NotNil(t, errS.Culprits(), "here should have been one culprit"); !ok {
+				t.FailNow()
+			}
+			if ok = assert.EqualValues(t, 1, len(errS.Culprits()), "there should have been one culprit"); !ok {
+				t.FailNow()
+			}
+			if ok = assert.NotNil(t, errS.Culprits()[0], "there should have been one culprit"); !ok {
+				t.FailNow()
+			}
+			if ok = assert.EqualValues(t, culpritPartySimulatingAbort, errS.Culprits()[0].Index, "error in test in identification of the malicious party"); !ok {
+				t.FailNow()
+			}
 			break signing
 
 		case msg := <-outCh:
@@ -544,17 +439,197 @@ signing:
 					if P.PartyID().Index == msg.GetFrom().Index {
 						continue
 					}
-					go updater(P, msg, errCh)
+					go updater(P, msg, parties, errCh, &partyMutex)
 				}
 			} else {
 				if dest[0].Index == msg.GetFrom().Index {
 					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
 				}
-				go updater(parties[dest[0].Index], msg, errCh)
+				go updater(parties[dest[0].Index], msg, parties, errCh, &partyMutex)
 			}
 
-		case data := <-endCh:
-			assert.FailNow(t, "the end channel should not have returned data %v", data)
+		case sigData := <-endCh:
+			common.Logger.Debugf("sigData: %v", sigData)
+			assert.FailNow(t, "signing should not succeed in this test")
+			break signing
+		}
+	}
+}
+
+func TestIdAbortSimulateRound7(test *testing.T) {
+	setUp("debug")
+	var err error
+	ec := tss.S256()
+	q := ec.Params().N
+
+	modN := common.ModInt(ec.Params().N)
+	var modMul = func(N, a, b *big.Int) *big.Int {
+		_N := common.ModInt(big.NewInt(0).Set(N))
+		return _N.Mul(a, b)
+	}
+	var modQ3Mul = func(a, b *big.Int) *big.Int {
+		q3 := common.ModInt(new(big.Int).Mul(q, new(big.Int).Mul(q, q)))
+		return q3.Mul(a, b)
+	}
+	var q3Add = func(a, b *big.Int) *big.Int {
+		q3 := new(big.Int).Mul(q, new(big.Int).Mul(q, q))
+		return q3.Add(a, b)
+	}
+	var i, j int
+
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	n := len(signPIDs)
+
+	K := make([]*big.Int, n)
+	k := make([]*big.Int, n)
+	𝜌 := make([]*big.Int, n)
+	𝛾 := make([]*big.Int, n)
+	Γ := make([]*crypto.ECPoint, n)
+	sk := make([]*paillier.PrivateKey, n)
+	pk := make([]*paillier.PublicKey, n)
+	NCap := make([]*big.Int, n)
+	s := make([]*big.Int, n)
+	t := make([]*big.Int, n)
+	D := make([][]*MtAOut, n)
+	𝛽 := make([][]*big.Int, n)
+	𝛽ʹ := make([][]*big.Int, n)
+
+	if err != nil {
+		test.Errorf("error %v", err)
+		test.FailNow()
+	}
+
+	for i = 0; i < len(signPIDs); i++ {
+		sk[i], pk[i] = keys[i].PaillierSK, &keys[i].PaillierSK.PublicKey
+
+		NCap[i], s[i], t[i] = keys[i].NTildei, keys[i].H1i, keys[i].H2i
+		k[i] = common.GetRandomPositiveInt(ec.Params().N)
+		K[i], 𝜌[i], err = sk[i].EncryptAndReturnRandomness(k[i])
+		𝛾[i] = common.GetRandomPositiveInt(q)
+		Γ[i] = crypto.ScalarBaseMult(ec, 𝛾[i])
+
+		D[i] = make([]*MtAOut, n)
+		𝛽[i] = make([]*big.Int, n)
+		𝛽ʹ[i] = make([]*big.Int, n)
+		if err != nil {
+			test.Errorf("error %v", err)
+			test.FailNow()
+		}
+	}
+	for i = 0; i < len(signPIDs); i++ {
+		for j = 0; j < len(signPIDs); j++ {
+			if j == i {
+				continue
+			}
+
+			DeltaMtAij, errMta := NewMtA(ec, K[j], 𝛾[i], Γ[i], pk[j], pk[i], NCap[j], s[j], t[j])
+			if errMta != nil {
+				test.Errorf("error %v", errMta)
+				test.FailNow()
+			}
+			D[j][i] = DeltaMtAij
+			𝛽ʹ[i][j] = DeltaMtAij.BetaNeg
+			𝛽[i][j] = DeltaMtAij.Beta
+		}
+	}
+
+	for i = 0; i < len(signPIDs); i++ {
+		Gi, 𝜈i, _ := sk[i].EncryptAndReturnRandomness(𝛾[i])
+
+		// Fig 7. Output.2
+		Hi, err := pk[i].HomoMult(k[i], Gi)
+		if err != nil {
+			test.Errorf("error %v", err)
+			test.FailNow()
+		}
+
+		DeltaShareEnc := Hi
+		secretProduct := big.NewInt(1).Exp(𝜈i, k[i], pk[i].NSquare())
+		encryptedValueSum := modQ3Mul(k[i], 𝛾[i])
+
+		{
+			proof, _ := zkpdec.NewProof(ec, pk[i], Hi, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i], encryptedValueSum, secretProduct)
+			ok := proof.Verify(ec, pk[i], Hi, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i])
+			assert.True(test, ok, "zkpdec proof must verify")
+		}
+
+		for j = 0; j < len(signPIDs); j++ {
+			if j == i {
+				continue
+			}
+
+			𝜌𝛾s := modMul(pk[i].NSquare(), big.NewInt(1).Exp(𝜌[i], 𝛾[j], pk[i].NSquare()), D[i][j].Sij)
+			𝛾k𝛽ʹ := q3Add(𝛽ʹ[j][i], modQ3Mul(𝛾[j], k[i]))
+
+			common.Logger.Debugf("ut NewMtAHardcoded D(i%v,j:%v): %v, 𝛽ji: %v, 𝛽ʹji: %v, sij:%v, 𝛾k𝛽ʹ:%v, 𝜌𝛾s: %v, 𝛾j:%v", i, j, common.FormatBigInt(D[i][j].Dji),
+				common.FormatBigInt(𝛽[j][i]), common.FormatBigInt(𝛽ʹ[j][i]), common.FormatBigInt(D[i][j].Sij), common.FormatBigInt(𝛾k𝛽ʹ),
+				common.FormatBigInt(𝜌𝛾s), common.FormatBigInt(𝛾[j]))
+			{
+				proofD, err1 := zkpdec.NewProof(ec, pk[i], D[i][j].Dji, modN.Add(zero, 𝛾k𝛽ʹ), NCap[i], s[i], t[i], 𝛾k𝛽ʹ, 𝜌𝛾s)
+				assert.NoError(test, err1)
+				okD := proofD.Verify(ec, pk[i], D[i][j].Dji, modN.Add(zero, 𝛾k𝛽ʹ), NCap[i], s[i], t[i])
+				assert.True(test, okD, "proof must verify")
+			}
+
+			// F
+			var Fji *big.Int
+			Fji, D[i][j].Rij, err = pk[i].EncryptAndReturnRandomness(𝛽[i][j])
+			if err != nil {
+				test.Errorf("error %v", err)
+				test.FailNow()
+			}
+
+			common.Logger.Debugf("ut F(j:%v,i:%v): %v, 𝛽ij: %v, rij:%v", j, i, common.FormatBigInt(Fji),
+				common.FormatBigInt(𝛽[i][j]), common.FormatBigInt(D[i][j].Rij))
+
+			// DF
+			𝜌𝛾sr := modMul(pk[i].NSquare(), 𝜌𝛾s, D[i][j].Rij)
+			𝛾k𝛽ʹ𝛽 := q3Add(𝛾k𝛽ʹ, 𝛽[i][j])
+			DF, err3 := pk[i].HomoAdd(D[i][j].Dji, Fji)
+			if err3 != nil {
+				test.Errorf("error %v", err3)
+				test.FailNow()
+			}
+
+			{
+				common.Logger.Debugf("ut zkpdecNewProof DF(i:%v,j:%v): %v, rij: %v, 𝛾k𝛽ʹ𝛽:%v, 𝛾k𝛽ʹ:%v, 𝛽ij:%v, 𝜌𝛾sr:%v", i, j, common.FormatBigInt(DF),
+					common.FormatBigInt(D[i][j].Rij), common.FormatBigInt(𝛾k𝛽ʹ𝛽),
+					common.FormatBigInt(𝛾k𝛽ʹ), common.FormatBigInt(𝛽[i][j]),
+					common.FormatBigInt(𝜌𝛾sr))
+
+				proof2, err4 := zkpdec.NewProof(ec, pk[i], DF, modN.Add(zero, 𝛾k𝛽ʹ𝛽), NCap[i], s[i], t[i], 𝛾k𝛽ʹ𝛽, 𝜌𝛾sr)
+				if err4 != nil {
+					test.Errorf("error %v", err4)
+					test.FailNow()
+				}
+				ok2 := proof2.Verify(ec, pk[i], DF, modN.Add(zero, 𝛾k𝛽ʹ𝛽), NCap[i], s[i], t[i])
+				if okA := assert.True(test, ok2, "proof must verify"); !okA {
+					test.FailNow()
+				}
+			}
+
+			secretProduct = modMul(pk[i].NSquare(), 𝜌𝛾sr, secretProduct)
+			encryptedValueSum = q3Add(𝛾k𝛽ʹ𝛽, encryptedValueSum)
+
+			DeltaShareEnc, err = pk[i].HomoAdd(DF, DeltaShareEnc)
+			if err != nil {
+				test.Errorf("error %v", err)
+				test.FailNow()
+			}
+
+		}
+		{
+			common.Logger.Debugf("ut zkpdecNewProof i:%v, j:%v, r6msgDeltaShareEnc[i:%v]: %v, encryptedValueSum: %v, secretProduct: %v", i, j, i,
+				common.FormatBigInt(DeltaShareEnc),
+				common.FormatBigInt(encryptedValueSum), common.FormatBigInt(secretProduct))
+
+			proofDeltaShare, err6 := zkpdec.NewProof(ec, pk[i], DeltaShareEnc, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i], encryptedValueSum, secretProduct)
+			if err6 != nil {
+				test.Errorf("error %v", err6)
+				test.FailNow()
+			}
+			ok6 := proofDeltaShare.Verify(ec, pk[i], DeltaShareEnc, modN.Add(zero, encryptedValueSum), NCap[i], s[i], t[i])
+			assert.True(test, ok6, "proof must verify")
 		}
 	}
 }

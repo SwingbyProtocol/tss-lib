@@ -7,20 +7,21 @@
 package keygen
 
 import (
-	"crypto/ecdsa"
 	"errors"
 	"math/big"
-
-	"github.com/hashicorp/go-multierror"
-	errors2 "github.com/pkg/errors"
+	sync "sync"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
-	"github.com/binance-chain/tss-lib/crypto/commitments"
-	"github.com/binance-chain/tss-lib/crypto/vss"
-	"github.com/binance-chain/tss-lib/crypto/zkp"
-	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
+	zkpfac "github.com/binance-chain/tss-lib/crypto/zkp/fac"
+	zkpsch "github.com/binance-chain/tss-lib/crypto/zkp/sch"
 	"github.com/binance-chain/tss-lib/tss"
+
+	zkpmod "github.com/binance-chain/tss-lib/crypto/zkp/mod"
+)
+
+const (
+	paillierModulusLen = 2048
 )
 
 func (round *round3) Start() *tss.Error {
@@ -31,231 +32,132 @@ func (round *round3) Start() *tss.Error {
 	round.started = true
 	round.resetOK()
 
-	Ps := round.Parties().IDs()
-	PIdx := round.PartyID().Index
+	i := round.PartyID().Index
+	Pi := round.Parties().IDs()[i]
+	round.ok[i] = true
 
-	// 2-3.
-	Vc := make(vss.Vs, round.Threshold()+1)
-	for c := range Vc {
-		Vc[c] = round.temp.vs[c] // ours
-	}
-
-	// 4-11.
-	type vssOut struct {
-		unWrappedErr            error
-		pjVs                    vss.Vs
-		feldmanCheckFailureArgs *ecdsautils.FeldmanCheckFailureEvidence
-	}
-	chs := make([]chan vssOut, len(Ps))
-	for i := range chs {
-		if i == PIdx {
+	// Fig 5. Round 3.1 / Fig 6. Round 3.1
+	toCmp := new(big.Int).Lsh(big.NewInt(1), 1024)
+	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*3)
+	rid := round.temp.ridi
+	wg := sync.WaitGroup{}
+	for j, Pj := range round.Parties().IDs() {
+		if j == i {
 			continue
 		}
-		chs[i] = make(chan vssOut)
-	}
-	for j := range Ps {
-		if j == PIdx {
-			continue
-		}
-		// 6-8.
-		go func(j int, ch chan<- vssOut) {
-			// 4-9.
-			KGCj := round.temp.KGCs[j]
-			r2msg2 := round.temp.kgRound2Message2s[j].Content().(*KGRound2Message2)
-			KGDj := r2msg2.UnmarshalDeCommitment()
-			cmtDeCmt := commitments.HashCommitDecommit{C: KGCj, D: KGDj}
-			ok, flatPolyGs := cmtDeCmt.DeCommit()
-			if !ok || flatPolyGs == nil {
-				ch <- vssOut{errors.New("de-commitment verify failed"), nil,
-					nil}
+		rid = new(big.Int).Xor(rid, round.temp.r2msgRidj[j])
+		wg.Add(1)
+		go func(j int, Pj *tss.PartyID) {
+			defer wg.Done()
+
+			if round.save.PaillierPKs[j].N.BitLen() < paillierModulusLen {
+				errChs <- round.WrapError(errors.New("paillier modulus too small"), Pj)
 				return
 			}
-			PjVs, err := crypto.UnFlattenECPoints(tss.EC(), flatPolyGs)
+			if round.save.NTildej[j].Cmp(toCmp) < 0 {
+				errChs <- round.WrapError(errors.New("paillier-blum modulus too small"), Pj)
+				return
+			}
+			𝜓j := round.temp.r2msg𝜓j[j]
+			if verifyOk := 𝜓j.Verify(round.save.H1j[j], round.save.H2j[j], round.save.NTildej[j]); !verifyOk {
+				errChs <- round.WrapError(errors.New("error in prm proof verification"), Pj)
+				return
+			}
+			listToHash, err := crypto.FlattenECPoints(round.temp.r2msgVss[j])
 			if err != nil {
-				ch <- vssOut{err, nil, nil}
+				errChs <- round.WrapError(err, Pj)
 				return
 			}
-			r2msg1 := round.temp.kgRound2Message1s[j].Content().(*KGRound2Message1)
-			PjShare := vss.Share{
-				Threshold: round.Threshold(),
-				ID:        round.PartyID().KeyInt(),
-				Share:     r2msg1.UnmarshalShare(),
-			}
-			authEcdsaSignature := r2msg1.UnmarshalAuthEcdsaSignature()
+			listToHash = append(listToHash, round.save.PaillierPKs[j].N, round.temp.r2msgRidj[j],
+				round.temp.r2msgXj[j].X(), round.temp.r2msgXj[j].Y(),
+				round.temp.r2msgAj[j].X(), round.temp.r2msgAj[j].Y(), round.save.NTildej[j], round.save.H1j[j],
+				round.save.H2j[j])
 
-			authEcdsaSignatureOk := ecdsa.Verify((*ecdsa.PublicKey)(round.save.AuthenticationPKs[j]),
-				ecdsautils.HashShare(&PjShare),
-				authEcdsaSignature.R, authEcdsaSignature.S)
-			if !authEcdsaSignatureOk {
-				ch <- vssOut{errors.New("ecdsa signature of VSS share for authentication failed"),
-					nil, nil}
+			for _, a := range 𝜓j.A {
+				listToHash = append(listToHash, a)
+			}
+			for _, z := range 𝜓j.Z {
+				listToHash = append(listToHash, z)
+			}
+			VjHash := common.SHA512_256i(listToHash...)
+			if VjHash.Cmp(round.temp.r1msgVHashs[j]) != 0 {
+				errChs <- round.WrapError(errors.New("verify hash failed"), Pj)
 				return
 			}
-
-			if ok = PjShare.Verify(round.Threshold(), PjVs) && !round.shouldTriggerAbortInFeldmanCheck(); !ok {
-				// Prepare evidence to be verified during the abort identification
-				evidence := ecdsautils.FeldmanCheckFailureEvidence{
-					Sigmaji: &PjShare,
-					AuthSignaturePkj: ecdsa.PublicKey{
-						Curve: tss.EC(),
-						X:     round.save.AuthenticationPKs[j].X,
-						Y:     round.save.AuthenticationPKs[j].Y},
-					AccusedPartyj:         uint32(j),
-					TheHashCommitDecommit: commitments.HashCommitDecommit{C: KGCj, D: KGDj},
-					AuthEcdsaSignature:    authEcdsaSignature,
-				}
-
-				ch <- vssOut{errors.New("vss verify failed"), nil,
-					&evidence}
-				return
-			}
-			// (9) handled above
-			ch <- vssOut{nil, PjVs, nil}
-		}(j, chs[j])
+		}(j, Pj)
+	}
+	round.temp.rid = rid
+	wg.Wait()
+	close(errChs)
+	culprits := make([]*tss.PartyID, 0)
+	for err := range errChs {
+		culprits = append(culprits, err.Culprits()...)
+	}
+	if len(culprits) > 0 {
+		return round.WrapError(errors.New("round3: failed stage 3.1"), culprits...)
 	}
 
-	// 1,9. calculate xi (deferred for performance)
-	modQ := common.ModInt(tss.EC().Params().N)
-	xi := new(big.Int).Set(round.temp.shares[PIdx].Share)
-	for j := range Ps {
-		if j == PIdx {
+	// Fig 5. Round 3.2 / Fig 6. Round 3.2
+	𝜓i, err := zkpmod.NewProof(round.save.NTildei, common.PrimeToSafePrime(round.save.P), common.PrimeToSafePrime(round.save.Q))
+	if err != nil {
+		return round.WrapError(errors.New("create proofmod failed"))
+	}
+	𝜙ji, err := zkpfac.NewProof(round.EC(), &round.save.PaillierSK.PublicKey, round.save.NTildei,
+		round.save.H1i, round.save.H2i, common.PrimeToSafePrime(round.save.P), common.PrimeToSafePrime(round.save.Q))
+	if err != nil {
+		return round.WrapError(errors.New("create proofPrm failed"))
+	}
+	xi := new(big.Int).Set(round.temp.shares[i].Share)
+	Xi := crypto.ScalarBaseMult(round.EC(), xi)
+	𝜓ij, err := zkpsch.NewProofWithAlpha(Xi, xi, round.temp.τ, rid)
+	if err != nil {
+		return round.WrapError(errors.New("create proofSch failed"))
+	}
+
+	errChs = make(chan *tss.Error, len(round.Parties().IDs())-1)
+	wg = sync.WaitGroup{}
+	for j, Pj := range round.Parties().IDs() {
+		if j == i {
 			continue
 		}
-		r2msg1 := round.temp.kgRound2Message1s[j].Content().(*KGRound2Message1)
-		share := r2msg1.UnmarshalShare()
-		xi = xi.Add(xi, share)
-	}
-	round.save.Xi = modQ.Add(xi, zero)
+		wg.Add(1)
+		go func(j int, Pj *tss.PartyID) {
+			defer wg.Done()
 
-	// consume unbuffered channels (end the goroutines)
-	vssResults := make([]vssOut, len(Ps))
-	{
-		culprits := make([]*tss.PartyID, 0, len(Ps)) // who caused the error(s)
-		feldmanCheckFailures := make([]*ecdsautils.FeldmanCheckFailureEvidence, 0)
-		for j, Pj := range Ps {
-			if j == PIdx {
-				continue
+			Cij, err := round.save.PaillierPKs[j].Encrypt(round.temp.shares[j].Share)
+			if err != nil {
+				errChs <- round.WrapError(errors.New("encrypt error"), Pi)
+				return
 			}
-			vssResults[j] = <-chs[j]
-			// collect culprits to error out with
-			if err := vssResults[j].unWrappedErr; err != nil {
-				culprits = append(culprits, Pj)
-				if vssResults[j].feldmanCheckFailureArgs != nil {
-					feldmanCheckFailures = append(feldmanCheckFailures, vssResults[j].feldmanCheckFailureArgs)
-				}
-			}
-		}
-		if len(feldmanCheckFailures) > 0 {
-			vssShareWithAuthSigMessages := ecdsautils.PrepareShareWithAuthSigMessages(feldmanCheckFailures, round.PartyID())
 
-			// BROADCAST the failed sigma and the authentication signature for the abort identification
-			r3msg := NewKGRound3MessageAbortMode(round.PartyID(), vssShareWithAuthSigMessages)
-			round.temp.kgRound3Messages[PIdx] = r3msg
+			r3msg := NewKGRound3Message(Pj, round.PartyID(), Cij, 𝜓i, 𝜙ji, 𝜓ij)
 			round.out <- r3msg
-			return nil
-		}
-		var multiErr error
-		if len(culprits) > 0 {
-			for _, vssResult := range vssResults {
-				if vssResult.unWrappedErr == nil {
-					continue
-				}
-				multiErr = multierror.Append(multiErr, vssResult.unWrappedErr)
-			}
-			return round.WrapError(multiErr, culprits...)
-		}
+		}(j, Pj)
 	}
-	{
-		var err error
-		culprits := make([]*tss.PartyID, 0, len(Ps)) // who caused the error(s)
-		for j, Pj := range Ps {
-			if j == PIdx {
-				continue
-			}
-			// 10-11.
-			PjVs := vssResults[j].pjVs
-			for c := 0; c <= round.Threshold(); c++ {
-				Vc[c], err = Vc[c].Add(PjVs[c])
-				if err != nil {
-					culprits = append(culprits, Pj)
-				}
-			}
-		}
-		if len(culprits) > 0 {
-			return round.WrapError(errors.New("adding PjVs[c] to Vc[c] resulted in a point not on the curve"), culprits...)
-		}
+	wg.Wait()
+	close(errChs)
+	for err := range errChs {
+		return err
 	}
 
-	// 12-16. compute Xj for each Pj
-	{
-		var err error
-		culprits := make([]*tss.PartyID, 0, len(Ps)) // who caused the error(s)
-		bigXj := round.save.BigXj
-		for j := 0; j < round.PartyCount(); j++ {
-			Pj := round.Parties().IDs()[j]
-			kj := Pj.KeyInt()
-			BigXj := Vc[0]
-			z := new(big.Int).SetInt64(int64(1))
-			for c := 1; c <= round.Threshold(); c++ {
-				z = modQ.Mul(z, kj)
-				BigXj, err = BigXj.Add(Vc[c].ScalarMult(z))
-				if err != nil {
-					culprits = append(culprits, Pj)
-				}
-			}
-			bigXj[j] = BigXj
-		}
-		if len(culprits) > 0 {
-			return round.WrapError(errors.New("adding Vc[c].ScalarMult(z) to BigXj resulted in a point not on the curve"), culprits...)
-		}
-
-		round.save.BigXj = bigXj
-	}
-
-	// 3.1 Phase 3 compute Schnorr's ZK proof of knowledge of xi
-	zkProofxi, err := zkp.NewDLogProof(xi, round.save.BigXj[PIdx])
-	if err != nil {
-		return round.WrapError(errors2.Wrapf(err, "NewDLogProof(xi, Xi)"), Ps[PIdx])
-	}
-
-	// 17. compute and SAVE the ECDSA public key `y`
-	ecdsaPubKey, err := crypto.NewECPoint(tss.EC(), Vc[0].X(), Vc[0].Y())
-	if err != nil {
-		return round.WrapError(errors2.Wrapf(err, "public key is not on the curve"), Ps[PIdx])
-	}
-	round.save.ECDSAPub = ecdsaPubKey
-
-	// PRINT public key & private share
-	common.Logger.Debugf("%s public key: %x", round.PartyID(), ecdsaPubKey)
-
-	// BROADCAST paillier proof for Pi
-	ki := round.PartyID().KeyInt()
-	paillierProof := round.save.PaillierSK.Proof(ki, ecdsaPubKey)
-	r3msg := NewKGRound3Message(round.PartyID(), paillierProof, *zkProofxi)
-	round.temp.kgRound3Messages[PIdx] = r3msg
-	round.out <- r3msg
 	return nil
 }
 
 func (round *round3) CanAccept(msg tss.ParsedMessage) bool {
 	if _, ok := msg.Content().(*KGRound3Message); ok {
-		return msg.IsBroadcast()
-	}
-	if _, ok := msg.Content().(*KGRound3MessageAbortMode); ok {
-		return msg.IsBroadcast()
+		return !msg.IsBroadcast()
 	}
 	return false
 }
 
 func (round *round3) Update() (bool, *tss.Error) {
-	for j, msg := range round.temp.kgRound3Messages {
+	for j, msg := range round.temp.r3msgxij {
 		if round.ok[j] {
 			continue
 		}
-		if msg == nil || !round.CanAccept(msg) {
+		if msg == nil {
 			return false, nil
 		}
-		// proof check is in round 4
 		round.ok[j] = true
 	}
 	return true, nil
@@ -264,8 +166,4 @@ func (round *round3) Update() (bool, *tss.Error) {
 func (round *round3) NextRound() tss.Round {
 	round.started = false
 	return &round4{round}
-}
-
-func (round *round3) shouldTriggerAbortInFeldmanCheck() bool {
-	return round.shouldTriggerAbort(ecdsautils.FeldmanCheckFailure)
 }

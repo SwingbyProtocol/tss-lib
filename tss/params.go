@@ -7,6 +7,7 @@
 package tss
 
 import (
+	"crypto/elliptic"
 	"errors"
 	"time"
 
@@ -15,12 +16,12 @@ import (
 
 type (
 	Parameters struct {
+		ec                      elliptic.Curve
 		partyID                 *PartyID
 		parties                 *PeerContext
 		partyCount              int
 		threshold               int
 		safePrimeGenTimeout     time.Duration
-		queuePollTimeout        time.Duration
 		unsafeKGIgnoreH1H2Dupes bool
 	}
 
@@ -29,51 +30,39 @@ type (
 		newParties    *PeerContext
 		newPartyCount int
 		newThreshold  int
-		old           bool
-	}
-
-	GenericParameters struct {
-		Dictionary       map[string]interface{}
-		DoubleDictionary map[string]map[string]interface{}
 	}
 )
 
 const (
 	defaultSafePrimeGenTimeout = 5 * time.Minute
-	defaultQueuePollTimeout    = 180 * time.Second
 )
 
 // Exported, used in `tss` client
-func NewParameters(ctx *PeerContext, partyID *PartyID, partyCount, threshold int,
-	optionalQueuePollAndSafePrimeGenTimeouts ...time.Duration) *Parameters {
-	var safePrimeGenTimeout, queuePollTimeout time.Duration
+func NewParameters(ec elliptic.Curve, ctx *PeerContext, partyID *PartyID, partyCount, threshold int, optionalSafePrimeGenTimeout ...time.Duration) *Parameters {
+	var safePrimeGenTimeout time.Duration
 	if threshold >= partyCount {
 		panic(errors.New("NewParameters: t<n necessarily with the dishonest majority assumption"))
 	}
-	if 0 < len(optionalQueuePollAndSafePrimeGenTimeouts) {
-		if 1 < len(optionalQueuePollAndSafePrimeGenTimeouts) {
-			if 2 < len(optionalQueuePollAndSafePrimeGenTimeouts) {
-				panic(errors.New("NewParameters: expected 0, 1 or 2 items in `optionalQueuePollAndSafePrimeGenTimeouts`"))
-			} else {
-				queuePollTimeout = optionalQueuePollAndSafePrimeGenTimeouts[0]
-				safePrimeGenTimeout = optionalQueuePollAndSafePrimeGenTimeouts[1]
-			}
-		} else {
-			queuePollTimeout = optionalQueuePollAndSafePrimeGenTimeouts[0]
-			safePrimeGenTimeout = defaultSafePrimeGenTimeout
+	if 0 < len(optionalSafePrimeGenTimeout) {
+		if 1 < len(optionalSafePrimeGenTimeout) {
+			panic(errors.New("GeneratePreParams: expected 0 or 1 item in `optionalSafePrimeGenTimeout`"))
 		}
+		safePrimeGenTimeout = optionalSafePrimeGenTimeout[0]
 	} else {
-		queuePollTimeout = defaultQueuePollTimeout
 		safePrimeGenTimeout = defaultSafePrimeGenTimeout
 	}
 	return &Parameters{
+		ec:                  ec,
 		parties:             ctx,
 		partyID:             partyID,
 		partyCount:          partyCount,
 		threshold:           threshold,
 		safePrimeGenTimeout: safePrimeGenTimeout,
-		queuePollTimeout:    queuePollTimeout,
 	}
+}
+
+func (params *Parameters) EC() elliptic.Curve {
+	return params.ec
 }
 
 func (params *Parameters) Parties() *PeerContext {
@@ -112,14 +101,13 @@ func (params *Parameters) UNSAFE_setKGIgnoreH1H2Dupes(unsafeKGIgnoreH1H2Dupes bo
 // ----- //
 
 // Exported, used in `tss` client
-func NewReSharingParameters(ctx, newCtx *PeerContext, partyID *PartyID, partyCount, threshold, newPartyCount, newThreshold int, old bool) *ReSharingParameters {
-	params := NewParameters(ctx, partyID, partyCount, threshold)
+func NewReSharingParameters(ec elliptic.Curve, ctx, newCtx *PeerContext, partyID *PartyID, partyCount, threshold, newPartyCount, newThreshold int) *ReSharingParameters {
+	params := NewParameters(ec, ctx, partyID, partyCount, threshold)
 	return &ReSharingParameters{
 		Parameters:    params,
 		newParties:    newCtx,
 		newPartyCount: newPartyCount,
 		newThreshold:  newThreshold,
-		old:           old,
 	}
 }
 
@@ -155,7 +143,7 @@ func (rgParams *ReSharingParameters) IsOldCommittee() bool {
 	partyID := rgParams.partyID
 	for _, Pj := range rgParams.parties.IDs() {
 		if partyID.KeyInt().Cmp(Pj.KeyInt()) == 0 {
-			return rgParams.old
+			return true
 		}
 	}
 	return false
@@ -165,7 +153,7 @@ func (rgParams *ReSharingParameters) IsNewCommittee() bool {
 	partyID := rgParams.partyID
 	for _, Pj := range rgParams.newParties.IDs() {
 		if partyID.KeyInt().Cmp(Pj.KeyInt()) == 0 {
-			return !rgParams.old
+			return true
 		}
 	}
 	return false

@@ -7,13 +7,8 @@
 package resharing
 
 import (
-	"crypto/ecdsa"
-	"crypto/rand"
 	"errors"
 
-	"github.com/hashicorp/go-multierror"
-
-	ecdsautils "github.com/binance-chain/tss-lib/ecdsa"
 	"github.com/binance-chain/tss-lib/tss"
 )
 
@@ -33,46 +28,13 @@ func (round *round3) Start() *tss.Error {
 
 	Pi := round.PartyID()
 	i := Pi.Index
-	authSignaturesFailCulprits := make([]*tss.PartyID, len(round.NewParties().IDs()))
-
-	for j, msg := range round.temp.dgRound2Message2s {
-		r2msg2 := msg.Content().(*DGRound2Message2)
-		authEcdsaPKj := r2msg2.UnmarshalAuthEcdsaPK()
-		round.save.AuthenticationPKs[j] = (*ecdsautils.MarshallableEcdsaPublicKey)(authEcdsaPKj)
-	}
 
 	// 2. send share to Pj from the new committee
 	for j, Pj := range round.NewParties().IDs() {
-		r, s, err := ecdsa.Sign(rand.Reader, (*ecdsa.PrivateKey)(round.save.AuthEcdsaPrivateKey),
-			ecdsautils.HashShare(round.temp.NewShares[j]))
-		if err != nil {
-			authSignaturesFailCulprits[j] = Pj
-		}
-		authSignature := ecdsautils.NewECDSASignature(r, s)
-
 		share := round.temp.NewShares[j]
-		r3msg1 := NewDGRound3Message1(Pj, round.PartyID(), share, authSignature, &round.save.AuthEcdsaPrivateKey.PublicKey)
+		r3msg1 := NewDGRound3Message1(Pj, round.PartyID(), share)
+		round.temp.dgRound3Message1s[i] = r3msg1
 		round.out <- r3msg1
-	}
-	var multiErr error
-	culpritSet := make(map[*tss.PartyID]struct{})
-	var culpritSetAndErrors = func(arrayCulprits []*tss.PartyID, errorMessage string) {
-		for _, culprit := range arrayCulprits {
-			if culprit != nil {
-				multiErr = multierror.Append(multiErr,
-					round.WrapError(errors.New(errorMessage), culprit))
-				culpritSet[culprit] = struct{}{}
-			}
-		}
-	}
-	culpritSetAndErrors(authSignaturesFailCulprits,
-		"ecdsa signature of shares for authentication failed")
-	uniqueCulprits := make([]*tss.PartyID, 0, len(culpritSet))
-	for aCulprit := range culpritSet {
-		uniqueCulprits = append(uniqueCulprits, aCulprit)
-	}
-	if multiErr != nil {
-		return round.WrapError(multiErr, uniqueCulprits...)
 	}
 
 	vDeCmt := round.temp.VD

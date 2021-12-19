@@ -49,12 +49,11 @@ func (round *round3) Start() *tss.Error {
 			return round.WrapError(errors.New("length of de-commitment should be 2"))
 		}
 
-		Rj, err := crypto.NewECPoint(tss.EC(), coordinates[0], coordinates[1])
-		Rj = Rj.EightInvEight()
+		Rj, err := crypto.NewECPoint(round.Params().EC(), coordinates[0], coordinates[1])
 		if err != nil {
 			return round.WrapError(errors.Wrapf(err, "NewECPoint(Rj)"), Pj)
 		}
-		proof, err := r2msg.UnmarshalZKProof()
+		proof, err := r2msg.UnmarshalZKProof(round.Params().EC())
 		if err != nil {
 			return round.WrapError(errors.New("failed to unmarshal Rj proof"), Pj)
 		}
@@ -63,7 +62,7 @@ func (round *round3) Start() *tss.Error {
 			return round.WrapError(errors.New("failed to prove Rj"), Pj)
 		}
 
-		extendedRj := ecPointToExtendedElement(Rj.X(), Rj.Y())
+		extendedRj := ecPointToExtendedElement(round.Params().EC(), Rj.X(), Rj.Y())
 		R = addExtendedElements(R, extendedRj)
 	}
 
@@ -75,9 +74,9 @@ func (round *round3) Start() *tss.Error {
 	// h = hash512(k || A || M)
 	h := sha512.New()
 	h.Reset()
-	_, _ = h.Write(encodedR[:])
-	_, _ = h.Write(encodedPubKey[:])
-	_, _ = h.Write(round.temp.m.Bytes())
+	h.Write(encodedR[:])
+	h.Write(encodedPubKey[:])
+	h.Write(round.temp.m.Bytes())
 
 	var lambda [64]byte
 	h.Sum(lambda[:0])

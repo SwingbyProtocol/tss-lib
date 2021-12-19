@@ -61,3 +61,20 @@ func NonEmptyMultiBytes(bzs [][]byte, expectLen ...int) bool {
 	}
 	return true
 }
+
+// Returns true when at least one of the slices in the multi-dimensional byte slice are non-nil and non-empty
+func AnyNonEmptyMultiByte(bzs [][]byte, expectLen ...int) bool {
+	if len(bzs) == 0 {
+		return false
+	}
+	// variadic (optional) arg test
+	if 0 < len(expectLen) && expectLen[0] != len(bzs) {
+		return false
+	}
+	for _, bz := range bzs {
+		if NonEmptyBytes(bz) {
+			return true
+		}
+	}
+	return false
+}

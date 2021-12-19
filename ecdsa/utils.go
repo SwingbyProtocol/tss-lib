@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"math/big"
 
-	"github.com/hashicorp/go-multierror"
-
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	"github.com/binance-chain/tss-lib/crypto/vss"
@@ -92,26 +90,6 @@ func (k *MarshallableEcdsaPublicKey) UnmarshalJSON(b []byte) error {
 type MarshallableEcdsaPublicKey ecdsa.PublicKey
 
 type MarshallableEcdsaPrivateKey ecdsa.PrivateKey
-
-func HandleMultiErrorVictimAndCulprit(culpritSet map[*tss.PartyID]struct{}, culprits []AttributionOfBlame,
-	Ps tss.SortedPartyIDs, errorMap map[FeldmanError]string, wrapMultiErrorFunc func(err error, victim *tss.PartyID, culprits ...*tss.PartyID) *tss.Error) *tss.Error {
-	uniqueCulprits := make([]*tss.PartyID, 0, len(culpritSet))
-	for aCulprit := range culpritSet {
-		uniqueCulprits = append(uniqueCulprits, aCulprit)
-	}
-
-	var multiErr error
-	for _, culprit := range culprits {
-		vc := &tss.VictimAndCulprit{Victim: Ps[culprit.Victim], Culprit: culprit.CulpritParty,
-			Message: errorMap[culprit.TheFeldmanError]}
-		multiErr = multierror.Append(multiErr, vc)
-	}
-	if len(culprits) > 0 {
-		return wrapMultiErrorFunc(multiErr, Ps[culprits[0].Victim], uniqueCulprits...)
-	} else {
-		return nil
-	}
-}
 
 func ProofNSquareFree(NTildei *big.Int, p *big.Int, q *big.Int) (*big.Int, *big.Int) {
 	randIntProofNSquareFreei := common.GetRandomPositiveInt(NTildei)
