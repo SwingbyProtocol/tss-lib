@@ -1,13 +1,16 @@
 module github.com/binance-chain/tss-lib
 
-go 1.15
+go 1.17
 
 require (
-	github.com/Workiva/go-datastructures v1.0.52
 	github.com/agl/ed25519 v0.0.0-20200225211852-fd4d107ace12
 	github.com/btcsuite/btcd v0.22.0-beta
-	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
+	github.com/btcsuite/btcd/btcec/v2 v2.0.0-00010101000000-000000000000
+	github.com/btcsuite/btcutil v1.0.3-0.20211129182920-9c4bbabe7acd
+	github.com/decred/dcrd/crypto/blake256 v1.0.0
 	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.2
+	github.com/decred/dcrd/dcrec/secp256k1/v2 v2.0.0
+	// github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
 	github.com/golang/protobuf v1.5.2
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1
@@ -23,7 +26,6 @@ require (
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/sys v0.0.0-20211213223007-03aa0b5f6827 // indirect
 	golang.org/x/text v0.3.6
 	google.golang.org/protobuf v1.27.1
@@ -31,3 +33,7 @@ require (
 )
 
 replace github.com/agl/ed25519 => github.com/binance-chain/edwards25519 v0.0.0-20200305024217-f36fc4b53d43
+
+replace github.com/btcsuite/btcd => github.com/Roasbeef/btcd v0.0.0-20211206001652-70ae843c3628
+
+replace github.com/btcsuite/btcd/btcec/v2 => github.com/Roasbeef/btcd/btcec/v2 v2.0.0-20211206001652-70ae843c3628

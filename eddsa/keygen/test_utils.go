@@ -29,17 +29,17 @@ const (
 )
 const (
 	testFixtureDirFormat  = "%s/../../test/_eddsa_fixtures"
-	testFixtureFileFormat = "keygen_data_%d.json"
+	testFixtureFileFormat = "keygen_data_%s_%d.json"
 )
 
-func LoadKeygenTestFixtures(qty int, optionalStart ...int) ([]LocalPartySaveData, tss.SortedPartyIDs, error) {
+func LoadKeygenTestFixtures(qty int, testSetId string, optionalStart ...int) ([]LocalPartySaveData, tss.SortedPartyIDs, error) {
 	keys := make([]LocalPartySaveData, 0, qty)
 	start := 0
 	if 0 < len(optionalStart) {
 		start = optionalStart[0]
 	}
 	for i := start; i < qty; i++ {
-		fixtureFilePath := makeTestFixtureFilePath(i)
+		fixtureFilePath := makeTestFixtureFilePath(testSetId, i)
 		bz, err := ioutil.ReadFile(fixtureFilePath)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err,
@@ -67,7 +67,7 @@ func LoadKeygenTestFixtures(qty int, optionalStart ...int) ([]LocalPartySaveData
 	return keys, sortedPIDs, nil
 }
 
-func LoadKeygenTestFixturesRandomSet(qty, fixtureCount int) ([]LocalPartySaveData, tss.SortedPartyIDs, error) {
+func LoadKeygenTestFixturesRandomSet(qty, fixtureCount int, testSetId string) ([]LocalPartySaveData, tss.SortedPartyIDs, error) {
 	keys := make([]LocalPartySaveData, 0, qty)
 	plucked := make(map[int]interface{}, qty)
 	for i := 0; len(plucked) < qty; i = (i + 1) % fixtureCount {
@@ -77,7 +77,7 @@ func LoadKeygenTestFixturesRandomSet(qty, fixtureCount int) ([]LocalPartySaveDat
 		}
 	}
 	for i := range plucked {
-		fixtureFilePath := makeTestFixtureFilePath(i)
+		fixtureFilePath := makeTestFixtureFilePath(testSetId, i)
 		bz, err := ioutil.ReadFile(fixtureFilePath)
 		if err != nil {
 			return nil, nil, errors.Wrapf(err,
@@ -109,9 +109,9 @@ func LoadKeygenTestFixturesRandomSet(qty, fixtureCount int) ([]LocalPartySaveDat
 	return keys, sortedPIDs, nil
 }
 
-func makeTestFixtureFilePath(partyIndex int) string {
+func makeTestFixtureFilePath(testSetId string, partyIndex int) string {
 	_, callerFileName, _, _ := runtime.Caller(0)
 	srcDirName := filepath.Dir(callerFileName)
 	fixtureDirName := fmt.Sprintf(testFixtureDirFormat, srcDirName)
-	return fmt.Sprintf("%s/"+testFixtureFileFormat, fixtureDirName, partyIndex)
+	return fmt.Sprintf("%s/"+testFixtureFileFormat, fixtureDirName, testSetId, partyIndex)
 }

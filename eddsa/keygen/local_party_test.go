@@ -16,6 +16,8 @@ import (
 	"testing"
 
 	"github.com/decred/dcrd/dcrec/edwards/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v2/schnorr"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -37,11 +39,11 @@ func setUp(level string) {
 	}
 }
 
-func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
+func TestE2EConcurrentAndSaveFixturesEdwards(t *testing.T) {
 	setUp("info")
 
 	threshold := testThreshold
-	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
+	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants, "Edwards")
 	if err != nil {
 		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
 		pIDs = tss.GenerateTestPartyIDs(testParticipants)
@@ -61,7 +63,7 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	// init the parties
 	for i := 0; i < len(pIDs); i++ {
 		var P *LocalParty
-		params := tss.NewParameters(tss.Edwards(), p2pCtx, pIDs[i], len(pIDs), threshold)
+		params := tss.NewParameters(tss.Edwards(), p2pCtx, pIDs[i], len(pIDs), threshold) // TODO
 		if i < len(fixtures) {
 			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
 		} else {
@@ -108,7 +110,7 @@ keygen:
 			// .. here comes a workaround to recover this party's index (it was removed from save data)
 			index, err := save.OriginalIndex()
 			assert.NoErrorf(t, err, "should not be an error getting a party's index from save data")
-			tryWriteTestFixtureFile(t, index, save)
+			tryWriteTestFixtureFile(t, index, "Edwards", save)
 
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(pIDs)) {
@@ -209,8 +211,180 @@ keygen:
 	}
 }
 
-func tryWriteTestFixtureFile(t *testing.T, index int, data LocalPartySaveData) {
-	fixtureFileName := makeTestFixtureFilePath(index)
+func TestE2EConcurrentAndSaveFixturesS256Schnorr(t *testing.T) {
+	setUp("info")
+
+	threshold := testThreshold
+	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants, "S256")
+	if err != nil {
+		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
+		pIDs = tss.GenerateTestPartyIDs(testParticipants)
+	}
+
+	p2pCtx := tss.NewPeerContext(pIDs)
+	parties := make([]*LocalParty, 0, len(pIDs))
+
+	errCh := make(chan *tss.Error, len(pIDs))
+	outCh := make(chan tss.Message, len(pIDs))
+	endCh := make(chan LocalPartySaveData, len(pIDs))
+
+	updater := test.SharedPartyUpdater
+
+	startGR := runtime.NumGoroutine()
+
+	// init the parties
+	for i := 0; i < len(pIDs); i++ {
+		var P *LocalParty
+		params := tss.NewParameters(tss.S256(), p2pCtx, pIDs[i], len(pIDs), threshold)
+		if i < len(fixtures) {
+			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
+		} else {
+			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
+		}
+		parties = append(parties, P)
+		go func(P *LocalParty) {
+			if err := P.Start(); err != nil {
+				errCh <- err
+			}
+		}(P)
+	}
+
+	// PHASE: keygen
+	var ended int32
+keygen:
+	for {
+		fmt.Printf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
+		select {
+		case err := <-errCh:
+			common.Logger.Errorf("Error: %s", err)
+			assert.FailNow(t, err.Error())
+			break keygen
+
+		case msg := <-outCh:
+			dest := msg.GetTo()
+			if dest == nil { // broadcast!
+				for _, P := range parties {
+					if P.PartyID().Index == msg.GetFrom().Index {
+						continue
+					}
+					go updater(P, msg, errCh)
+				}
+			} else { // point-to-point!
+				if dest[0].Index == msg.GetFrom().Index {
+					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
+					return
+				}
+				go updater(parties[dest[0].Index], msg, errCh)
+			}
+
+		case save := <-endCh:
+			// SAVE a test fixture file for this P (if it doesn't already exist)
+			// .. here comes a workaround to recover this party's index (it was removed from save data)
+			index, err := save.OriginalIndex()
+			assert.NoErrorf(t, err, "should not be an error getting a party's index from save data")
+			tryWriteTestFixtureFile(t, index, "S256", save)
+
+			atomic.AddInt32(&ended, 1)
+			if atomic.LoadInt32(&ended) == int32(len(pIDs)) {
+				t.Logf("Done. Received save data from %d participants", ended)
+
+				// combine shares for each Pj to get u
+				u := new(big.Int)
+				for j, Pj := range parties {
+					pShares := make(vss.Shares, 0)
+					for j2, P := range parties {
+						if j2 == j {
+							continue
+						}
+						vssMsgs := P.temp.kgRound2Message1s
+						share := vssMsgs[j].Content().(*KGRound2Message1).Share
+						shareStruct := &vss.Share{
+							Threshold: threshold,
+							ID:        P.PartyID().KeyInt(),
+							Share:     new(big.Int).SetBytes(share),
+						}
+						pShares = append(pShares, shareStruct)
+					}
+					uj, err := pShares[:threshold+1].ReConstruct(tss.S256())
+					assert.NoError(t, err, "vss.ReConstruct should not throw error")
+
+					// uG test: u*G[j] == V[0]
+					assert.Equal(t, uj, Pj.temp.ui)
+					uG := crypto.ScalarBaseMult(tss.S256(), uj)
+					assert.True(t, uG.Equals(Pj.temp.vs[0]), "ensure u*G[j] == V_0")
+
+					// xj tests: BigXj == xj*G
+					xj := Pj.data.Xi
+					gXj := crypto.ScalarBaseMult(tss.S256(), xj)
+					BigXj := Pj.data.BigXj[j]
+					assert.True(t, BigXj.Equals(gXj), "ensure BigX_j == g^x_j")
+
+					// fails if threshold cannot be satisfied (bad share)
+					{
+						badShares := pShares[:threshold]
+						badShares[len(badShares)-1].Share.Set(big.NewInt(0))
+						uj, err := pShares[:threshold].ReConstruct(tss.S256())
+						assert.NoError(t, err)
+						assert.NotEqual(t, parties[j].temp.ui, uj)
+						BigXjX, BigXjY := tss.S256().ScalarBaseMult(uj.Bytes())
+						assert.NotEqual(t, BigXjX, Pj.temp.vs[0].X())
+						assert.NotEqual(t, BigXjY, Pj.temp.vs[0].Y())
+					}
+					u = new(big.Int).Add(u, uj)
+				}
+				u = new(big.Int).Mod(u, tss.S256().Params().N)
+				scalar := make([]byte, 0, 32)
+				copy(scalar, u.Bytes())
+
+				// build eddsa key pair
+				pkX, pkY := save.EDDSAPub.X(), save.EDDSAPub.Y()
+				pk := secp256k1.PublicKey{
+					Curve: tss.S256(),
+					X:     pkX,
+					Y:     pkY,
+				}
+				println("u len: ", len(u.Bytes()))
+				sk, _ := secp256k1.PrivKeyFromScalar(u.Bytes())
+				// fmt.Println("err: ", err.Error())
+
+				// test pub key, should be on curve and match pkX, pkY
+				assert.True(t, pk.IsOnCurve(pkX, pkY), "public key must be on curve")
+
+				// public key tests
+				assert.NotZero(t, u, "u should not be zero")
+				ourPkX, ourPkY := tss.S256().ScalarBaseMult(u.Bytes())
+				assert.Equal(t, pkX, ourPkX, "pkX should match expected pk derived from u")
+				assert.Equal(t, pkY, ourPkY, "pkY should match expected pk derived from u")
+				t.Log("Public key tests done.")
+
+				// make sure everyone has the same EdDSA public key
+				for _, Pj := range parties {
+					assert.Equal(t, pkX, Pj.data.EDDSAPub.X())
+					assert.Equal(t, pkY, Pj.data.EDDSAPub.Y())
+				}
+				t.Log("Public key distribution test done.")
+
+				// test sign/verify
+				data := make([]byte, 32)
+				for i := range data {
+					data[i] = byte(i)
+				}
+				r, s, err := schnorr.Sign(sk, data)
+				assert.NoError(t, err, "sign should not throw an error")
+				ok := schnorr.Verify(&pk, data, r, s)
+				assert.True(t, ok, "signature should be ok")
+				t.Log("EdDSA signing test done.")
+
+				t.Logf("Start goroutines: %d, End goroutines: %d", startGR, runtime.NumGoroutine())
+
+				break keygen
+			}
+		}
+	}
+}
+
+func tryWriteTestFixtureFile(t *testing.T, index int, testSetId string, data LocalPartySaveData) {
+	fixtureFileName := makeTestFixtureFilePath(testSetId, index)
 
 	// fixture file does not already exist?
 	// if it does, we won't re-create it here
