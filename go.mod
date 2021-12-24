@@ -10,7 +10,6 @@ require (
 	github.com/decred/dcrd/crypto/blake256 v1.0.0
 	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.2
 	github.com/decred/dcrd/dcrec/secp256k1/v2 v2.0.0
-	// github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
 	github.com/golang/protobuf v1.5.2
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1

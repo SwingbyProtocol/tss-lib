@@ -29,8 +29,10 @@ import (
 )
 
 const (
-	testParticipants = TestParticipants
-	testThreshold    = TestThreshold
+	testParticipants     = TestParticipants
+	testThreshold        = TestThreshold
+	testSetIdS256Schnorr = "S256"
+	testSetIdEdwards     = "Edwards"
 )
 
 func setUp(level string) {
@@ -43,7 +45,7 @@ func TestE2EConcurrentAndSaveFixturesEdwards(t *testing.T) {
 	setUp("info")
 
 	threshold := testThreshold
-	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants, "Edwards")
+	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants, testSetIdEdwards)
 	if err != nil {
 		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
 		pIDs = tss.GenerateTestPartyIDs(testParticipants)
@@ -110,7 +112,7 @@ keygen:
 			// .. here comes a workaround to recover this party's index (it was removed from save data)
 			index, err := save.OriginalIndex()
 			assert.NoErrorf(t, err, "should not be an error getting a party's index from save data")
-			tryWriteTestFixtureFile(t, index, "Edwards", save)
+			tryWriteTestFixtureFile(t, index, testSetIdEdwards, save)
 
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(pIDs)) {
@@ -215,7 +217,7 @@ func TestE2EConcurrentAndSaveFixturesS256Schnorr(t *testing.T) {
 	setUp("info")
 
 	threshold := testThreshold
-	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants, "S256")
+	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants, testSetIdS256Schnorr)
 	if err != nil {
 		common.Logger.Info("No test fixtures were found, so the safe primes will be generated from scratch. This may take a while...")
 		pIDs = tss.GenerateTestPartyIDs(testParticipants)
@@ -282,7 +284,7 @@ keygen:
 			// .. here comes a workaround to recover this party's index (it was removed from save data)
 			index, err := save.OriginalIndex()
 			assert.NoErrorf(t, err, "should not be an error getting a party's index from save data")
-			tryWriteTestFixtureFile(t, index, "S256", save)
+			tryWriteTestFixtureFile(t, index, testSetIdS256Schnorr, save)
 
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(pIDs)) {

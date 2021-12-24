@@ -15,10 +15,9 @@ import (
 	"testing"
 
 	"github.com/agl/ed25519/edwards25519"
-	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/decred/dcrd/crypto/blake256"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v2"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -29,8 +28,10 @@ import (
 )
 
 const (
-	testParticipants = test.TestParticipants
-	testThreshold    = test.TestThreshold
+	testParticipants     = test.TestParticipants
+	testThreshold        = test.TestThreshold
+	testSetIdS256Schnorr = "S256"
+	testSetIdEdwards     = "Edwards"
 )
 
 func setUp(level string) {
@@ -41,12 +42,11 @@ func setUp(level string) {
 
 func TestE2EConcurrentEdwards(t *testing.T) {
 	setUp("debug")
-	t.Skip("Skipping this test for now - TODO")
 
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
-	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants, "S256")
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants, testSetIdEdwards)
 	assert.NoError(t, err, "should load keygen fixtures")
 	assert.Equal(t, testThreshold+1, len(keys))
 	assert.Equal(t, testThreshold+1, len(signPIDs))
@@ -109,14 +109,14 @@ signing:
 				R := parties[0].temp.r
 
 				// BEGIN check s correctness
-				sumS := parties[0].temp.si
+				sumS := bigIntToEncodedBytes(&parties[0].temp.si)
 				for i, p := range parties {
 					if i == 0 {
 						continue
 					}
 
 					var tmpSumS [32]byte
-					edwards25519.ScMulAdd(&tmpSumS, sumS, bigIntToEncodedBytes(big.NewInt(1)), p.temp.si)
+					edwards25519.ScMulAdd(&tmpSumS, sumS, bigIntToEncodedBytes(big.NewInt(1)), bigIntToEncodedBytes(&p.temp.si))
 					sumS = &tmpSumS
 				}
 				// END check s correctness
@@ -156,12 +156,12 @@ signing:
 
 func TestE2EConcurrentS256Schnorr(t *testing.T) {
 	setUp("debug")
-	t.Skip("Skipping this test for now - TODO")
 
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
-	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants, "S256")
+
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants, testSetIdS256Schnorr)
 	assert.NoError(t, err, "should load keygen fixtures")
 	assert.Equal(t, testThreshold+1, len(keys))
 	assert.Equal(t, testThreshold+1, len(signPIDs))
@@ -230,7 +230,7 @@ signing:
 				// BEGIN check s correctness
 				sumS := big.NewInt(0)
 				for _, p := range parties {
-					sumS = modN.Add(sumS, encodedBytesToBigInt(p.temp.si))
+					sumS = modN.Add(sumS, &p.temp.si)
 				}
 				fmt.Printf("S: %s\n", common.FormatBigInt(sumS))
 				fmt.Printf("R: %s\n", R.String())
@@ -238,16 +238,17 @@ signing:
 
 				// BEGIN EdDSA verify
 				pkX, pkY := keys[0].EDDSAPub.X(), keys[0].EDDSAPub.Y()
-				var r btcec.FieldVal
-				var s btcec.ModNScalar
-				r.SetByteSlice(parties[0].data.GetR())
-				s.SetByteSlice(parties[0].data.GetS())
-				signature := schnorr.NewSignature(&r, &s)
-				var x, y btcec.FieldVal
-				x.SetByteSlice(pkX.Bytes())
-				y.SetByteSlice(pkY.Bytes())
-				pk := btcec.NewPublicKey(&x, &y)
-				ok := signature.Verify(msg_, pk)
+				pk := secp256k1.PublicKey{
+					Curve: tss.S256(),
+					X:     pkX,
+					Y:     pkY,
+				}
+
+				r := new(big.Int).SetBytes(parties[0].data.GetR())
+				s := new(big.Int).SetBytes(parties[0].data.GetS())
+
+				ok := SchnorrVerify(&pk, msg_, r, s)
+
 				assert.True(t, ok, "eddsa verify must pass")
 				t.Log("EdDSA signing test done.")
 				// END EdDSA verify

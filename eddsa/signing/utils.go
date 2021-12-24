@@ -11,8 +11,11 @@ import (
 	"math/big"
 
 	"github.com/agl/ed25519/edwards25519"
-
 	"github.com/binance-chain/tss-lib/common"
+	"github.com/binance-chain/tss-lib/crypto"
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	secp256k12 "github.com/decred/dcrd/dcrec/secp256k1/v2"
 )
 
 func encodedBytesToBigInt(s *[32]byte) *big.Int {
@@ -125,4 +128,20 @@ func ecPointToExtendedElement(ec elliptic.Curve, x *big.Int, y *big.Int) edwards
 		Z: Z,
 		T: T,
 	}
+}
+
+func oddY(a *crypto.ECPoint) bool {
+	return a.Y().Bit(0) > 0
+}
+
+func SchnorrVerify(p *secp256k12.PublicKey, m []byte, r_ *big.Int, s_ *big.Int) bool {
+	var r btcec.FieldVal
+	var s btcec.ModNScalar
+	r.SetByteSlice(r_.Bytes())
+	s.SetByteSlice(s_.Bytes())
+	signature := schnorr.NewSignature(&r, &s)
+	var x, y btcec.FieldVal
+	x.SetByteSlice(p.X.Bytes())
+	y.SetByteSlice(p.Y.Bytes())
+	return signature.Verify(m, btcec.NewPublicKey(&x, &y))
 }

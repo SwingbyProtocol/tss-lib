@@ -7,12 +7,11 @@
 package signing
 
 import (
-	"encoding/hex"
 	"math/big"
 	"strings"
 
 	"github.com/agl/ed25519/edwards25519"
-	"github.com/binance-chain/tss-lib/common"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 	"github.com/pkg/errors"
@@ -87,7 +86,6 @@ func (round *round3) Start() *tss.Error {
 		}
 	}
 
-	// 7. compute lambda
 	var encodedR [32]byte
 	var encodedPubKey *[32]byte
 
@@ -97,13 +95,13 @@ func (round *round3) Start() *tss.Error {
 	} else if isSecp256k1Curve {
 		s := new([32]byte)
 		round.key.EDDSAPub.X().FillBytes(s[:])
-		serializeR(Rsecp256k1, &encodedR)
-		common.Logger.Debugf("r3, encodedR: %s", hex.EncodeToString(encodedR[:]))
 		encodedPubKey = s
 	}
 
+	// 7. compute lambda
 	// h = hash512(k || A || M)
 	var lambda [64]byte
+	var 𝜆 *chainhash.Hash
 	var lambdaReduced [32]byte
 	if isTwistedEdwardsCurve {
 		h := round.EdDSAParameters.hashingAlgorithm
@@ -115,28 +113,47 @@ func (round *round3) Start() *tss.Error {
 
 		edwards25519.ScReduce(&lambdaReduced, &lambda)
 	} else if isSecp256k1Curve {
-		𝜆 := chainhash.TaggedHash(
+		// if R has an odd Y coordinate, we'll add to it until we find an R with even Y.
+		a := 0
+		G := crypto.ScalarBaseMult(round.Params().EC(), big.NewInt(1))
+		for ; oddY(Rsecp256k1); a++ { // Y cannot be odd in BIP340
+			Rsecp256k1, _ = Rsecp256k1.Add(G)
+		}
+		round.temp.a = a
+
+		//
+		encode32bytes(Rsecp256k1.X(), &encodedR)
+		𝜆 = chainhash.TaggedHash(
 			[]byte("BIP0340/challenge"), encodedR[:], encodedPubKey[:], round.temp.m.Bytes(),
-		)
-		copy(lambda[:0], 𝜆.CloneBytes())
+		) // commitment
+		var e btcec.ModNScalar
+		if overflow := e.SetBytes((*[32]byte)(𝜆)); overflow != 0 {
+			str := "hash of (r || P || m) too big"
+			return round.WrapError(errors.New(str))
+		}
 	}
 
 	// 8. compute si
 	var localS [32]byte
+	var si *big.Int
 	if isTwistedEdwardsCurve {
 		edwards25519.ScMulAdd(&localS, &lambdaReduced, bigIntToEncodedBytes(round.temp.wi), riBytes)
+		si = encodedBytesToBigInt(&localS)
 	} else if isSecp256k1Curve {
-		𝜆wi := big.NewInt(0).Mul(big.NewInt(0).SetBytes(lambda[:0]), round.temp.wi)
-		si := big.NewInt(0).Add(round.temp.ri, 𝜆wi)
-		localS = *bigIntToEncodedBytes(si)
+		𝜆wi := big.NewInt(0).Mul(big.NewInt(0).SetBytes(𝜆.CloneBytes()), round.temp.wi)
+		si = big.NewInt(0).Add(round.temp.ri, 𝜆wi)
 	}
 
 	// 9. store r3 message pieces
-	round.temp.si = &localS
-	round.temp.r = encodedBytesToBigInt(&encodedR)
+	round.temp.si = *si
+	if isTwistedEdwardsCurve {
+		round.temp.r = encodedBytesToBigInt(&encodedR)
+	} else if isSecp256k1Curve {
+		round.temp.r = Rsecp256k1.X()
+	}
 
 	// 10. broadcast si to other parties
-	r3msg := NewSignRound3Message(round.PartyID(), encodedBytesToBigInt(&localS))
+	r3msg := NewSignRound3Message(round.PartyID(), si)
 	round.temp.signRound3Messages[round.PartyID().Index] = r3msg
 	round.out <- r3msg
 
@@ -154,10 +171,6 @@ func (round *round3) Update() (bool, *tss.Error) {
 		round.ok[j] = true
 	}
 	return true, nil
-}
-
-func serializeR(Rsecp256k1 *crypto.ECPoint, encodedR *[32]byte) {
-	Rsecp256k1.X().FillBytes(encodedR[:])
 }
 
 func (round *round3) CanAccept(msg tss.ParsedMessage) bool {
