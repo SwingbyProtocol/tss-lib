@@ -7,7 +7,6 @@
 package resharing_test
 
 import (
-	"crypto/sha512"
 	"math/big"
 	"sync/atomic"
 	"testing"
@@ -168,8 +167,7 @@ signing:
 
 	for j, signPID := range signPIDs {
 		params := tss.NewParameters(tss.Edwards(), signP2pCtx, signPID, len(signPIDs), newThreshold)
-		edDSAParameters := &signing.EdDSAParameters{Parameters: params, HashingAlgorithm: sha512.New()}
-		P := signing.NewLocalParty(big.NewInt(42), edDSAParameters, signKeys[j], signOutCh, signEndCh).(*signing.LocalParty)
+		P := signing.NewLocalParty(big.NewInt(42), params, signKeys[j], signOutCh, signEndCh).(*signing.LocalParty)
 		signParties = append(signParties, P)
 		go func(P *signing.LocalParty) {
 			if err := P.Start(); err != nil {
