@@ -7,7 +7,6 @@
 package signing
 
 import (
-	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -15,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/agl/ed25519/edwards25519"
-	"github.com/decred/dcrd/crypto/blake256"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 	"github.com/decred/dcrd/dcrec/secp256k1/v2"
 	"github.com/ipfs/go-log"
@@ -67,8 +65,7 @@ func TestE2EConcurrentEdwards(t *testing.T) {
 	for i := 0; i < len(signPIDs); i++ {
 		params := tss.NewParameters(edwards.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 
-		edDSAParameters := &EdDSAParameters{Parameters: params, HashingAlgorithm: sha512.New()}
-		P := NewLocalParty(msg, edDSAParameters, keys[i], outCh, endCh).(*LocalParty)
+		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
 			if err := P.Start(); err != nil {
@@ -183,9 +180,8 @@ func TestE2EConcurrentS256Schnorr(t *testing.T) {
 	// init the parties
 	for i := 0; i < len(signPIDs); i++ {
 		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
-		edDSAParameters := &EdDSAParameters{Parameters: params, HashingAlgorithm: blake256.New()}
 
-		P := NewLocalParty(msg, edDSAParameters, keys[i], outCh, endCh).(*LocalParty)
+		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
 			if err := P.Start(); err != nil {

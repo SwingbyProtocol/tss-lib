@@ -9,7 +9,6 @@ package signing
 import (
 	"errors"
 	"fmt"
-	"hash"
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -24,17 +23,10 @@ import (
 var _ tss.Party = (*LocalParty)(nil)
 var _ fmt.Stringer = (*LocalParty)(nil)
 
-type HashingAlgorithm int
-
 type (
-	EdDSAParameters struct {
-		*tss.Parameters
-		HashingAlgorithm hash.Hash
-	}
-
 	LocalParty struct {
 		*tss.BaseParty
-		edDSAParams *EdDSAParameters
+		params *tss.Parameters
 
 		keys keygen.LocalPartySaveData
 		temp localTempData
@@ -73,20 +65,20 @@ type (
 
 func NewLocalParty(
 	msg *big.Int,
-	params *EdDSAParameters,
+	params *tss.Parameters,
 	key keygen.LocalPartySaveData,
 	out chan<- tss.Message,
 	end chan<- common.SignatureData,
 ) tss.Party {
 	partyCount := len(params.Parties().IDs())
 	p := &LocalParty{
-		BaseParty:   new(tss.BaseParty),
-		edDSAParams: params,
-		keys:        keygen.BuildLocalSaveDataSubset(key, params.Parties().IDs()),
-		temp:        localTempData{},
-		data:        common.SignatureData{},
-		out:         out,
-		end:         end,
+		BaseParty: new(tss.BaseParty),
+		params:    params,
+		keys:      keygen.BuildLocalSaveDataSubset(key, params.Parties().IDs()),
+		temp:      localTempData{},
+		data:      common.SignatureData{},
+		out:       out,
+		end:       end,
 	}
 	// msgs init
 	p.temp.signRound1Messages = make([]tss.ParsedMessage, partyCount)
@@ -100,7 +92,7 @@ func NewLocalParty(
 }
 
 func (p *LocalParty) FirstRound() tss.Round {
-	return newRound1(p.edDSAParams, &p.keys, &p.data, &p.temp, p.out, p.end)
+	return newRound1(p.params, &p.keys, &p.data, &p.temp, p.out, p.end)
 }
 
 func (p *LocalParty) Start() *tss.Error {
@@ -133,7 +125,7 @@ func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		return false, p.WrapError(fmt.Errorf("received msg with an invalid sender: %s", msg))
 	}
 	// check that the message's "from index" will fit into the array
-	if maxFromIdx := len(p.edDSAParams.Parties().IDs()) - 1; maxFromIdx < msg.GetFrom().Index {
+	if maxFromIdx := len(p.params.Parties().IDs()) - 1; maxFromIdx < msg.GetFrom().Index {
 		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
 			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
 	}
@@ -167,7 +159,7 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 }
 
 func (p *LocalParty) PartyID() *tss.PartyID {
-	return p.edDSAParams.PartyID()
+	return p.params.PartyID()
 }
 
 func (p *LocalParty) String() string {

@@ -7,6 +7,7 @@
 package signing
 
 import (
+	"crypto/sha512"
 	"math/big"
 	"strings"
 
@@ -104,7 +105,7 @@ func (round *round3) Start() *tss.Error {
 	var 𝜆 *chainhash.Hash
 	var lambdaReduced [32]byte
 	if isTwistedEdwardsCurve {
-		h := round.EdDSAParameters.HashingAlgorithm
+		h := sha512.New()
 		h.Reset()
 		h.Write(encodedR[:])
 		h.Write(encodedPubKey[:])

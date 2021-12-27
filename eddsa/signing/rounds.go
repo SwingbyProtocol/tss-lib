@@ -18,7 +18,7 @@ const (
 
 type (
 	base struct {
-		*EdDSAParameters
+		*tss.Parameters
 		key     *keygen.LocalPartySaveData
 		data    *common.SignatureData
 		temp    *localTempData
