@@ -29,7 +29,7 @@ type HashingAlgorithm int
 type (
 	EdDSAParameters struct {
 		*tss.Parameters
-		hashingAlgorithm hash.Hash
+		HashingAlgorithm hash.Hash
 	}
 
 	LocalParty struct {

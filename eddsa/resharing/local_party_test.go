@@ -7,6 +7,7 @@
 package resharing_test
 
 import (
+	"crypto/sha512"
 	"math/big"
 	"sync/atomic"
 	"testing"
@@ -25,8 +26,10 @@ import (
 )
 
 const (
-	testParticipants = test.TestParticipants
-	testThreshold    = test.TestThreshold
+	testParticipants     = test.TestParticipants
+	testThreshold        = test.TestThreshold
+	testSetIdS256Schnorr = "S256"
+	testSetIdEdwards     = "Edwards"
 )
 
 func setUp(level string) {
@@ -45,7 +48,7 @@ func TestE2EConcurrent(t *testing.T) {
 
 	// PHASE: load keygen fixtures
 	firstPartyIdx, extraParties := 0, 1 // // extra can be 0 to N-first
-	oldKeys, oldPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold+1+extraParties+firstPartyIdx, firstPartyIdx)
+	oldKeys, oldPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold+1+extraParties+firstPartyIdx, testSetIdEdwards, firstPartyIdx)
 	assert.NoError(t, err, "should load keygen fixtures")
 
 	// PHASE: resharing
@@ -165,7 +168,8 @@ signing:
 
 	for j, signPID := range signPIDs {
 		params := tss.NewParameters(tss.Edwards(), signP2pCtx, signPID, len(signPIDs), newThreshold)
-		P := signing.NewLocalParty(big.NewInt(42), params, signKeys[j], signOutCh, signEndCh).(*signing.LocalParty)
+		edDSAParameters := &signing.EdDSAParameters{Parameters: params, HashingAlgorithm: sha512.New()}
+		P := signing.NewLocalParty(big.NewInt(42), edDSAParameters, signKeys[j], signOutCh, signEndCh).(*signing.LocalParty)
 		signParties = append(signParties, P)
 		go func(P *signing.LocalParty) {
 			if err := P.Start(); err != nil {

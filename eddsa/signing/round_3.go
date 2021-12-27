@@ -104,7 +104,7 @@ func (round *round3) Start() *tss.Error {
 	var 𝜆 *chainhash.Hash
 	var lambdaReduced [32]byte
 	if isTwistedEdwardsCurve {
-		h := round.EdDSAParameters.hashingAlgorithm
+		h := round.EdDSAParameters.HashingAlgorithm
 		h.Reset()
 		h.Write(encodedR[:])
 		h.Write(encodedPubKey[:])
