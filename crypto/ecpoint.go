@@ -17,6 +17,7 @@ import (
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/tss"
+	"github.com/btcsuite/btcd/btcec/v2"
 )
 
 // ECPoint convenience helper
@@ -64,6 +65,14 @@ func (p *ECPoint) ToECDSAPubKey() *ecdsa.PublicKey {
 		X:     p.X(),
 		Y:     p.Y(),
 	}
+}
+
+func (p *ECPoint) ToBtcecPubKey() *btcec.PublicKey {
+	var x, y btcec.FieldVal
+	x.SetByteSlice(p.X().Bytes())
+	y.SetByteSlice(p.Y().Bytes())
+
+	return btcec.NewPublicKey(&x, &y)
 }
 
 func (p *ECPoint) IsOnCurve() bool {

@@ -135,13 +135,27 @@ func oddY(a *crypto.ECPoint) bool {
 }
 
 func SchnorrVerify(p *secp256k12.PublicKey, m []byte, r_ *big.Int, s_ *big.Int) bool {
+	signature := RSToSchnorrSignature(r_, s_)
+	var x, y btcec.FieldVal
+	x.SetByteSlice(p.X.Bytes())
+	y.SetByteSlice(p.Y.Bytes())
+	return signature.Verify(m, btcec.NewPublicKey(&x, &y))
+}
+
+func RSToSchnorrSignature(r_ *big.Int, s_ *big.Int) *schnorr.Signature {
 	var r btcec.FieldVal
 	var s btcec.ModNScalar
 	r.SetByteSlice(r_.Bytes())
 	s.SetByteSlice(s_.Bytes())
 	signature := schnorr.NewSignature(&r, &s)
-	var x, y btcec.FieldVal
-	x.SetByteSlice(p.X.Bytes())
-	y.SetByteSlice(p.Y.Bytes())
-	return signature.Verify(m, btcec.NewPublicKey(&x, &y))
+	return signature
+}
+
+func RSByesToSchnorrSignature(r_ []byte, s_ []byte) *schnorr.Signature {
+	var r btcec.FieldVal
+	var s btcec.ModNScalar
+	r.SetByteSlice(r_)
+	s.SetByteSlice(s_)
+	signature := schnorr.NewSignature(&r, &s)
+	return signature
 }
