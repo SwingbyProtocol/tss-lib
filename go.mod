@@ -3,12 +3,13 @@ module github.com/binance-chain/tss-lib
 go 1.17
 
 require (
-	github.com/agl/ed25519 v0.0.0-20200225211852-fd4d107ace12
+	github.com/agl/ed25519 v0.0.0-20200305024217-f36fc4b53d43
 	github.com/btcsuite/btcd v0.22.0-beta
 	github.com/btcsuite/btcd/btcec/v2 v2.0.0-00010101000000-000000000000
 	github.com/btcsuite/btcutil v1.0.3-0.20211129182920-9c4bbabe7acd
 	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.2
 	github.com/decred/dcrd/dcrec/secp256k1/v2 v2.0.0
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
 	github.com/golang/protobuf v1.5.2
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ipfs/go-log v1.0.5
@@ -25,7 +26,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/chaincfg/chainhash v1.0.2 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.0 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/ipfs/go-log/v2 v2.4.0 // indirect

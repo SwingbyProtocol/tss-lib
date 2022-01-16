@@ -7,6 +7,7 @@
 package signing
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -16,7 +17,6 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
-	"github.com/decred/dcrd/dcrec/secp256k1/v2"
 )
 
 func (round *finalization) Start() *tss.Error {
@@ -90,17 +90,14 @@ func (round *finalization) Start() *tss.Error {
 			X:     round.key.EDDSAPub.X(),
 			Y:     round.key.EDDSAPub.Y(),
 		}
+		common.Logger.Debugf("finalize - r: %v, s:%v", hex.EncodeToString(round.temp.r.Bytes()),
+			hex.EncodeToString(s.Bytes()))
 		ok = edwards.Verify(&pk, round.temp.m.Bytes(), round.temp.r, s)
 		if !ok {
 			return round.WrapError(fmt.Errorf("edwards signature verification failed"))
 		}
 	} else if isSecp256k1Curve {
-		pk := secp256k1.PublicKey{
-			Curve: round.Params().EC(),
-			X:     round.key.EDDSAPub.X(),
-			Y:     round.key.EDDSAPub.Y(),
-		}
-		ok = SchnorrVerify(&pk, round.temp.m.Bytes(), round.temp.r, s)
+		ok = SchnorrVerify(round.key.EDDSAPub.ToBtcecPubKey(), round.temp.m.Bytes(), round.temp.r, s)
 		if !ok {
 			return round.WrapError(fmt.Errorf("schnorr signature verification failed"))
 		}

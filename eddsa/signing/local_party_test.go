@@ -15,7 +15,6 @@ import (
 
 	"github.com/agl/ed25519/edwards25519"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
-	"github.com/decred/dcrd/dcrec/secp256k1/v2"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -233,17 +232,11 @@ signing:
 				// END check s correctness
 
 				// BEGIN EdDSA verify
-				pkX, pkY := keys[0].EDDSAPub.X(), keys[0].EDDSAPub.Y()
-				pk := secp256k1.PublicKey{
-					Curve: tss.S256(),
-					X:     pkX,
-					Y:     pkY,
-				}
 
 				r := new(big.Int).SetBytes(parties[0].data.GetR())
 				s := new(big.Int).SetBytes(parties[0].data.GetS())
 
-				ok := SchnorrVerify(&pk, msg_, r, s)
+				ok := SchnorrVerify(keys[0].EDDSAPub.ToBtcecPubKey(), msg_, r, s)
 
 				assert.True(t, ok, "eddsa verify must pass")
 				t.Log("EdDSA signing test done.")

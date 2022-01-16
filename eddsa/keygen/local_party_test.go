@@ -15,9 +15,10 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 	"github.com/decred/dcrd/dcrec/secp256k1/v2"
-	"github.com/decred/dcrd/dcrec/secp256k1/v2/schnorr"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -311,9 +312,16 @@ keygen:
 					assert.NoError(t, err, "vss.ReConstruct should not throw error")
 
 					// uG test: u*G[j] == V[0]
-					assert.Equal(t, uj, Pj.temp.ui)
+					if eq := assert.Equal(t, uj, Pj.temp.ui); !eq {
+						t.Logf("Pj: %v, uj: %v, ui: %v", Pj,
+							common.FormatBigInt(uj), common.FormatBigInt(Pj.temp.ui))
+						t.FailNow()
+					}
 					uG := crypto.ScalarBaseMult(tss.S256(), uj)
-					assert.True(t, uG.Equals(Pj.temp.vs[0]), "ensure u*G[j] == V_0")
+					if eq := assert.Equal(t, uG, Pj.temp.vs[0], "ensure u*G[j] == V_0"); !eq {
+						t.Logf("Pj: %v", Pj)
+						t.FailNow()
+					}
 
 					// xj tests: BigXj == xj*G
 					xj := Pj.data.Xi
@@ -346,7 +354,7 @@ keygen:
 					Y:     pkY,
 				}
 				println("u len: ", len(u.Bytes()))
-				sk, _ := secp256k1.PrivKeyFromScalar(u.Bytes())
+				sk, _ := btcec.PrivKeyFromBytes(u.Bytes())
 				// fmt.Println("err: ", err.Error())
 
 				// test pub key, should be on curve and match pkX, pkY
@@ -364,6 +372,7 @@ keygen:
 					assert.Equal(t, pkX, Pj.data.EDDSAPub.X())
 					assert.Equal(t, pkY, Pj.data.EDDSAPub.Y())
 				}
+				t.Logf("Public key: X: %v, Y: %v", common.FormatBigInt(pkX), common.FormatBigInt(pkY))
 				t.Log("Public key distribution test done.")
 
 				// test sign/verify
@@ -371,9 +380,9 @@ keygen:
 				for i := range data {
 					data[i] = byte(i)
 				}
-				r, s, err := schnorr.Sign(sk, data)
+				signature, err := schnorr.Sign(sk, data)
 				assert.NoError(t, err, "sign should not throw an error")
-				ok := schnorr.Verify(&pk, data, r, s)
+				ok := signature.Verify(data, save.EDDSAPub.ToBtcecPubKey())
 				assert.True(t, ok, "signature should be ok")
 				t.Log("EdDSA signing test done.")
 
