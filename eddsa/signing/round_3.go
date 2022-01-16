@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/agl/ed25519/edwards25519"
-	"github.com/binance-chain/tss-lib/common"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
