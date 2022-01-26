@@ -1,5 +1,7 @@
 MODULE = github.com/binance-chain/tss-lib
 PACKAGES = $(shell go list ./... | grep -v '/vendor/')
+UT_PACKAGES_LEVEL_0 = $(shell go list ./... | grep -v '/vendor/' | grep 'keygen' )
+UT_PACKAGES_LEVEL_1 = $(shell go list ./... | grep -v '/vendor/' | grep -v 'keygen'  )
 
 all: protob test
 
@@ -37,16 +39,32 @@ benchsign: fmt
 ########################################
 ### Testing
 
-test_unit:
-	@echo "--> Running Unit Tests"
+test_unit_level0:
+	@echo "--> Running Unit Tests - Level 0"
 	@echo "!!! WARNING: This will take a long time :)"
-	go test -timeout 60m $(PACKAGES)
+	@echo "!!! WARNING: This will delete fixtures  :("
+	sleep 10
+	go clean -testcache
+	rm -f ./test/_ecdsa_fixtures/*json
+	rm -f ./test/_eddsa_fixtures/*json
+	go test -v -timeout 30m $(UT_PACKAGES_LEVEL_0)
+
+
+test_unit: test_unit_level0
+	@echo "--> Running Unit Tests - Level 1"
+	@echo "!!! WARNING: This will take a long time :)"
+	sleep 2
+	go test -v -timeout 60m $(UT_PACKAGES_LEVEL_1)
 
 test_unit_race:
 	@echo "--> Running Unit Tests (with Race Detection)"
 	@echo "!!! WARNING: This will take a long time :)"
+	@echo "!!! WARNING: This will delete fixtures :("
 	# go clean -testcache
-	go test -timeout 60m -race $(PACKAGES)
+	sleep 10
+	rm -f ./test/_ecdsa_fixtures/*json
+	rm -f ./test/_eddsa_fixtures/*json
+	go test -v -timeout 10m -race $(DEPENDENCIES_PACKAGES)
 
 test:
 	make test_unit_race

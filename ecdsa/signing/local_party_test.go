@@ -375,7 +375,7 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 }
 
 func TestAbortIdentification(t *testing.T) {
-	setUp("debug")
+	setUp("info")
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
@@ -457,7 +457,7 @@ signing:
 }
 
 func TestIdAbortSimulateRound7(test *testing.T) {
-	setUp("debug")
+	setUp("info")
 	var err error
 	ec := tss.S256()
 	q := ec.Params().N

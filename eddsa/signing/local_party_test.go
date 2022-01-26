@@ -35,10 +35,13 @@ func setUp(level string) {
 	if err := log.SetLogLevel("tss-lib", level); err != nil {
 		panic(err)
 	}
+
+	// only for test
+	tss.SetCurve(tss.Edwards())
 }
 
 func TestE2EConcurrentEdwards(t *testing.T) {
-	setUp("debug")
+	setUp("info")
 
 	threshold := testThreshold
 
@@ -120,7 +123,7 @@ signing:
 				// BEGIN EDDSA verify
 				pkX, pkY := keys[0].EDDSAPub.X(), keys[0].EDDSAPub.Y()
 				pk := edwards.PublicKey{
-					Curve: tss.EC(),
+					Curve: tss.Edwards(),
 					X:     pkX,
 					Y:     pkY,
 				}
@@ -151,7 +154,7 @@ signing:
 }
 
 func TestE2EConcurrentS256Schnorr(t *testing.T) {
-	setUp("debug")
+	setUp("info")
 
 	threshold := testThreshold
 

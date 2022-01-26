@@ -99,6 +99,11 @@ func (p *ECPoint) ValidateBasic() bool {
 	return p != nil && p.coords[0] != nil && p.coords[1] != nil && p.IsOnCurve()
 }
 
+/* func (p *ECPoint) EightInvEight() *ECPoint {
+	return p.ScalarMult(eight).ScalarMult(eightInv)
+}
+*/
+
 func ScalarBaseMult(curve elliptic.Curve, k *big.Int) *ECPoint {
 	x, y := curve.ScalarBaseMult(k.Bytes())
 	p, _ := NewECPoint(curve, x, y) // it must be on the curve, no need to check.

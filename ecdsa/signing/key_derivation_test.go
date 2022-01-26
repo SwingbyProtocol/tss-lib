@@ -28,7 +28,7 @@ import (
 // in signing. Our code does not require updates u_i or the VSS commitment to the polynomial either,
 // as these are not used during the signing phase.
 func TestHDKeyDerivation(t *testing.T) {
-	setUp("debug")
+	setUp("info")
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
@@ -118,7 +118,7 @@ signing:
 				bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
 
 				r := parties[0].temp.Rx
-				fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
+				// fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
 
 				modN := common.ModInt(tss.EC().Params().N)
 
@@ -127,7 +127,7 @@ signing:
 				for _, p := range parties {
 					sumS = modN.Add(sumS, p.temp.SigmaShare)
 				}
-				fmt.Printf("S: %s\n", sumS.String())
+				// fmt.Printf("S: %s\n", sumS.String())
 				// END check s correctness
 
 				ok := ecdsa.Verify(&extendedChildPk.PublicKey, msg.Bytes(), bigR.X(), sumS)

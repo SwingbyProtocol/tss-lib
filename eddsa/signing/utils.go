@@ -241,7 +241,7 @@ func schnorrVerify(hash []byte, pub *btcec.PublicKey, sigR btcec.FieldVal, sigS 
 	var _ePAffine btcec.JacobianPoint
 	_ePAffine.X, _ePAffine.Y, _ePAffine.Z = eP.X, eP.Y, eP.Z
 	_ePAffine.ToAffine()
-	common.Logger.Infof("finalize - (minus)e: %v, P: %v, _sGAffine: %v, -ePAffine: %v", e.String(),
+	common.Logger.Debugf("finalize - (minus)e: %v, P: %v, _sGAffine: %v, -ePAffine: %v", e.String(),
 		JacobianPointToString(P),
 		JacobianPointToString(_sGAffine),
 		JacobianPointToString(_ePAffine))

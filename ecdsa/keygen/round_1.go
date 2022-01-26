@@ -41,7 +41,7 @@ func (round *round1) Start() *tss.Error {
 
 	// Fig 5. Round 1. private key part
 	ridi := common.GetRandomPositiveInt(round.EC().Params().N)
-	ui := common.GetRandomPositiveInt(round.EC().Params().N)
+	ui := common.GetRandomPositiveInt(round.Params().EC().Params().N)
 
 	// Fig 5. Round 1. pub key part, vss shares
 	ids := round.Parties().IDs().Keys()
