@@ -47,14 +47,14 @@ test_unit_level0:
 	go clean -testcache
 	rm -f ./test/_ecdsa_fixtures/*json
 	rm -f ./test/_eddsa_fixtures/*json
-	go test -v -timeout 50m $(UT_PACKAGES_LEVEL_0)
+	go test -timeout 50m $(UT_PACKAGES_LEVEL_0)
 
 
 test_unit: test_unit_level0
 	@echo "--> Running Unit Tests - Level 1"
 	@echo "!!! WARNING: This will take a long time :)"
 	sleep 2
-	go test -v -timeout 60m $(UT_PACKAGES_LEVEL_1)
+	go test -timeout 60m $(UT_PACKAGES_LEVEL_1)
 
 test_unit_race_level0:
 	@echo "--> Running Unit Tests (with Race Detection) - Level 0"
@@ -64,13 +64,13 @@ test_unit_race_level0:
 	sleep 10
 	rm -f ./test/_ecdsa_fixtures/*json
 	rm -f ./test/_eddsa_fixtures/*json
-	go test -v -timeout 50m -race $(UT_PACKAGES_LEVEL_0)
+	go test -timeout 50m -race $(UT_PACKAGES_LEVEL_0)
 
 test_unit_race: test_unit_race_level0
 	@echo "--> Running Unit Tests (with Race Detection) - Level 1"
 	@echo "!!! WARNING: This will take a long time :)"
 	sleep 2
-	go test -v -timeout 60m -race $(UT_PACKAGES_LEVEL_1)
+	go test -timeout 60m -race $(UT_PACKAGES_LEVEL_1)
 
 test:
 	make test_unit_race

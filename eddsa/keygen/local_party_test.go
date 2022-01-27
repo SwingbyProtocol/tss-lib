@@ -121,6 +121,7 @@ keygen:
 
 				// combine shares for each Pj to get u
 				u := new(big.Int)
+				modQ := common.ModInt(tss.Edwards().Params().N)
 				for j, Pj := range parties {
 					pShares := make(vss.Shares, 0)
 					for j2, P := range parties {
@@ -161,9 +162,8 @@ keygen:
 						assert.NotEqual(t, BigXjX, Pj.temp.vs[0].X())
 						assert.NotEqual(t, BigXjY, Pj.temp.vs[0].Y())
 					}
-					u = new(big.Int).Add(u, uj)
+					u = modQ.Add(u, uj)
 				}
-				u = new(big.Int).Mod(u, tss.Edwards().Params().N)
 				scalar := make([]byte, 0, 32)
 				copy(scalar, u.Bytes())
 
@@ -174,8 +174,10 @@ keygen:
 					X:     pkX,
 					Y:     pkY,
 				}
-				println("u len: ", len(u.Bytes()))
-				sk, _, err := edwards.PrivKeyFromScalar(u.Bytes())
+				t.Logf("u len: %v", len(u.Bytes()))
+				uBytes := common.PadToLengthBytesInPlace(u.Bytes(), edwards.PrivScalarSize)
+				sk, _, err := edwards.PrivKeyFromScalar(uBytes)
+				assert.NoError(t, err, "error loading private key")
 				// fmt.Println("err: ", err.Error())
 
 				// test pub key, should be on curve and match pkX, pkY
@@ -343,6 +345,8 @@ keygen:
 					u = new(big.Int).Add(u, uj)
 				}
 				u = new(big.Int).Mod(u, tss.S256().Params().N)
+				t.Logf("u len: %v", len(u.Bytes()))
+
 				scalar := make([]byte, 0, 32)
 				copy(scalar, u.Bytes())
 
@@ -353,7 +357,6 @@ keygen:
 					X:     pkX,
 					Y:     pkY,
 				}
-				println("u len: ", len(u.Bytes()))
 				sk, _ := btcec.PrivKeyFromBytes(u.Bytes())
 				// fmt.Println("err: ", err.Error())
 
