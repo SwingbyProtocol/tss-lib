@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"sort"
 
-	"github.com/binance-chain/tss-lib/common"
 	"github.com/pkg/errors"
 
 	"github.com/binance-chain/tss-lib/test"
