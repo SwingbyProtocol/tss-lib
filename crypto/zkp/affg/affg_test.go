@@ -49,7 +49,7 @@ func TestAffg(test *testing.T) {
 	Y, rhoy, err := pk1.EncryptAndReturnRandomness(y)
 	assert.NoError(test, err)
 
-	NCap, s, t, err := keygen.LoadNTildeH1H2FromTestFixture(1)
+	NCap, s, t, err := keygen.ConstantTestNTildeH1H2(1)
 	assert.NoError(test, err)
 
 	C, _, err := pk0.EncryptAndReturnRandomness(a)

@@ -34,9 +34,9 @@ func TestShareProtocol(t *testing.T) {
 	a := common.GetRandomPositiveInt(q)
 	b := common.GetRandomPositiveInt(q)
 
-	NTildei, h1i, h2i, err := keygen.LoadNTildeH1H2FromTestFixture(0)
+	NTildei, h1i, h2i, err := keygen.ConstantTestNTildeH1H2(0)
 	assert.NoError(t, err)
-	NTildej, h1j, h2j, err := keygen.LoadNTildeH1H2FromTestFixture(1)
+	NTildej, h1j, h2j, err := keygen.ConstantTestNTildeH1H2(1)
 	assert.NoError(t, err)
 
 	cA, rA, err := pk.EncryptAndReturnRandomness(a)
@@ -67,9 +67,9 @@ func TestShareProtocolWC(t *testing.T) {
 	b := common.GetRandomPositiveInt(q)
 	gBX, gBY := tss.EC().ScalarBaseMult(b.Bytes())
 
-	NTildei, h1i, h2i, err := keygen.LoadNTildeH1H2FromTestFixture(0)
+	NTildei, h1i, h2i, err := keygen.ConstantTestNTildeH1H2(0)
 	assert.NoError(t, err)
-	NTildej, h1j, h2j, err := keygen.LoadNTildeH1H2FromTestFixture(1)
+	NTildej, h1j, h2j, err := keygen.ConstantTestNTildeH1H2(1)
 	assert.NoError(t, err)
 
 	cA, rA, err := pk.EncryptAndReturnRandomness(a)

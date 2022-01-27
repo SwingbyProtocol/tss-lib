@@ -46,7 +46,7 @@ func TestAffg(test *testing.T) {
 	gammai := common.GetRandomPositiveInt(q)
 	BigGammai := crypto.ScalarBaseMult(ec, gammai)
 
-	NCap, s, t, err := keygen.ConstantTestNTildeH1H2()
+	NCap, s, t, err := keygen.ConstantTestNTildeH1H2(1)
 	assert.NoError(test, err)
 
 	MtaOut, err := NewMtA(ec, Kj, gammai, BigGammai, pkj, pki, NCap, s, t)
@@ -83,7 +83,7 @@ func TestDec(test *testing.T) {
 	𝛾i := common.GetRandomPositiveInt(q)
 	Γi := crypto.ScalarBaseMult(ec, 𝛾i)
 
-	NCap, s, t, err := keygen.ConstantTestNTildeH1H2()
+	NCap, s, t, err := keygen.ConstantTestNTildeH1H2(1)
 	assert.NoError(test, err)
 
 	N2 := pkj.NSquare()
