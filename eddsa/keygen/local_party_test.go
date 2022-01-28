@@ -301,8 +301,10 @@ keygen:
 						if j2 == j {
 							continue
 						}
+						P.Lock()
 						vssMsgs := P.temp.kgRound2Message1s
 						share := vssMsgs[j].Content().(*KGRound2Message1).Share
+						P.Unlock()
 						shareStruct := &vss.Share{
 							Threshold: threshold,
 							ID:        P.PartyID().KeyInt(),
