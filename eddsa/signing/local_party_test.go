@@ -15,6 +15,8 @@ import (
 
 	"github.com/agl/ed25519/edwards25519"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v2/schnorr"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -176,14 +178,14 @@ func TestE2EConcurrentS256Schnorr(t *testing.T) {
 
 	updater := test.SharedPartyUpdater
 
-	msg_, _ := hex.DecodeString("304502210088BE0644191B935DB1CD786B43FF27798006578D8C908906B49E89") // big.NewInt(200).Bytes()
-	msg := big.NewInt(0).SetBytes(msg_)
+	msg, _ := hex.DecodeString("304502210088BE0644191B935DB1CD786B43FF27798006578D8C908906B49E89") // big.NewInt(200).Bytes()
+	msgI := big.NewInt(0).SetBytes(msg)
 
 	// init the parties
 	for i := 0; i < len(signPIDs); i++ {
 		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 
-		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
+		P := NewLocalParty(msgI, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
 			if err := P.Start(); err != nil {
@@ -239,9 +241,11 @@ signing:
 				r := new(big.Int).SetBytes(parties[0].data.GetR())
 				s := new(big.Int).SetBytes(parties[0].data.GetS())
 
-				ok := SchnorrVerify(keys[0].EDDSAPub.ToBtcecPubKey(), msg_, r, s)
-
-				assert.True(t, ok, "eddsa verify must pass")
+				pk1 := keys[0].EDDSAPub.ToSecp256k1PubKey().ToECDSA()
+				pk2 := secp256k1.PublicKey(*pk1)
+				if ok := schnorr.Verify(&pk2, msg, r, s); !assert.True(t, ok, "eddsa verify must pass") {
+					return
+				}
 				t.Log("EdDSA signing test done.")
 				// END EdDSA verify
 

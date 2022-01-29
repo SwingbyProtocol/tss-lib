@@ -61,13 +61,6 @@ func (p *ECPoint) ScalarMult(k *big.Int) *ECPoint {
 	return newP
 }
 
-func (p *ECPoint) ToBtcecPubKey() *btcec.PublicKey {
-	var x, y btcec.FieldVal
-	x.SetByteSlice(p.X().Bytes())
-	y.SetByteSlice(p.Y().Bytes())
-	return btcec.NewPublicKey(&x, &y)
-}
-
 func (p *ECPoint) ToSecp256k1PubKey() *secp256k1.PublicKey {
 	var x, y btcec.FieldVal
 	x.SetByteSlice(p.X().Bytes())

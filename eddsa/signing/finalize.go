@@ -17,6 +17,8 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v2/schnorr"
 )
 
 func (round *finalization) Start() *tss.Error {
@@ -97,18 +99,17 @@ func (round *finalization) Start() *tss.Error {
 			return round.WrapError(fmt.Errorf("edwards signature verification failed"))
 		}
 	} else if isSecp256k1Curve {
-		ok = SchnorrVerify(round.key.EDDSAPub.ToBtcecPubKey(), round.temp.m.Bytes(), round.temp.r, s)
-		if !ok {
+		pk1 := round.key.EDDSAPub.ToSecp256k1PubKey().ToECDSA()
+		pk2 := secp256k1.PublicKey(*pk1)
+		if ok = schnorr.Verify(&pk2, round.temp.m.Bytes(), round.temp.r, s); !ok {
 			return round.WrapError(fmt.Errorf("schnorr signature verification failed"))
 		}
 	}
-
 	round.end <- *round.data
-
 	return nil
 }
 
-func (round *finalization) CanAccept(msg tss.ParsedMessage) bool {
+func (round *finalization) CanAccept(_ tss.ParsedMessage) bool {
 	// not expecting any incoming messages in this round
 	return false
 }
