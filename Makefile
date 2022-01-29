@@ -29,10 +29,10 @@ build: protob
 ### Benchmarking
 
 benchgen: fmt
-	go run ./cmd/tss-benchgen benchdata
+	cd cmd && go run ./tss-benchgen benchdata
 
 benchsign: fmt
-	go run ./cmd/tss-benchsign benchdata
+	cd cmd && go run ./tss-benchsign benchdata
 
 ########################################
 ### Testing
