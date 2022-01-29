@@ -3,7 +3,6 @@
 package signing
 
 import (
-	"crypto/ecdsa"
 	"crypto/elliptic"
 	"math/big"
 
@@ -11,15 +10,16 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/ckd"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg"
 )
 
 func UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta *big.Int, keys []keygen.LocalPartySaveData,
-	extendedChildPk *ecdsa.PublicKey, ec elliptic.Curve) error {
+	extendedChildPk *btcec.PublicKey, ec elliptic.Curve) error {
 	var err error
 	gDelta := crypto.ScalarBaseMult(ec, keyDerivationDelta)
 	for k := range keys {
-		keys[k].ECDSAPub, err = crypto.NewECPoint(ec, extendedChildPk.X, extendedChildPk.Y)
+		keys[k].ECDSAPub, err = crypto.NewECPoint(ec, extendedChildPk.X(), extendedChildPk.Y())
 		if err != nil {
 			common.Logger.Errorf("error creating new extended child public key")
 			return err
@@ -39,12 +39,7 @@ func UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta *big.Int, keys []keygen.Lo
 
 func derivingPubkeyFromPath(masterPub *crypto.ECPoint, chainCode []byte, path []uint32, ec elliptic.Curve) (*big.Int, *ckd.ExtendedKey, error) {
 	// build ecdsa key pair
-	pk := ecdsa.PublicKey{
-		Curve: ec,
-		X:     masterPub.X(),
-		Y:     masterPub.Y(),
-	}
-
+	pk := masterPub.ToBtcecPubKey()
 	net := &chaincfg.MainNetParams
 	extendedParentPk := &ckd.ExtendedKey{
 		PublicKey:  pk,
@@ -54,6 +49,5 @@ func derivingPubkeyFromPath(masterPub *crypto.ECPoint, chainCode []byte, path []
 		ParentFP:   []byte{0x00, 0x00, 0x00, 0x00},
 		Version:    net.HDPrivateKeyID[:],
 	}
-
 	return ckd.DeriveChildKeyFromHierarchy(path, extendedParentPk, ec.Params().N, ec)
 }

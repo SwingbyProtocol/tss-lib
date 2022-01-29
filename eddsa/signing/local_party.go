@@ -55,10 +55,11 @@ type (
 
 		// round 2
 		cjs []*big.Int
-		si  *[32]byte
+		si  big.Int
 
 		// round 3
 		r *big.Int
+		a int // aG, ensuring R with even Y
 	}
 )
 

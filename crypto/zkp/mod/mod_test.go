@@ -17,7 +17,7 @@ import (
 )
 
 func TestMod(test *testing.T) {
-	preParams, err := keygen.GeneratePreParams(time.Minute*10, 8)
+	preParams, err := keygen.GeneratePreParams(time.Minute*20, 8)
 	assert.NoError(test, err)
 
 	p, q, N := preParams.P, preParams.Q, preParams.NTildei

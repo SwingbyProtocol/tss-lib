@@ -7,15 +7,17 @@
 package signing
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/agl/ed25519/edwards25519"
-	"github.com/decred/dcrd/dcrec/edwards/v2"
-
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
+	"github.com/decred/dcrd/dcrec/edwards/v2"
+	errors2 "github.com/pkg/errors"
 )
 
 func (round *finalization) Start() *tss.Error {
@@ -26,43 +28,75 @@ func (round *finalization) Start() *tss.Error {
 	round.started = true
 	round.resetOK()
 
-	sumS := round.temp.si
-	for j := range round.Parties().IDs() {
-		round.ok[j] = true
-		if j == round.PartyID().Index {
-			continue
+	ok := false
+	var s *big.Int
+	var sumS *[32]byte
+
+	_, isTwistedEdwardsCurve := round.Params().EC().(*edwards.TwistedEdwardsCurve)
+	isSecp256k1Curve := strings.Compare("secp256k1", round.Params().EC().Params().Name) == 0
+
+	if isTwistedEdwardsCurve {
+		sumS = bigIntToEncodedBytes(&round.temp.si)
+		for j := range round.Parties().IDs() {
+			round.ok[j] = true
+			if j == round.PartyID().Index {
+				continue
+			}
+			r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
+			sjBytes := bigIntToEncodedBytes(r3msg.UnmarshalS())
+			var tmpSumS [32]byte
+			edwards25519.ScMulAdd(&tmpSumS, sumS, bigIntToEncodedBytes(big.NewInt(1)), sjBytes)
+
+			sumS = &tmpSumS
 		}
-		r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
-		sjBytes := bigIntToEncodedBytes(r3msg.UnmarshalS())
-		var tmpSumS [32]byte
-		edwards25519.ScMulAdd(&tmpSumS, sumS, bigIntToEncodedBytes(big.NewInt(1)), sjBytes)
-		sumS = &tmpSumS
+		s = encodedBytesToBigInt(sumS)
+	} else if isSecp256k1Curve {
+		sumSInt := &round.temp.si
+		modN := common.ModInt(tss.S256().Params().N)
+		for j := range round.Parties().IDs() {
+			round.ok[j] = true
+			if j == round.PartyID().Index {
+				continue
+			}
+			r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
+			sumSInt = modN.Add(sumSInt, r3msg.UnmarshalS())
+		}
+		// if we adjusted R by adding aG to find R with an even Y coordinate, add a to s also.
+		s = modN.Add(sumSInt, big.NewInt(int64(round.temp.a)))
 	}
-	s := encodedBytesToBigInt(sumS)
 
 	// save the signature for final output
 	signature := new(common.ECSignature)
-	signature.Signature = append(bigIntToEncodedBytes(round.temp.r)[:], sumS[:]...)
-	signature.R = bigIntToEncodedBytes(round.temp.r)[:]
-	signature.S = bigIntToEncodedBytes(s)[:]
+	if isTwistedEdwardsCurve {
+		signature.Signature = append(bigIntToEncodedBytes(round.temp.r)[:], sumS[:]...)
+		signature.R = bigIntToEncodedBytes(round.temp.r)[:]
+		signature.S = bigIntToEncodedBytes(s)[:]
+	} else if isSecp256k1Curve {
+		var r32b, s32b [32]byte
+		encode32bytes(round.temp.r, &r32b)
+		encode32bytes(s, &s32b)
+		signature.Signature = append(r32b[:], s32b[:]...)
+		signature.R = r32b[:]
+		signature.S = s32b[:]
+	}
 	signature.M = round.temp.m.Bytes()
 
 	round.data.R = signature.R
 	round.data.S = signature.S
 	round.data.Signature = append(round.data.R, round.data.S...)
 
-	pk := edwards.PublicKey{
-		Curve: round.Params().EC(),
-		X:     round.key.EDDSAPub.X(),
-		Y:     round.key.EDDSAPub.Y(),
-	}
-
-	ok := edwards.Verify(&pk, round.temp.m.Bytes(), round.temp.r, s)
-	if !ok {
-		return round.WrapError(fmt.Errorf("signature verification failed"))
+	if isTwistedEdwardsCurve {
+		common.Logger.Debugf("finalize - r: %v, s:%v", hex.EncodeToString(round.temp.r.Bytes()),
+			hex.EncodeToString(s.Bytes()))
+		if ok = edwards.Verify(round.key.EDDSAPub.ToEdwardsPubKey(), round.temp.m.Bytes(), round.temp.r, s); !ok {
+			return round.WrapError(fmt.Errorf("edwards signature verification failed"))
+		}
+	} else if isSecp256k1Curve {
+		if err := SchnorrVerify(round.key.EDDSAPub.ToBtcecPubKey(), round.temp.m.Bytes(), round.temp.r, s); err != nil {
+			return round.WrapError(errors2.Wrapf(err, "schnorr signature verification failed"))
+		}
 	}
 	round.end <- *round.data
-
 	return nil
 }
 
@@ -80,12 +114,6 @@ func (round *finalization) NextRound() tss.Round {
 	return nil // finished!
 }
 
-func padToLengthBytesInPlace(src []byte, length int) []byte {
-	oriLen := len(src)
-	if oriLen < length {
-		for i := 0; i < length-oriLen; i++ {
-			src = append([]byte{0}, src...)
-		}
-	}
-	return src
+func encode32bytes(i *big.Int, buff *[32]byte) {
+	i.FillBytes(buff[:])
 }

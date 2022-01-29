@@ -1,5 +1,7 @@
 MODULE = github.com/binance-chain/tss-lib
 PACKAGES = $(shell go list ./... | grep -v '/vendor/')
+UT_PACKAGES_LEVEL_0 = $(shell go list ./... | grep -v '/vendor/' | grep 'keygen' )
+UT_PACKAGES_LEVEL_1 = $(shell go list ./... | grep -v '/vendor/' | grep -v 'keygen'  )
 
 all: protob test
 
@@ -29,24 +31,42 @@ build: protob
 ### Benchmarking
 
 benchgen: fmt
-	go run ./cmd/tss-benchgen benchdata
+	cd cmd && go run ./tss-benchgen benchdata
 
 benchsign: fmt
-	go run ./cmd/tss-benchsign benchdata
+	cd cmd && go run ./tss-benchsign benchdata
 
 ########################################
 ### Testing
 
-test_unit:
-	@echo "--> Running Unit Tests"
+test_unit_level0:
+	@echo "--> Running Unit Tests - Level 0"
 	@echo "!!! WARNING: This will take a long time :)"
-	go test -timeout 60m $(PACKAGES)
+	@echo "!!! WARNING: This will delete fixtures  :("
+	go clean -testcache
+	rm -f ./test/_ecdsa_fixtures/*json
+	rm -f ./test/_eddsa_fixtures/*json
+	go test -timeout 50m $(UT_PACKAGES_LEVEL_0)
 
-test_unit_race:
-	@echo "--> Running Unit Tests (with Race Detection)"
+
+test_unit: test_unit_level0
+	@echo "--> Running Unit Tests - Level 1"
 	@echo "!!! WARNING: This will take a long time :)"
-	# go clean -testcache
-	go test -timeout 60m -race $(PACKAGES)
+	go test -timeout 60m $(UT_PACKAGES_LEVEL_1)
+
+test_unit_race_level0:
+	@echo "--> Running Unit Tests (with Race Detection) - Level 0"
+	@echo "!!! WARNING: This will take a long time :)"
+	@echo "!!! WARNING: This will delete fixtures :("
+	go clean -testcache
+	rm -f ./test/_ecdsa_fixtures/*json
+	rm -f ./test/_eddsa_fixtures/*json
+	go test -timeout 50m -race $(UT_PACKAGES_LEVEL_0)
+
+test_unit_race: test_unit_race_level0
+	@echo "--> Running Unit Tests (with Race Detection) - Level 1"
+	@echo "!!! WARNING: This will take a long time :)"
+	go test -timeout 60m -race $(UT_PACKAGES_LEVEL_1)
 
 test:
 	make test_unit_race

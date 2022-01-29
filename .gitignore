@@ -23,3 +23,5 @@ benchdata
 *.swp
 .vscode/*.json
 
+# Test fixtures
+test/*fixtures/*.json

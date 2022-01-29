@@ -74,8 +74,8 @@ func (round *signout) Start() *tss.Error {
 
 	// save the signature for final output
 	bitSizeInBytes := round.Params().EC().Params().BitSize / 8
-	round.data.R = padToLengthBytesInPlace(round.temp.Rx.Bytes(), bitSizeInBytes)
-	round.data.S = padToLengthBytesInPlace(Sigma.Bytes(), bitSizeInBytes)
+	round.data.R = common.PadToLengthBytesInPlace(round.temp.Rx.Bytes(), bitSizeInBytes)
+	round.data.S = common.PadToLengthBytesInPlace(Sigma.Bytes(), bitSizeInBytes)
 	round.data.Signature = append(round.data.R, round.data.S...)
 	round.data.SignatureRecovery = []byte{byte(recid)}
 	round.data.M = round.temp.m.Bytes()
@@ -108,14 +108,4 @@ func (round *signout) Update() (bool, *tss.Error) {
 
 func (round *signout) NextRound() tss.Round {
 	return nil // finished!
-}
-
-func padToLengthBytesInPlace(src []byte, length int) []byte {
-	oriLen := len(src)
-	if oriLen < length {
-		for i := 0; i < length-oriLen; i++ {
-			src = append([]byte{0}, src...)
-		}
-	}
-	return src
 }

@@ -21,7 +21,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	zkpdec "github.com/binance-chain/tss-lib/crypto/zkp/dec"
 	zkplogstar "github.com/binance-chain/tss-lib/crypto/zkp/logstar"
-	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -137,8 +137,8 @@ signing:
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
 				t.Logf("Done. Received signature data from %d participants", ended)
 				R := parties[0].temp.BigR
-				r := parties[0].temp.Rx
-				fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
+				// r := parties[0].temp.Rx
+				// fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
 
 				modN := common.ModInt(tss.S256().Params().N)
 
@@ -147,7 +147,7 @@ signing:
 				for _, p := range parties {
 					sumS = modN.Add(sumS, p.temp.SigmaShare)
 				}
-				fmt.Printf("S: %s\n", sumS.String())
+				// fmt.Printf("S: %s\n", sumS.String())
 				// END check s correctness
 
 				// BEGIN ECDSA verify
@@ -188,7 +188,7 @@ func TestE2EWithHDKeyDerivation(t *testing.T) {
 
 	keyDerivationDelta := il
 
-	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, &extendedChildPk.PublicKey, btcec.S256())
+	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, extendedChildPk.PublicKey, btcec.S256())
 	assert.NoErrorf(t, err, "there should not be an error setting the derived keys")
 
 	// PHASE: signing
@@ -246,8 +246,8 @@ signing:
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
 				t.Logf("Done. Received signature data from %d participants", ended)
 				R := parties[0].temp.BigR
-				r := parties[0].temp.Rx
-				fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
+				// r := parties[0].temp.Rx
+				// fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
 
 				modN := common.ModInt(tss.S256().Params().N)
 
@@ -256,7 +256,7 @@ signing:
 				for _, p := range parties {
 					sumS = modN.Add(sumS, p.temp.SigmaShare)
 				}
-				fmt.Printf("S: %s\n", sumS.String())
+				// fmt.Printf("S: %s\n", sumS.String())
 				// END check s correctness
 
 				// BEGIN ECDSA verify
@@ -375,7 +375,7 @@ func identifiedAbortUpdater(party tss.Party, msg tss.Message, parties []*LocalPa
 }
 
 func TestAbortIdentification(t *testing.T) {
-	setUp("debug")
+	setUp("info")
 	threshold := testThreshold
 
 	// PHASE: load keygen fixtures
@@ -457,7 +457,7 @@ signing:
 }
 
 func TestIdAbortSimulateRound7(test *testing.T) {
-	setUp("debug")
+	setUp("info")
 	var err error
 	ec := tss.S256()
 	q := ec.Params().N
@@ -636,7 +636,7 @@ func TestIdAbortSimulateRound7(test *testing.T) {
 
 func TestFillTo32BytesInPlace(t *testing.T) {
 	s := big.NewInt(123456789)
-	normalizedS := padToLengthBytesInPlace(s.Bytes(), 32)
+	normalizedS := common.PadToLengthBytesInPlace(s.Bytes(), 32)
 	assert.True(t, big.NewInt(0).SetBytes(normalizedS).Cmp(s) == 0)
 	assert.Equal(t, 32, len(normalizedS))
 	assert.NotEqual(t, 32, len(s.Bytes()))

@@ -27,6 +27,7 @@ import (
 const (
 	testParticipants = test.TestParticipants
 	testThreshold    = test.TestThreshold
+	testSetIdEdwards = "Edwards"
 )
 
 func setUp(level string) {
@@ -45,7 +46,7 @@ func TestE2EConcurrent(t *testing.T) {
 
 	// PHASE: load keygen fixtures
 	firstPartyIdx, extraParties := 0, 1 // // extra can be 0 to N-first
-	oldKeys, oldPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold+1+extraParties+firstPartyIdx, firstPartyIdx)
+	oldKeys, oldPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold+1+extraParties+firstPartyIdx, testSetIdEdwards, firstPartyIdx)
 	assert.NoError(t, err, "should load keygen fixtures")
 
 	// PHASE: resharing

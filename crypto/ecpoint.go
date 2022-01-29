@@ -17,6 +17,8 @@ import (
 	"math/big"
 
 	"github.com/binance-chain/tss-lib/tss"
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/decred/dcrd/dcrec/edwards/v2"
 )
 
 // ECPoint convenience helper
@@ -58,12 +60,21 @@ func (p *ECPoint) ScalarMult(k *big.Int) *ECPoint {
 	return newP
 }
 
-func (p *ECPoint) ToECDSAPubKey() *ecdsa.PublicKey {
-	return &ecdsa.PublicKey{
+func (p *ECPoint) ToBtcecPubKey() *btcec.PublicKey {
+	var x, y btcec.FieldVal
+	x.SetByteSlice(p.X().Bytes())
+	y.SetByteSlice(p.Y().Bytes())
+	return btcec.NewPublicKey(&x, &y)
+}
+
+func (p *ECPoint) ToEdwardsPubKey() *edwards.PublicKey {
+	ecdsaPK := ecdsa.PublicKey{
 		Curve: p.curve,
 		X:     p.X(),
 		Y:     p.Y(),
 	}
+	pk := edwards.PublicKey(ecdsaPK)
+	return &pk
 }
 
 func (p *ECPoint) IsOnCurve() bool {
@@ -89,6 +100,11 @@ func (p *ECPoint) SetCurve(curve elliptic.Curve) *ECPoint {
 func (p *ECPoint) ValidateBasic() bool {
 	return p != nil && p.coords[0] != nil && p.coords[1] != nil && p.IsOnCurve()
 }
+
+/* func (p *ECPoint) EightInvEight() *ECPoint {
+	return p.ScalarMult(eight).ScalarMult(eightInv)
+}
+*/
 
 func ScalarBaseMult(curve elliptic.Curve, k *big.Int) *ECPoint {
 	x, y := curve.ScalarBaseMult(k.Bytes())

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	TaskName = "signing"
+	TaskName = "ecdsa-signing"
 )
 
 type (
