@@ -43,7 +43,6 @@ test_unit_level0:
 	@echo "--> Running Unit Tests - Level 0"
 	@echo "!!! WARNING: This will take a long time :)"
 	@echo "!!! WARNING: This will delete fixtures  :("
-	sleep 10
 	go clean -testcache
 	rm -f ./test/_ecdsa_fixtures/*json
 	rm -f ./test/_eddsa_fixtures/*json
@@ -53,7 +52,6 @@ test_unit_level0:
 test_unit: test_unit_level0
 	@echo "--> Running Unit Tests - Level 1"
 	@echo "!!! WARNING: This will take a long time :)"
-	sleep 2
 	go test -timeout 60m $(UT_PACKAGES_LEVEL_1)
 
 test_unit_race_level0:
@@ -61,7 +59,6 @@ test_unit_race_level0:
 	@echo "!!! WARNING: This will take a long time :)"
 	@echo "!!! WARNING: This will delete fixtures :("
 	go clean -testcache
-	sleep 10
 	rm -f ./test/_ecdsa_fixtures/*json
 	rm -f ./test/_eddsa_fixtures/*json
 	go test -timeout 50m -race $(UT_PACKAGES_LEVEL_0)
@@ -69,7 +66,6 @@ test_unit_race_level0:
 test_unit_race: test_unit_race_level0
 	@echo "--> Running Unit Tests (with Race Detection) - Level 1"
 	@echo "!!! WARNING: This will take a long time :)"
-	sleep 2
 	go test -timeout 60m -race $(UT_PACKAGES_LEVEL_1)
 
 test:
