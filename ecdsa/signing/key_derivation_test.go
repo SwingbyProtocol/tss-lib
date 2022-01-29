@@ -38,7 +38,7 @@ func TestHDKeyDerivation(t *testing.T) {
 	assert.NotNil(t, keys[0].ECDSAPub, "the first ECDSA public key must not be null")
 
 	// build ecdsa key pair
-	pk := keys[0].ECDSAPub.ToSecp256k1PubKey()
+	pk := keys[0].ECDSAPub.ToBtcecPubKey()
 
 	// setting the chain code to a random positive number smaller than the maximum allowed of 32 bytes
 	chainCode := make([]byte, 32)

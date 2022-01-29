@@ -21,9 +21,8 @@ import (
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
-	"github.com/decred/dcrd/dcrec/secp256k1/v2"
-	"github.com/decred/dcrd/dcrec/secp256k1/v4/schnorr"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 )
@@ -353,16 +352,12 @@ keygen:
 
 				// build eddsa key pair
 				pkX, pkY := save.EDDSAPub.X(), save.EDDSAPub.Y()
-				pk := secp256k1.PublicKey{
-					Curve: tss.S256(),
-					X:     pkX,
-					Y:     pkY,
-				}
+				pk := save.EDDSAPub.ToBtcecPubKey()
 				sk, _ := btcec.PrivKeyFromBytes(u.Bytes())
 				// fmt.Println("err: ", err.Error())
 
 				// test pub key, should be on curve and match pkX, pkY
-				assert.True(t, pk.IsOnCurve(pkX, pkY), "public key must be on curve")
+				assert.True(t, pk.IsOnCurve(), "public key must be on curve")
 
 				// public key tests
 				assert.NotZero(t, u, "u should not be zero")
@@ -386,7 +381,7 @@ keygen:
 				}
 				signature, err := schnorr.Sign(sk, data)
 				assert.NoError(t, err, "sign should not throw an error")
-				ok := signature.Verify(data, save.EDDSAPub.ToSecp256k1PubKey())
+				ok := signature.Verify(data, save.EDDSAPub.ToBtcecPubKey())
 				assert.True(t, ok, "signature should be ok")
 				t.Log("EdDSA signing test done.")
 

@@ -8,8 +8,6 @@ require (
 	github.com/btcsuite/btcd/btcec/v2 v2.0.0
 	github.com/btcsuite/btcutil v1.0.3-0.20211129182920-9c4bbabe7acd
 	github.com/decred/dcrd/dcrec/edwards/v2 v2.0.2
-	github.com/decred/dcrd/dcrec/secp256k1/v2 v2.0.0
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/ipfs/go-log v1.0.5
 	github.com/olekukonko/tablewriter v0.0.5
@@ -24,6 +22,7 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/ipfs/go-log/v2 v2.5.0 // indirect
@@ -46,4 +45,4 @@ replace github.com/agl/ed25519 => github.com/SwingbyProtocol/edwards25519 v0.0.0
 
 replace github.com/btcsuite/btcd => github.com/Roasbeef/btcd v0.0.0-20220128222530-5a59e7c0ddfb
 
-replace github.com/btcsuite/btcd/btcec/v2 => github.com/Roasbeef/btcd/btcec/v2 v2.0.0-20220128222525-3e50557000a9
+replace github.com/btcsuite/btcd/btcec/v2 => github.com/Roasbeef/btcd/btcec/v2 v2.0.0-20220128222530-5a59e7c0ddfb

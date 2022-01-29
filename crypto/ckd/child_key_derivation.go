@@ -244,7 +244,7 @@ func DeriveChildKey(index uint32, pk *ExtendedKey, curve elliptic.Curve) (*big.I
 	}
 
 	childPk := &ExtendedKey{
-		PublicKey:  childCryptoPk.ToSecp256k1PubKey(),
+		PublicKey:  childCryptoPk.ToBtcecPubKey(),
 		Depth:      pk.Depth + 1,
 		ChildIndex: index,
 		ChainCode:  childChainCode,

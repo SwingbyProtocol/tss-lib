@@ -19,7 +19,6 @@ import (
 	"github.com/binance-chain/tss-lib/tss"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
 // ECPoint convenience helper
@@ -66,13 +65,6 @@ func (p *ECPoint) ToBtcecPubKey() *btcec.PublicKey {
 	x.SetByteSlice(p.X().Bytes())
 	y.SetByteSlice(p.Y().Bytes())
 	return btcec.NewPublicKey(&x, &y)
-}
-
-func (p *ECPoint) ToSecp256k1PubKey() *secp256k1.PublicKey {
-	var x, y btcec.FieldVal
-	x.SetByteSlice(p.X().Bytes())
-	y.SetByteSlice(p.Y().Bytes())
-	return secp256k1.NewPublicKey(&x, &y)
 }
 
 func (p *ECPoint) ToEdwardsPubKey() *edwards.PublicKey {

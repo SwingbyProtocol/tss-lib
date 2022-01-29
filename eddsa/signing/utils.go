@@ -15,7 +15,6 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
 func encodedBytesToBigInt(s *[32]byte) *big.Int {
@@ -133,11 +132,11 @@ func OddY(a *crypto.ECPoint) bool {
 	return a.Y().Bit(0) > 0
 }
 
-func SchnorrVerify(p *btcec.PublicKey, m []byte, r_ *big.Int, s_ *big.Int) bool {
-	var r secp256k1.FieldVal
-	var s secp256k1.ModNScalar
-	r.SetByteSlice(r_.Bytes())
-	s.SetByteSlice(s_.Bytes())
-	sig := schnorr.NewSignature(&r, &s)
+func SchnorrVerify(p *btcec.PublicKey, m []byte, r *big.Int, s *big.Int) bool {
+	R := new(btcec.FieldVal)
+	R.SetByteSlice(r.Bytes())
+	S := new(btcec.ModNScalar)
+	S.SetByteSlice(s.Bytes())
+	sig := schnorr.NewSignature(R, S)
 	return sig.Verify(m, p)
 }

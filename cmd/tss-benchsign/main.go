@@ -18,7 +18,8 @@ import (
 	"github.com/binance-chain/tss-lib/ecdsa/signing"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
-	"github.com/decred/dcrd/dcrec/secp256k1/v2"
+	"github.com/btcsuite/btcd/btcec/v2"
+	ecdsa2 "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/ipfs/go-log"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
@@ -194,10 +195,14 @@ outer:
 					msg.Bytes(),
 					r, s,
 				); !ok {
-					panic("ECDSA signature verification did not pass")
+					panic("ECDSA signature verification 1 did not pass")
 				}
-				btcecSig := secp256k1.NewSignature(r, s)
-				if ok = btcecSig.Verify(msg.Bytes(), (*secp256k1.PublicKey)(&pk)); !ok {
+				R := new(btcec.ModNScalar)
+				R.SetByteSlice(r.Bytes())
+				S := new(btcec.ModNScalar)
+				S.SetByteSlice(s.Bytes())
+				sig := ecdsa2.NewSignature(R, S)
+				if ok = sig.Verify(msg.Bytes(), keys[0].ECDSAPub.ToBtcecPubKey()); !ok {
 					panic("ECDSA signature verification 2 did not pass")
 				}
 				break outer

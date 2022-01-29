@@ -1,8 +1,8 @@
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/Roasbeef/btcd v0.0.0-20220128222530-5a59e7c0ddfb h1:iiJ9fLbB/sG4MGNAOAi6DoezeasH2+Hnv/HN4lMMeu8=
 github.com/Roasbeef/btcd v0.0.0-20220128222530-5a59e7c0ddfb/go.mod h1:vkwesBkYQtKXFYQYi9PyahtopbX53Tvk/O/qp2WI6Gk=
-github.com/Roasbeef/btcd/btcec/v2 v2.0.0-20220128222525-3e50557000a9 h1:Y0bDb3tYW2NysBmmq+pYH2Ct/1NRyzk5lXWD/k4LFvM=
-github.com/Roasbeef/btcd/btcec/v2 v2.0.0-20220128222525-3e50557000a9/go.mod h1:2VzYrv4Gm4apmbVVsSq5bqf1Ec8v56E48Vt0Y/umPgA=
+github.com/Roasbeef/btcd/btcec/v2 v2.0.0-20220128222530-5a59e7c0ddfb h1:BIc4awpCV2FjrFHI4fVjNjRVT6olrTvoF5ebpEucdto=
+github.com/Roasbeef/btcd/btcec/v2 v2.0.0-20220128222530-5a59e7c0ddfb/go.mod h1:2VzYrv4Gm4apmbVVsSq5bqf1Ec8v56E48Vt0Y/umPgA=
 github.com/SwingbyProtocol/edwards25519 v0.0.0-20200305024217-f36fc4b53d43 h1:oJHEIS4MpbHUZP2P+9+bATmf4KQSX/SGwxdVoJKhrEI=
 github.com/SwingbyProtocol/edwards25519 v0.0.0-20200305024217-f36fc4b53d43/go.mod h1:l5lLTZ+iRubuGXG2bs2YcG4EkM2V2jqUOrjQlVDznuo=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
@@ -31,14 +31,10 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/decred/dcrd/chaincfg/chainhash v1.0.2 h1:rt5Vlq/jM3ZawwiacWjPa+smINyLRN07EO0cNBV6DGU=
-github.com/decred/dcrd/chaincfg/chainhash v1.0.2/go.mod h1:BpbrGgrPTr3YJYRN3Bm+D9NuaFd+zGyNeIKgrhCXK60=
 github.com/decred/dcrd/crypto/blake256 v1.0.0 h1:/8DMNYp9SGi5f0w7uCm6d6M4OU2rGFK09Y2A4Xv7EE0=
 github.com/decred/dcrd/crypto/blake256 v1.0.0/go.mod h1:sQl2p6Y26YV+ZOcSTP6thNdn47hh8kt6rqSlvmrXFAc=
 github.com/decred/dcrd/dcrec/edwards/v2 v2.0.2 h1:bX7rtGTMBDJxujZ29GNqtn7YCAdINjHKnA6J6tBBv6s=
 github.com/decred/dcrd/dcrec/edwards/v2 v2.0.2/go.mod h1:d0H8xGMWbiIQP7gN3v2rByWUcuZPm9YsgmnfoxgbINc=
-github.com/decred/dcrd/dcrec/secp256k1/v2 v2.0.0 h1:3GIJYXQDAKpLEFriGFN8SbSffak10UXHGdIcFaMPykY=
-github.com/decred/dcrd/dcrec/secp256k1/v2 v2.0.0/go.mod h1:3s92l0paYkZoIHuj4X93Teg/HB7eGM9x/zokGw+u4mY=
 github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 h1:YLtO71vCjJRCBcrPMtQ9nqBsqpA1m5sE92cU+pd5Mcc=
 github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1/go.mod h1:hyedUtir6IdtD/7lIxGeCxkaw7y45JueMRL4DIyJDKs=
 github.com/decred/dcrd/lru v1.0.0/go.mod h1:mxKOwFd7lFjN2GZYsiz/ecgqR6kkYAl+0pz0tEMk218=

@@ -10,12 +10,12 @@ import (
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/ckd"
 	"github.com/binance-chain/tss-lib/ecdsa/keygen"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
 func UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta *big.Int, keys []keygen.LocalPartySaveData,
-	extendedChildPk *secp256k1.PublicKey, ec elliptic.Curve) error {
+	extendedChildPk *btcec.PublicKey, ec elliptic.Curve) error {
 	var err error
 	gDelta := crypto.ScalarBaseMult(ec, keyDerivationDelta)
 	for k := range keys {
@@ -39,7 +39,7 @@ func UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta *big.Int, keys []keygen.Lo
 
 func derivingPubkeyFromPath(masterPub *crypto.ECPoint, chainCode []byte, path []uint32, ec elliptic.Curve) (*big.Int, *ckd.ExtendedKey, error) {
 	// build ecdsa key pair
-	pk := masterPub.ToSecp256k1PubKey()
+	pk := masterPub.ToBtcecPubKey()
 	net := &chaincfg.MainNetParams
 	extendedParentPk := &ckd.ExtendedKey{
 		PublicKey:  pk,
