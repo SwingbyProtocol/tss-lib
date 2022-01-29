@@ -17,6 +17,7 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
+	errors2 "github.com/pkg/errors"
 )
 
 func (round *finalization) Start() *tss.Error {
@@ -91,13 +92,11 @@ func (round *finalization) Start() *tss.Error {
 			return round.WrapError(fmt.Errorf("edwards signature verification failed"))
 		}
 	} else if isSecp256k1Curve {
-		if ok = SchnorrVerify(round.key.EDDSAPub.ToBtcecPubKey(), round.temp.m.Bytes(), round.temp.r, s); !ok {
-			return round.WrapError(fmt.Errorf("schnorr signature verification failed"))
+		if err := SchnorrVerify(round.key.EDDSAPub.ToBtcecPubKey(), round.temp.m.Bytes(), round.temp.r, s); err != nil {
+			return round.WrapError(errors2.Wrapf(err, "schnorr signature verification failed"))
 		}
 	}
-
 	round.end <- *round.data
-
 	return nil
 }
 

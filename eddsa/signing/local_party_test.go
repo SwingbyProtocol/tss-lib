@@ -239,7 +239,7 @@ signing:
 				r := new(big.Int).SetBytes(parties[0].data.GetR())
 				s := new(big.Int).SetBytes(parties[0].data.GetS())
 
-				if ok := SchnorrVerify(keys[0].EDDSAPub.ToBtcecPubKey(), msg, r, s); !assert.True(t, ok, "EdDSA sig must verify") {
+				if err2 := SchnorrVerify(keys[0].EDDSAPub.ToBtcecPubKey(), msg, r, s); !assert.NoError(t, err2, "EdDSA sig must verify") {
 					return
 				}
 				t.Log("EdDSA signing test done.")
