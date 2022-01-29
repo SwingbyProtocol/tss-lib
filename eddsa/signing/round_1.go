@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 
+	"filippo.io/edwards25519"
+	"filippo.io/edwards25519/field"
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/commitments"
@@ -33,15 +35,28 @@ func (round *round1) Start() *tss.Error {
 	round.resetOK()
 
 	// 1. select ri
-	ri := common.GetRandomPositiveInt(round.Params().EC().Params().N)
+	ri := common.MustGetRandomInt(256)
 
 	// 2. make commitment
-	pointRi := crypto.ScalarBaseMult(round.Params().EC(), ri)
-	cmt := commitments.NewHashCommitment(pointRi.X(), pointRi.Y())
+	// pointRi := crypto.ScalarBaseMult(round.Params().EC(), ri)
+	riSc, err := new(edwards25519.Scalar).SetBytesWithClamping(reverse(ri.Bytes()))
+	if err != nil {
+		return round.WrapError(err)
+	}
+	pointRi := new(edwards25519.Point).ScalarBaseMult(riSc)
+	x, y, z, t := pointRi.ExtendedCoordinates()
+	bzs := [][]byte{x.Bytes(), y.Bytes(), z.Bytes(), t.Bytes()}
+	cmt := commitments.NewHashCommitment(common.ByteSlicesToBigInts(bzs)...)
 
 	// 3. store r1 message pieces
-	round.temp.ri = ri
-	round.temp.pointRi = pointRi
+	// round.temp.ri = new(big.Int).SetBytes(reverse(riSc.Bytes()))
+	if round.temp.pointRi, err = crypto.NewECPoint(
+		round.EC(),
+		encoded32BytesToBigInt(new(field.Element).Multiply(x, z).Bytes()),
+		encoded32BytesToBigInt(new(field.Element).Multiply(y, z).Bytes())); err != nil {
+		return round.WrapError(err)
+	}
+	// round.temp.pointRi = crypto.ScalarBaseMult(round.EC(), round.temp.ri)
 	round.temp.deCommit = cmt.D
 
 	i := round.PartyID().Index

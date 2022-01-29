@@ -3,7 +3,7 @@ module github.com/binance-chain/tss-lib
 go 1.17
 
 require (
-	github.com/agl/ed25519 v0.0.0-20200305024217-f36fc4b53d43
+	filippo.io/edwards25519 v1.0.0-rc.1
 	github.com/btcsuite/btcd v0.22.0-beta.0.20220111032746-97732e52810c
 	github.com/btcsuite/btcd/btcec/v2 v2.0.0
 	github.com/btcsuite/btcutil v1.0.3-0.20211129182920-9c4bbabe7acd
@@ -22,6 +22,7 @@ require (
 )
 
 require (
+	github.com/agl/ed25519 v0.0.0-20200305024217-f36fc4b53d43 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/crypto/blake256 v1.0.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -42,6 +43,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
 
-replace github.com/agl/ed25519 => github.com/binance-chain/edwards25519 v0.0.0-20200305024217-f36fc4b53d43
-
 replace github.com/btcsuite/btcd => github.com/Roasbeef/btcd v0.0.0-20220128222530-5a59e7c0ddfb
+
+replace github.com/agl/ed25519 => github.com/binance-chain/edwards25519 v0.0.0-20200305024217-f36fc4b53d43

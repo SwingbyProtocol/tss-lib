@@ -13,7 +13,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/agl/ed25519/edwards25519"
+	edwards255192 "filippo.io/edwards25519"
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/tss"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
@@ -29,26 +29,32 @@ func (round *finalization) Start() *tss.Error {
 
 	ok := false
 	var s *big.Int
-	var sumS *[32]byte
+	var sumS []byte
 
 	_, isTwistedEdwardsCurve := round.Params().EC().(*edwards.TwistedEdwardsCurve)
 	isSecp256k1Curve := strings.Compare("secp256k1", round.Params().EC().Params().Name) == 0
 
 	if isTwistedEdwardsCurve {
-		sumS = bigIntToEncodedBytes(&round.temp.si)
-		for j := range round.Parties().IDs() {
+		sumS = bigIntToEncodedBytes32(&round.temp.si)
+		for j, Pj := range round.Parties().IDs() {
 			round.ok[j] = true
 			if j == round.PartyID().Index {
 				continue
 			}
 			r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
-			sjBytes := bigIntToEncodedBytes(r3msg.UnmarshalS())
-			var tmpSumS [32]byte
-			edwards25519.ScMulAdd(&tmpSumS, sumS, bigIntToEncodedBytes(big.NewInt(1)), sjBytes)
-
-			sumS = &tmpSumS
+			sjBytes := bigIntToEncodedBytes32(r3msg.UnmarshalS())
+			var err error
+			var sc, scSJ *edwards255192.Scalar
+			if sc, err = new(edwards255192.Scalar).SetCanonicalBytes(sumS[:]); err != nil {
+				return round.WrapError(err, Pj)
+			}
+			if scSJ, err = new(edwards255192.Scalar).SetCanonicalBytes(sjBytes[:]); err != nil {
+				return round.WrapError(err, Pj)
+			}
+			sc = sc.Add(sc, scSJ)
+			sumS = sc.Bytes()
 		}
-		s = encodedBytesToBigInt(sumS)
+		s = encoded32BytesToBigInt(sumS)
 	} else if isSecp256k1Curve {
 		sumSInt := &round.temp.si
 		modN := common.ModInt(tss.S256().Params().N)
@@ -67,13 +73,13 @@ func (round *finalization) Start() *tss.Error {
 	// save the signature for final output
 	signature := new(common.ECSignature)
 	if isTwistedEdwardsCurve {
-		signature.Signature = append(bigIntToEncodedBytes(round.temp.r)[:], sumS[:]...)
-		signature.R = bigIntToEncodedBytes(round.temp.r)[:]
-		signature.S = bigIntToEncodedBytes(s)[:]
+		signature.Signature = append(bigIntToEncodedBytes32(round.temp.r)[:], sumS[:]...)
+		signature.R = bigIntToEncodedBytes32(round.temp.r)[:]
+		signature.S = bigIntToEncodedBytes32(s)[:]
 	} else if isSecp256k1Curve {
 		var r32b, s32b [32]byte
-		encode32bytes(round.temp.r, &r32b)
-		encode32bytes(s, &s32b)
+		round.temp.r.FillBytes(r32b[:])
+		s.FillBytes(s32b[:])
 		signature.Signature = append(r32b[:], s32b[:]...)
 		signature.R = r32b[:]
 		signature.S = s32b[:]
@@ -120,8 +126,4 @@ func (round *finalization) Update() (bool, *tss.Error) {
 
 func (round *finalization) NextRound() tss.Round {
 	return nil // finished!
-}
-
-func encode32bytes(i *big.Int, buff *[32]byte) {
-	i.FillBytes(buff[:])
 }

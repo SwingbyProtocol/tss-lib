@@ -12,7 +12,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/agl/ed25519/edwards25519"
+	"filippo.io/edwards25519"
+	"filippo.io/edwards25519/field"
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/btcsuite/btcd/btcec/v2"
@@ -21,44 +22,45 @@ import (
 	"github.com/decred/dcrd/dcrec/secp256k1/v4/schnorr"
 )
 
-func encodedBytesToBigInt(s *[32]byte) *big.Int {
-	// Use a copy so we don't screw up our original
-	// memory.
-	sCopy := new([32]byte)
-	for i := 0; i < 32; i++ {
-		sCopy[i] = s[i]
+func encoded32BytesToBigInt(s []byte) *big.Int {
+	if len(s) > 32 {
+		panic(fmt.Errorf("encoded32BytesToBigInt expected <= 32 bytes but got %d", len(s)))
 	}
+	sCopy := make([]byte, 0, 32)
+	copy(sCopy, s)
 	reverse(sCopy)
-
-	bi := new(big.Int).SetBytes(sCopy[:])
-
-	return bi
+	return new(big.Int).SetBytes(sCopy)
 }
 
-func bigIntToEncodedBytes(a *big.Int) *[32]byte {
-	s := new([32]byte)
-	if a == nil {
-		return s
+func bigIntToEncodedBytes32(a *big.Int) []byte {
+	if len(a.Bytes()) > 32 {
+		panic(fmt.Errorf("bigIntToEncodedBytes32 expected <= 32 bytes but got %d", len(a.Bytes())))
 	}
-
-	// Caveat: a can be longer than 32 bytes.
-	s = copyBytes(a.Bytes())
-
-	// Reverse the byte string --> little endian after
-	// encoding.
-	reverse(s)
-
-	return s
+	var s []byte
+	if a == nil {
+		panic("a == nil in bigIntToEncodedBytes32")
+	}
+	s = copyBytes32(a.Bytes())
+	// reverse to become little endian
+	return reverse(s)
 }
 
-func copyBytes(aB []byte) *[32]byte {
+func ecPointToEncodedBytes32(x *big.Int) ([]byte, error) {
+	var err error
+	fe := new(field.Element)
+	xB := bigIntToEncodedBytes32(x)
+	if fe, err = fe.SetBytes(xB); err != nil {
+		return nil, err
+	}
+	return fe.Bytes(), nil
+}
+
+func copyBytes32(aB []byte) []byte {
 	if aB == nil {
 		return nil
 	}
-	s := new([32]byte)
-
-	// If we have a short byte string, expand
-	// it so that it's long enough.
+	s := make([]byte, 32)
+	// if short, expand it so that it's long enough
 	aBLen := len(aB)
 	if aBLen < 32 {
 		diff := 32 - aBLen
@@ -66,71 +68,21 @@ func copyBytes(aB []byte) *[32]byte {
 			aB = append([]byte{0x00}, aB...)
 		}
 	}
-
 	for i := 0; i < 32; i++ {
 		s[i] = aB[i]
 	}
-
 	return s
 }
 
-func ecPointToEncodedBytes(x *big.Int, y *big.Int) *[32]byte {
-	s := bigIntToEncodedBytes(y)
-	xB := bigIntToEncodedBytes(x)
-	xFE := new(edwards25519.FieldElement)
-	edwards25519.FeFromBytes(xFE, xB)
-	isNegative := edwards25519.FeIsNegative(xFE) == 1
-
-	if isNegative {
-		s[31] |= (1 << 7)
-	} else {
-		s[31] &^= (1 << 7)
-	}
-
-	return s
-}
-
-func reverse(s *[32]byte) {
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
-	}
-}
-
-func addExtendedElements(p, q edwards25519.ExtendedGroupElement) edwards25519.ExtendedGroupElement {
-	var r edwards25519.CompletedGroupElement
-	var qCached edwards25519.CachedGroupElement
-	q.ToCached(&qCached)
-	edwards25519.GeAdd(&r, &p, &qCached)
-	var result edwards25519.ExtendedGroupElement
-	r.ToExtended(&result)
-	return result
-}
-
-func ecPointToExtendedElement(ec elliptic.Curve, x *big.Int, y *big.Int) edwards25519.ExtendedGroupElement {
-	encodedXBytes := bigIntToEncodedBytes(x)
-	encodedYBytes := bigIntToEncodedBytes(y)
-
-	z := common.GetRandomPositiveInt(ec.Params().N)
-	encodedZBytes := bigIntToEncodedBytes(z)
-
-	var fx, fy, fxy edwards25519.FieldElement
-	edwards25519.FeFromBytes(&fx, encodedXBytes)
-	edwards25519.FeFromBytes(&fy, encodedYBytes)
-
-	var X, Y, Z, T edwards25519.FieldElement
-	edwards25519.FeFromBytes(&Z, encodedZBytes)
-
-	edwards25519.FeMul(&X, &fx, &Z)
-	edwards25519.FeMul(&Y, &fy, &Z)
-	edwards25519.FeMul(&fxy, &fx, &fy)
-	edwards25519.FeMul(&T, &fxy, &Z)
-
-	return edwards25519.ExtendedGroupElement{
-		X: X,
-		Y: Y,
-		Z: Z,
-		T: T,
-	}
+func addExtendedElements(p, q *edwards25519.Point) (*edwards25519.Point, error) {
+	new(edwards25519.Point).Add(p, q)
+	PX, PY, PZ, PT := p.ExtendedCoordinates()
+	QX, QY, QZ, QT := q.ExtendedCoordinates()
+	return new(edwards25519.Point).SetExtendedCoordinates(
+		new(field.Element).Add(PX, QX),
+		new(field.Element).Add(PY, QY),
+		new(field.Element).Add(PZ, QZ),
+		new(field.Element).Add(PT, QT))
 }
 
 func OddY(a *crypto.ECPoint) bool {
@@ -287,26 +239,6 @@ func JacobianPointToString(point secp256k1.JacobianPoint) string {
 	return "[X:" + point.X.String() + ", Y:" + point.Y.String() + ", Z:" + point.Z.String() + "]"
 }
 
-func ParsePubKey(pubKeyStr []byte) (*btcec.PublicKey, error) {
-	if pubKeyStr == nil {
-		err := fmt.Errorf("nil pubkey byte string")
-		return nil, err
-	}
-	if len(pubKeyStr) != 32 {
-		err := fmt.Errorf("bad pubkey byte string size (want %v, have %v)",
-			32, len(pubKeyStr))
-		return nil, err
-	}
-
-	// We'll manually prepend the compressed byte so we can re-use the
-	// existing pubkey parsing routine of the main btcec package.
-	var keyCompressed [btcec.PubKeyBytesLenCompressed]byte
-	keyCompressed[0] = secp256k1.PubKeyFormatCompressedEven
-	copy(keyCompressed[1:], pubKeyStr)
-
-	return btcec.ParsePubKey(keyCompressed[:])
-}
-
 func RSBytesToBtcec(r_ []byte, s_ []byte) (btcec.FieldVal, btcec.ModNScalar) {
 	var r btcec.FieldVal
 	var s btcec.ModNScalar
@@ -341,4 +273,11 @@ func NextPointEvenY(curve elliptic.Curve, P *crypto.ECPoint) (*crypto.ECPoint, i
 		Qptr, _ = Qptr.Add(G)
 	}
 	return Qptr, a
+}
+
+func reverse(s []byte) []byte {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+	return s
 }

@@ -1,3 +1,5 @@
+filippo.io/edwards25519 v1.0.0-rc.1 h1:m0VOOB23frXZvAOK44usCgLWvtsxIoMCTBGJZlpmGfU=
+filippo.io/edwards25519 v1.0.0-rc.1/go.mod h1:N1IkdkCkiLB6tki+MYJoSx2JTY9NUlxZE7eHn5EwJns=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/Roasbeef/btcd v0.0.0-20220128222530-5a59e7c0ddfb h1:iiJ9fLbB/sG4MGNAOAi6DoezeasH2+Hnv/HN4lMMeu8=
 github.com/Roasbeef/btcd v0.0.0-20220128222530-5a59e7c0ddfb/go.mod h1:vkwesBkYQtKXFYQYi9PyahtopbX53Tvk/O/qp2WI6Gk=

@@ -8,10 +8,12 @@ package signing
 
 import (
 	"crypto/sha512"
+	"fmt"
 	"math/big"
 	"strings"
 
-	"github.com/agl/ed25519/edwards25519"
+	"filippo.io/edwards25519"
+	"filippo.io/edwards25519/field"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
@@ -32,17 +34,21 @@ func (round *round3) Start() *tss.Error {
 	round.resetOK()
 
 	// 1. init R
-	var Redwards edwards25519.ExtendedGroupElement
+	Redwards := new(edwards25519.Point) // extended group element
 	var Rsecp256k1 *crypto.ECPoint
 
-	var riBytes *[32]byte
-	_, isTwistedEdwardsCurve := round.Params().EC().(*edwards.TwistedEdwardsCurve)
-	isSecp256k1Curve := strings.Compare("secp256k1", round.Params().EC().Params().Name) == 0
+	var riBytes []byte
+	_, isTwistedEdwardsCurve := round.EC().(*edwards.TwistedEdwardsCurve)
+	isSecp256k1Curve := strings.Compare("secp256k1", round.EC().Params().Name) == 0
 	if isTwistedEdwardsCurve {
-		riBytes = bigIntToEncodedBytes(round.temp.ri)
-		edwards25519.GeScalarMultBase(&Redwards, riBytes)
+		riBytes = bigIntToEncodedBytes32(round.temp.ri)
+		sc, err := new(edwards25519.Scalar).SetBytesWithClamping(riBytes)
+		if err != nil {
+			return round.WrapError(err)
+		}
+		Redwards = Redwards.ScalarBaseMult(sc)
 	} else if isSecp256k1Curve {
-		Rsecp256k1 = crypto.ScalarBaseMult(round.Params().EC(), round.temp.ri)
+		Rsecp256k1 = crypto.ScalarBaseMult(round.EC(), round.temp.ri)
 	}
 
 	// 2-6. compute R
@@ -55,19 +61,22 @@ func (round *round3) Start() *tss.Error {
 		msg := round.temp.signRound2Messages[j]
 		r2msg := msg.Content().(*SignRound2Message)
 		cmtDeCmt := commitments.HashCommitDecommit{C: round.temp.cjs[j], D: r2msg.UnmarshalDeCommitment()}
-		ok, coordinates := cmtDeCmt.DeCommit()
+		ok, _ := cmtDeCmt.DeCommit()
 		if !ok {
 			return round.WrapError(errors.New("de-commitment verify failed"))
 		}
-		if len(coordinates) != 2 {
-			return round.WrapError(errors.New("length of de-commitment should be 2"))
+		// the first element is the randomness param; discard it
+		coordinates := r2msg.GetDeCommitment()
+		if len(coordinates) != 5 {
+			return round.WrapError(fmt.Errorf("length of de-commitment should be 4 but was %d", len(coordinates) - 1))
 		}
+		coordinates = coordinates[1:]
 
-		Rj, err := crypto.NewECPoint(round.Params().EC(), coordinates[0], coordinates[1])
+		Rj, err := crypto.NewECPoint(round.EC(), encoded32BytesToBigInt(coordinates[0]), encoded32BytesToBigInt(coordinates[1]))
 		if err != nil {
 			return round.WrapError(errors.Wrapf(err, "NewECPoint(Rj)"), Pj)
 		}
-		proof, err := r2msg.UnmarshalZKProof(round.Params().EC())
+		proof, err := r2msg.UnmarshalZKProof(round.EC())
 		if err != nil {
 			return round.WrapError(errors.New("failed to unmarshal Rj proof"), Pj)
 		}
@@ -77,8 +86,25 @@ func (round *round3) Start() *tss.Error {
 		}
 
 		if isTwistedEdwardsCurve {
-			extendedRj := ecPointToExtendedElement(round.Params().EC(), Rj.X(), Rj.Y())
-			Redwards = addExtendedElements(Redwards, extendedRj)
+			var err2 error
+			var x, y, z, t *field.Element
+			if x, err2 = new(field.Element).SetBytes(coordinates[0]); err2 != nil {
+				return round.WrapError(err2)
+			}
+			if y, err2 = new(field.Element).SetBytes(coordinates[1]); err2 != nil {
+				return round.WrapError(err2)
+			}
+			if z, err2 = new(field.Element).SetBytes(coordinates[2]); err2 != nil {
+				return round.WrapError(err2)
+			}
+			if t, err2 = new(field.Element).SetBytes(coordinates[3]); err2 != nil {
+				return round.WrapError(err2)
+			}
+			extendedRj, err2 := new(edwards25519.Point).SetExtendedCoordinates(x, y, z, t)
+			if err2 != nil {
+				return round.WrapError(errors.Wrapf(err2, "1"), Pj)
+			}
+			Redwards = new(edwards25519.Point).Add(Redwards, extendedRj)
 		} else if isSecp256k1Curve {
 			Rsecp256k1, err = Rsecp256k1.Add(Rj)
 			if err != nil {
@@ -87,43 +113,48 @@ func (round *round3) Start() *tss.Error {
 		}
 	}
 
-	var encodedR [32]byte
-	var encodedPubKey *[32]byte
+	encodedR := make([]byte, 32)
+	var encodedPubKey []byte
 
 	if isTwistedEdwardsCurve {
-		Redwards.ToBytes(&encodedR)
-		encodedPubKey = ecPointToEncodedBytes(round.key.EDDSAPub.X(), round.key.EDDSAPub.Y())
+		var err error
+		encodedR = Redwards.Bytes()
+		if encodedPubKey, err = ecPointToEncodedBytes32(round.key.EDDSAPub.X()); err != nil {
+			return round.WrapError(err)
+		}
 	} else if isSecp256k1Curve {
-		s := new([32]byte)
+		s := make([]byte, 32)
 		round.key.EDDSAPub.X().FillBytes(s[:])
 		encodedPubKey = s
 	}
 
 	// 7. compute lambda
 	// h = hash512(k || A || M)
-	var lambda [64]byte
 	var 𝜆 *chainhash.Hash
-	var lambdaReduced [32]byte
+	var lambdaSc *edwards25519.Scalar
+	lambda := make([]byte, 0, 64)
 	if isTwistedEdwardsCurve {
 		h := sha512.New()
 		h.Reset()
 		h.Write(encodedR[:])
 		h.Write(encodedPubKey[:])
 		h.Write(round.temp.m.Bytes())
-		h.Sum(lambda[:0])
+		lambda = h.Sum(nil)
 
-		edwards25519.ScReduce(&lambdaReduced, &lambda)
+		var err error
+		if lambdaSc, err = new(edwards25519.Scalar).SetUniformBytes(lambda); err != nil {
+			return round.WrapError(err)
+		}
 	} else if isSecp256k1Curve {
 		// if R has an odd Y coordinate, we'll add to it until we find an R with even Y.
 		a := 0
-		G := crypto.ScalarBaseMult(round.Params().EC(), big.NewInt(1))
+		G := crypto.ScalarBaseMult(round.EC(), big.NewInt(1))
 		for ; OddY(Rsecp256k1); a++ { // Y cannot be odd in BIP340
 			Rsecp256k1, _ = Rsecp256k1.Add(G)
 		}
 		round.temp.a = a
 
-		//
-		encode32bytes(Rsecp256k1.X(), &encodedR)
+		Rsecp256k1.X().FillBytes(encodedR[:])
 		𝜆 = chainhash.TaggedHash(
 			[]byte("BIP0340/challenge"), encodedR[:], encodedPubKey[:], round.temp.m.Bytes(),
 		) // commitment
@@ -135,11 +166,19 @@ func (round *round3) Start() *tss.Error {
 	}
 
 	// 8. compute si
-	var localS [32]byte
+	var localS *edwards25519.Scalar
 	var si *big.Int
 	if isTwistedEdwardsCurve {
-		edwards25519.ScMulAdd(&localS, &lambdaReduced, bigIntToEncodedBytes(round.temp.wi), riBytes)
-		si = encodedBytesToBigInt(&localS)
+		var err error
+		var wiSc, riSc *edwards25519.Scalar
+		if wiSc, err = new(edwards25519.Scalar).SetCanonicalBytes(bigIntToEncodedBytes32(round.temp.wi)); err != nil {
+			return round.WrapError(err)
+		}
+		if riSc, err = new(edwards25519.Scalar).SetCanonicalBytes(riBytes); err != nil {
+			return round.WrapError(err)
+		}
+		localS = localS.MultiplyAdd(lambdaSc, wiSc, riSc)
+		si = encoded32BytesToBigInt(localS.Bytes())
 	} else if isSecp256k1Curve {
 		𝜆wi := big.NewInt(0).Mul(big.NewInt(0).SetBytes(𝜆.CloneBytes()), round.temp.wi)
 		si = big.NewInt(0).Add(round.temp.ri, 𝜆wi)
@@ -148,7 +187,7 @@ func (round *round3) Start() *tss.Error {
 	// 9. store r3 message pieces
 	round.temp.si = *si
 	if isTwistedEdwardsCurve {
-		round.temp.r = encodedBytesToBigInt(&encodedR)
+		round.temp.r = encoded32BytesToBigInt(encodedR)
 	} else if isSecp256k1Curve {
 		round.temp.r = Rsecp256k1.X()
 	}
