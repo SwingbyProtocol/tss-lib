@@ -24,4 +24,4 @@ benchdata
 .vscode/*.json
 
 # Test fixtures
-./test/*fixtures/*.json
+test/*fixtures/*.json
