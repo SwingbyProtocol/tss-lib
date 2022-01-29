@@ -85,20 +85,13 @@ func (round *finalization) Start() *tss.Error {
 	round.data.Signature = append(round.data.R, round.data.S...)
 
 	if isTwistedEdwardsCurve {
-		pk := edwards.PublicKey{
-			Curve: round.Params().EC(),
-			X:     round.key.EDDSAPub.X(),
-			Y:     round.key.EDDSAPub.Y(),
-		}
 		common.Logger.Debugf("finalize - r: %v, s:%v", hex.EncodeToString(round.temp.r.Bytes()),
 			hex.EncodeToString(s.Bytes()))
-		ok = edwards.Verify(&pk, round.temp.m.Bytes(), round.temp.r, s)
-		if !ok {
+		if ok = edwards.Verify(round.key.EDDSAPub.ToEdwardsPubKey(), round.temp.m.Bytes(), round.temp.r, s); !ok {
 			return round.WrapError(fmt.Errorf("edwards signature verification failed"))
 		}
 	} else if isSecp256k1Curve {
-		ok = SchnorrVerify(round.key.EDDSAPub.ToBtcecPubKey(), round.temp.m.Bytes(), round.temp.r, s)
-		if !ok {
+		if ok = SchnorrVerify(round.key.EDDSAPub.ToBtcecPubKey(), round.temp.m.Bytes(), round.temp.r, s); !ok {
 			return round.WrapError(fmt.Errorf("schnorr signature verification failed"))
 		}
 	}
