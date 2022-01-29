@@ -16,9 +16,9 @@ import (
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4/schnorr"
 )
 
 func encodedBytesToBigInt(s *[32]byte) *big.Int {
@@ -138,15 +138,15 @@ func OddY(a *crypto.ECPoint) bool {
 }
 
 func SchnorrVerify(p *btcec.PublicKey, m []byte, r_ *big.Int, s_ *big.Int) bool {
-	var r btcec.FieldVal
-	var s btcec.ModNScalar
+	var r secp256k1.FieldVal
+	var s secp256k1.ModNScalar
 	r.SetByteSlice(r_.Bytes())
 	s.SetByteSlice(s_.Bytes())
 	err := schnorrVerify(m, p, r, s)
 	return err == nil
 }
 
-func schnorrVerify(hash []byte, pub *btcec.PublicKey, sigR btcec.FieldVal, sigS btcec.ModNScalar) error {
+func schnorrVerify(hash []byte, pubKey *btcec.PublicKey, sigR secp256k1.FieldVal, sigS secp256k1.ModNScalar) error {
 	// The algorithm for producing a BIP-340 signature is described in
 	// README.md and is reproduced here for reference:
 	//
@@ -175,11 +175,6 @@ func schnorrVerify(hash []byte, pub *btcec.PublicKey, sigR btcec.FieldVal, sigS 
 	// for verification always has an even y-coordinate. So we'll serialize
 	// it, then parse it again to esure we only proceed with points that
 	// have an even y-coordinate.
-	pubKey, err := ParsePubKey(pub.SerializeCompressed()[1:])
-	if err != nil {
-		return err
-	}
-	pubKey = pub // extra
 
 	// Step 2.
 	//
@@ -306,7 +301,7 @@ func ParsePubKey(pubKeyStr []byte) (*btcec.PublicKey, error) {
 	// We'll manually prepend the compressed byte so we can re-use the
 	// existing pubkey parsing routine of the main btcec package.
 	var keyCompressed [btcec.PubKeyBytesLenCompressed]byte
-	keyCompressed[0] = btcec.PubKeyFormatCompressedEven
+	keyCompressed[0] = secp256k1.PubKeyFormatCompressedEven
 	copy(keyCompressed[1:], pubKeyStr)
 
 	return btcec.ParsePubKey(keyCompressed[:])

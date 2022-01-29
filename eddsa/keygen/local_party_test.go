@@ -15,18 +15,17 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/btcec/v2/schnorr"
-	"github.com/decred/dcrd/dcrec/edwards/v2"
-	"github.com/decred/dcrd/dcrec/secp256k1/v2"
-	"github.com/ipfs/go-log"
-	"github.com/stretchr/testify/assert"
-
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/vss"
 	"github.com/binance-chain/tss-lib/test"
 	"github.com/binance-chain/tss-lib/tss"
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/decred/dcrd/dcrec/edwards/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v2"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4/schnorr"
+	"github.com/ipfs/go-log"
+	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -387,7 +386,7 @@ keygen:
 				}
 				signature, err := schnorr.Sign(sk, data)
 				assert.NoError(t, err, "sign should not throw an error")
-				ok := signature.Verify(data, save.EDDSAPub.ToBtcecPubKey())
+				ok := signature.Verify(data, save.EDDSAPub.ToSecp256k1PubKey())
 				assert.True(t, ok, "signature should be ok")
 				t.Log("EdDSA signing test done.")
 

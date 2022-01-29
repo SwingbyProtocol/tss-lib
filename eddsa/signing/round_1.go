@@ -9,17 +9,12 @@ package signing
 import (
 	"errors"
 	"fmt"
-	"math/big"
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
 	"github.com/binance-chain/tss-lib/crypto/commitments"
 	"github.com/binance-chain/tss-lib/eddsa/keygen"
 	"github.com/binance-chain/tss-lib/tss"
-)
-
-var (
-	zero = big.NewInt(0)
 )
 
 // round 1 represents round 1 of the signing part of the EDDSA TSS spec

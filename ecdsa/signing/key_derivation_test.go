@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/btcsuite/btcd/btcec"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/binance-chain/tss-lib/common"
@@ -39,12 +38,7 @@ func TestHDKeyDerivation(t *testing.T) {
 	assert.NotNil(t, keys[0].ECDSAPub, "the first ECDSA public key must not be null")
 
 	// build ecdsa key pair
-	parentPkX, parentPkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
-	pk := ecdsa.PublicKey{
-		Curve: tss.EC(),
-		X:     parentPkX,
-		Y:     parentPkY,
-	}
+	pk := keys[0].ECDSAPub.ToSecp256k1PubKey()
 
 	// setting the chain code to a random positive number smaller than the maximum allowed of 32 bytes
 	chainCode := make([]byte, 32)
@@ -66,7 +60,7 @@ func TestHDKeyDerivation(t *testing.T) {
 
 	keyDerivationDelta := il
 
-	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, &extendedChildPk.PublicKey, tss.EC())
+	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, extendedChildPk.PublicKey, tss.EC())
 	assert.NoErrorf(t, err, "there should not be an error setting the derived keys")
 
 	// PHASE: signing
@@ -117,7 +111,6 @@ signing:
 				bigRX, bigRY := parties[0].temp.BigR.X(), parties[0].temp.BigR.Y()
 				bigR := crypto.NewECPointNoCurveCheck(tss.EC(), bigRX, bigRY)
 
-				r := parties[0].temp.Rx
 				// fmt.Printf("sign result: R(%s, %s), r=%s\n", bigR.X().String(), bigR.Y().String(), r.String())
 
 				modN := common.ModInt(tss.EC().Params().N)
@@ -130,12 +123,13 @@ signing:
 				// fmt.Printf("S: %s\n", sumS.String())
 				// END check s correctness
 
-				ok := ecdsa.Verify(&extendedChildPk.PublicKey, msg.Bytes(), bigR.X(), sumS)
+				ecdsaPK := &ecdsa.PublicKey{
+					Curve: tss.EC(),
+					X:     extendedChildPk.X(),
+					Y:     extendedChildPk.Y(),
+				}
+				ok := ecdsa.Verify(ecdsaPK, msg.Bytes(), bigR.X(), sumS)
 				assert.True(t, ok, "ecdsa verify must pass")
-
-				btcecSig := &btcec.Signature{R: r, S: sumS}
-				btcecSig.Verify(msg.Bytes(), (*btcec.PublicKey)(&extendedChildPk.PublicKey))
-				assert.True(t, ok, "ecdsa verify 2 must pass")
 
 				t.Log("ECDSA signing test done.")
 				// END ECDSA verify

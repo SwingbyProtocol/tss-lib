@@ -21,7 +21,7 @@ import (
 	"github.com/binance-chain/tss-lib/crypto/paillier"
 	zkpdec "github.com/binance-chain/tss-lib/crypto/zkp/dec"
 	zkplogstar "github.com/binance-chain/tss-lib/crypto/zkp/logstar"
-	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
@@ -188,7 +188,7 @@ func TestE2EWithHDKeyDerivation(t *testing.T) {
 
 	keyDerivationDelta := il
 
-	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, &extendedChildPk.PublicKey, btcec.S256())
+	err = UpdatePublicKeyAndAdjustBigXj(keyDerivationDelta, keys, extendedChildPk.PublicKey, btcec.S256())
 	assert.NoErrorf(t, err, "there should not be an error setting the derived keys")
 
 	// PHASE: signing

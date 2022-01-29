@@ -4,7 +4,6 @@ package ckd
 
 import (
 	"bytes"
-	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/rand"
@@ -17,13 +16,13 @@ import (
 
 	"github.com/binance-chain/tss-lib/common"
 	"github.com/binance-chain/tss-lib/crypto"
-	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcutil/base58"
 	"golang.org/x/crypto/ripemd160"
 )
 
 type ExtendedKey struct {
-	ecdsa.PublicKey
+	*btcec.PublicKey
 	Depth      uint8
 	ChildIndex uint32
 	ChainCode  []byte // 32 bytes
@@ -71,7 +70,7 @@ func (k *ExtendedKey) String() string {
 	serializedBytes = append(serializedBytes, k.ParentFP...)
 	serializedBytes = append(serializedBytes, childNumBytes[:]...)
 	serializedBytes = append(serializedBytes, k.ChainCode...)
-	pubKeyBytes := serializeCompressed(k.PublicKey.X, k.PublicKey.Y)
+	pubKeyBytes := serializeCompressed(k.PublicKey.X(), k.PublicKey.Y())
 	serializedBytes = append(serializedBytes, pubKeyBytes...)
 
 	checkSum := doubleHashB(serializedBytes)[:4]
@@ -104,23 +103,21 @@ func NewExtendedKeyFromString(key string, curve elliptic.Curve) (*ExtendedKey, e
 	chainCode := payload[13:45]
 	keyData := payload[45:78]
 
-	var pubKey ecdsa.PublicKey
-
-	if c, ok := curve.(*btcec.KoblitzCurve); ok {
+	var pubKey *btcec.PublicKey
+	if _, ok := curve.(*btcec.KoblitzCurve); ok {
 		// Ensure the public key parses correctly and is actually on the
 		// secp256k1 curve.
-		pk, err := btcec.ParsePubKey(keyData, c)
+		pk, err := btcec.ParsePubKey(keyData)
 		if err != nil {
 			return nil, err
 		}
-		pubKey = ecdsa.PublicKey(*pk)
+		pubKey = pk
 	} else {
+		var x, y btcec.FieldVal
 		px, py := elliptic.Unmarshal(curve, keyData)
-		pubKey = ecdsa.PublicKey{
-			Curve: curve,
-			X:     px,
-			Y:     py,
-		}
+		x.SetByteSlice(px.Bytes())
+		y.SetByteSlice(py.Bytes())
+		pubKey = btcec.NewPublicKey(&x, &y)
 	}
 
 	return &ExtendedKey{
@@ -207,13 +204,13 @@ func DeriveChildKey(index uint32, pk *ExtendedKey, curve elliptic.Curve) (*big.I
 		return nil, nil, errors.New("cannot derive key beyond max depth")
 	}
 
-	cryptoPk, err := crypto.NewECPoint(curve, pk.X, pk.Y)
+	cryptoPk, err := crypto.NewECPoint(curve, pk.X(), pk.Y())
 	if err != nil {
 		common.Logger.Error("error getting pubkey from extendedkey")
 		return nil, nil, err
 	}
 
-	pkPublicKeyBytes := serializeCompressed(pk.X, pk.Y)
+	pkPublicKeyBytes := serializeCompressed(pk.X(), pk.Y())
 
 	data := make([]byte, 37)
 	copy(data, pkPublicKeyBytes)
@@ -247,7 +244,7 @@ func DeriveChildKey(index uint32, pk *ExtendedKey, curve elliptic.Curve) (*big.I
 	}
 
 	childPk := &ExtendedKey{
-		PublicKey:  *childCryptoPk.ToECDSAPubKey(),
+		PublicKey:  childCryptoPk.ToSecp256k1PubKey(),
 		Depth:      pk.Depth + 1,
 		ChildIndex: index,
 		ChainCode:  childChainCode,
@@ -257,6 +254,8 @@ func DeriveChildKey(index uint32, pk *ExtendedKey, curve elliptic.Curve) (*big.I
 	return ilNum, childPk, nil
 }
 
+// GenerateSeed
+// TODO: Is this being used?
 func GenerateSeed(length uint8) ([]byte, error) {
 	// Per [BIP32], the seed must be in range [MinSeedBytes, MaxSeedBytes].
 	if length < MinSeedBytes || length > MaxSeedBytes {

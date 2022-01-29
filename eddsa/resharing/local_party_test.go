@@ -25,10 +25,9 @@ import (
 )
 
 const (
-	testParticipants     = test.TestParticipants
-	testThreshold        = test.TestThreshold
-	testSetIdS256Schnorr = "S256"
-	testSetIdEdwards     = "Edwards"
+	testParticipants = test.TestParticipants
+	testThreshold    = test.TestThreshold
+	testSetIdEdwards = "Edwards"
 )
 
 func setUp(level string) {
